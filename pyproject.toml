@@ -1,0 +1,54 @@
+[project]
+name = "aizim"
+version = "0.1.0"
+description = "Formal-native autonomous mathematical research with Lean 4"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+license = "MIT"
+authors = [{ name = "Frankie Wang" }]
+dependencies = [
+  "lean-lsp-mcp==0.28.1",
+  "leanclient==0.12.1",
+  "mcp[cli]==1.28.1",
+]
+
+[project.scripts]
+aizim = "aizim.cli.main:main"
+aizim-gateway-sidecar = "aizim.gateway.sidecar:main"
+
+[dependency-groups]
+dev = [
+  "anyio==4.14.1",
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "pytest-timeout==2.4.0",
+  "ruff==0.15.20",
+  "ty==0.0.56",
+]
+
+[build-system]
+requires = ["uv_build==0.11.29"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--strict-markers"
+markers = [
+  "lean_integration: requires pinned Lean 4.32.0",
+  "macos_sandbox: requires macOS and Codex CLI 0.144.6",
+  "manual_real_codex: requires external Codex credentials and model access",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+include = ["src", "tests"]

@@ -1,0 +1,15 @@
+.aizim/
+.lake/
+.venv/
+.superpowers/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ty/
+build/
+dist/
+
+.DS_Store
