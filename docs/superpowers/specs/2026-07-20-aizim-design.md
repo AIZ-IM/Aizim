@@ -160,8 +160,9 @@ tool surface of lean-lsp-mcp:
 
 The foundation composes, rather than forks, upstream
 `lean-lsp-mcp==0.28.1` at commit
-`15766fef24246f2159f55a5f6897126a26916ae8`; its lock resolves
-`leanclient==0.12.1`. That dependency supplies goal and context inspection,
+`15766fef24246f2159f55a5f6897126a26916ae8`. Aizim directly pins both
+`lean-lsp-mcp==0.28.1` and `leanclient==0.12.1` in `pyproject.toml`; `uv.lock`
+then fixes the exact artifacts. The adapter supplies goal and context inspection,
 scratch-document multi-attempt screening, diagnostics, search, build, and axiom
 queries. It does **not** edit source, own worker namespaces, or implement branch
 transactions.
@@ -203,12 +204,34 @@ Backend isolation reinforces tool gating. The trusted launcher keeps model-
 transport credentials out of model-controlled command environments. Those
 commands receive a filtered, read-only project view that excludes `.aizim/`, a
 private ephemeral scratch directory, no database file descriptor or writable
-shared mount, and a scrubbed environment. They have no arbitrary outbound
+shared path, and a scrubbed environment. They have no arbitrary outbound
 network: only launcher-owned model transport and the gateway sidecar are
 allowlisted, while literature, Lean, and state access are brokered. A backend
 that cannot establish and pass this isolation profile is refused for autonomous
 execution. A launch with approvals or sandboxing bypassed is not a valid Aizim
 backend.
+
+### 4.6 Platform sandbox adapters
+
+Slices 1 and 2 support macOS first. `MacOSSandboxAdapter` pins Codex CLI
+`0.144.6` and uses its native permission-profile compiler, which enforces
+filesystem and network policy with Seatbelt through `/usr/bin/sandbox-exec`.
+Before launch, `WorkspaceViewBuilder` materializes a symlink-free worker view
+containing only approved source; `.aizim/`, `.git/`, unleased documents, and
+shared artifacts are absent. `CodexBackend` runs with the Aizim-owned profile,
+read-only command execution, no approvals or sandbox bypass, an ephemeral
+session, ignored user config/rules, and a minimal shell environment. Model-
+controlled commands have no direct network; model transport remains launcher-
+owned, and all mutations go through role-gated tools. The same compiled policy
+drives deterministic filesystem, environment, and network probes, so startup
+fails before a worker runs if enforcement is weaker than the declared profile.
+
+The portable `SandboxAdapter` contract is shared, but Linux is not a slices-1/2
+acceptance platform. Its planned adapter uses the pinned Codex CLI's default
+bubblewrap filesystem/user/PID namespace isolation plus its seccomp network
+filter; the legacy Landlock fallback is rejected unless separately qualified by
+the same probes. Unsupported platforms fail closed rather than running without
+an adapter.
 
 ## 5. Authority and persistent state
 
@@ -255,9 +278,10 @@ mode for transactions and concurrent readers. Large artifacts live under
 `.aizim/artifacts/<run_id>/` and are referenced by content hash. Stable reports
 and promoted Lean artifacts can be exported from the database. Only the trusted
 `StateService` process holds a database connection and resolves these paths;
-the state tree is absent from agent mounts and OS policy denies access even if a
-model guesses its host path. All state mutations arrive as authenticated gateway
-requests and are validated again inside the service.
+the state tree is absent from the materialized agent view and the platform
+sandbox denies access even if a model guesses its host path. All state mutations
+arrive as authenticated gateway requests and are validated again inside the
+service.
 
 The database contains append-only events plus materialized views. Important
 objects are `Run`, `Worker`, `ResearchDirective`, `FileLease`, `EvidenceNode`,
@@ -345,13 +369,24 @@ the sequence answers *in what publication order?* A `KnowledgeDelta` names both
 its previous and new pair. Run manifests and leases pin the pair, so two runs can
 select an identical starting state rather than merely a similarly named one.
 
+Every scored evaluation freezes the environment and allowed-import manifest;
+any transition request is rejected and the run cannot continue under a changed
+environment. Outside scored evaluation, the conductor may only propose a
+transition. A trusted `EnvironmentPolicy` approves it: a predeclared policy may
+approve unscored autonomous research, while collaborative runs require a human
+approval event. Any human approval changes the participation label. The
+promotion service executes an approved transition but cannot approve one, and
+the approver, reason, old fingerprint, and new fingerprint are durable events.
+
 A contribution is stale if either pinned formal epoch differs from the current
-published pair, or if its leased file version no longer matches. An environment
-change necessarily changes `base_epoch`; there is no independent, weaker
-environment-staleness rule. Stale work remains immutable evidence but cannot be
-promoted directly. The promotion queue may replay it in a staging document on
-the current pair; success creates a new rebased contribution while preserving
-the original and its provenance.
+published pair. A patch-form contribution is also stale if its expected leased
+file version no longer matches; an immutable snapshot-form contribution is
+self-contained and is not made stale merely because the worker later edits its
+leased document. An environment change necessarily changes `base_epoch`; there
+is no independent, weaker environment-staleness rule. Stale work remains
+immutable evidence but cannot be promoted directly. The promotion queue may
+replay it in a staging document on the current pair; success creates a new
+rebased contribution while preserving the original and its provenance.
 
 ### 7.3 Isolated runtime, available on demand
 
@@ -380,14 +415,18 @@ A worker submits a `Contribution` with:
 ```text
 worker_id, run_id, lease_id
 base_epoch, knowledge_epoch, file_version
+payload_kind = patch | snapshot
 candidate declaration and proof
 formal dependencies
 imports and environment_fingerprint
-source patch or virtual-document snapshot
+source patch with expected file_version, or immutable snapshot with payload_hash
 assumptions and axioms
 formal action trace
 research notes and evidence links
 ```
+
+For `patch`, `file_version` is an application precondition. For `snapshot`, it
+records provenance only; integrity and replay use `payload_hash`.
 
 ### 8.2 Knowledge Promotion Layer
 
@@ -493,11 +532,12 @@ disabled by default. Preflight warns on low disk and refuses an isolated runtime
 when the configured free-space floor is not met.
 
 The slice-2 project at `examples/smoke_lean/` is explicitly Mathlib-free: it
-imports only Lean 4 core/Std, has no external Lake packages, and pins
-`leanprover/lean4:v4.32.0`. Slice 2 must not download Mathlib or a local Loogle
-index, and premise search is not exercised by its acceptance run. This keeps the
-formal bridge, lease, promotion, and synchronization test independent of the
-machine's limited free disk.
+imports only Lean 4 core and the `Std` library shipped in the pinned toolchain,
+has no external Lake packages, does not depend on the external `Batteries`
+package, and pins `leanprover/lean4:v4.32.0`. Slice 2 must not download Mathlib or
+a local Loogle index, and premise search is not exercised by its acceptance run.
+This keeps the formal bridge, lease, promotion, and synchronization test
+independent of the machine's limited free disk.
 
 When remote formal search is enabled in later profiles, workers call a central
 `SearchBroker` rather than endpoints directly. The broker deduplicates identical
@@ -525,6 +565,7 @@ Every evaluation manifest freezes and records:
 - agent capability and process-isolation profiles;
 - warm/cold cache state;
 - runtime mode;
+- environment-transition policy and any rejected transition requests;
 - human intervention count, which must be zero for `formal_unassisted`;
 - alignment-review kind, auditor identity, and verdict.
 
@@ -625,8 +666,8 @@ delivered through ordered vertical slices:
    backend, isolation probes, and status/doctor commands.
 2. **Shared formal loop:** Aizim `DocumentBroker`, pinned upstream lean-lsp-mcp
    adapter, shared LSP runtime, file leases, virtual tactic attempts, two proof
-   workers, serialized contribution promotion, and the Std-only Lean smoke
-   project.
+   workers, serialized contribution promotion, and the toolchain-Std-only Lean
+   smoke project.
 3. **Agentic modes:** persistent worker memory, richer agent roles,
    `autonomous`, `collaborative`, and trace-based `learning` flows.
 4. **Question Lab:** literature adapters, evidence statuses, conjecture agents,
@@ -649,18 +690,23 @@ The first implementation plan covers slices 1 and 2. It is complete only when:
    disallowed tools are absent from discovery and server-side authorization
    independently rejects the calls with durable denial events.
 5. A deterministic attack probe launched through the exact real-backend sandbox
-   cannot modify `.aizim/state.sqlite3`, an unleased Lean file, or a shared
-   artifact, cannot escape through a symlink/path traversal, and cannot make a
-   non-allowlisted direct network call. Hashes before and after remain identical.
+   cannot read or directly modify `.aizim/state.sqlite3`, modify an unleased Lean
+   file or shared artifact, escape through a symlink/path traversal, or make a
+   non-allowlisted direct network call. SHA-256 digests of the unleased file and
+   shared artifact remain identical; the canonical logical digest of protected
+   state projections is unchanged except for the expected appended denial
+   events.
 6. Two proof workers can use one shared Lean runtime on separate leases without
    modifying each other's documents.
 7. Virtual tactic trials do not edit physical source. An explicitly accepted
    action changes only the leased document through a version-checked broker CAS.
-8. The smoke project builds with pinned Lean `v4.32.0` and Std only; its manifest
-   and Lake state contain no Mathlib or external package dependency.
-9. A contribution pinned to either a stale epoch pair or stale file version
-   cannot publish directly; replay creates a separately identified rebased
-   contribution and preserves the original.
+8. The smoke project builds with pinned Lean `v4.32.0`, Lean core, and the `Std`
+   library shipped in that toolchain only; its manifest and Lake state contain no
+   Mathlib, `Batteries`, or other external package dependency.
+9. A contribution pinned to a stale epoch pair cannot publish directly. A stale
+   file version additionally blocks patch-form contributions, while a valid
+   immutable snapshot remains promotable after later worker edits. Replay creates
+   a separately identified rebased contribution and preserves the original.
 10. A promoted smoke declaration passes Lean diagnostics, whole-project build,
     and axiom checks before entering VerifiedFormalGraph.
 11. Two racing valid contributions pass through the single-writer queue without
@@ -697,7 +743,8 @@ The first implementation plan covers slices 1 and 2. It is complete only when:
 - A deterministic fake agent backend keeps orchestration tests reproducible.
 - Standard CI runs Python tests from `uv.lock`. A separate real-Lean workflow
   installs `elan` and pinned Lean `v4.32.0`, asserts the smoke Lake manifest has
-  no external packages, and runs the Std-only LSP/promotion integration suite.
+  no external packages, and runs the toolchain-Std-only LSP/promotion integration
+  suite.
   Mathlib-heavy tests are out of scope and later run only in an explicitly
   provisioned scheduled/manual job.
 - A real autonomous Codex run, with credentials supplied outside the repository,
@@ -716,8 +763,12 @@ Foundation dependencies:
 - [Lean 4 `v4.32.0`](https://github.com/leanprover/lean4/tree/8c9756b28d64dab099da31a4c09229a9e6a2ef35), commit
   `8c9756b28d64dab099da31a4c09229a9e6a2ef35`.
 - [lean-lsp-mcp `0.28.1`](https://github.com/oOo0oOo/lean-lsp-mcp/tree/15766fef24246f2159f55a5f6897126a26916ae8), commit
-  `15766fef24246f2159f55a5f6897126a26916ae8`, with locked
-  [leanclient `0.12.1`](https://pypi.org/project/leanclient/0.12.1/).
+  `15766fef24246f2159f55a5f6897126a26916ae8`, and
+  [leanclient `0.12.1`](https://pypi.org/project/leanclient/0.12.1/) are both
+  direct Aizim dependency pins.
+- [Codex CLI `0.144.6`](https://github.com/openai/codex/tree/5d1fbf26c43abc65a203928b2e31561cb039e06d), commit
+  `5d1fbf26c43abc65a203928b2e31561cb039e06d`, is the foundation agent-harness
+  and platform-sandbox baseline.
 - [leanprover-community/repl](https://github.com/leanprover-community/repl/tree/68a3b3a059787a7db44fb1e6281e4a657efee470)
   tag `v4.32.0`, commit `68a3b3a059787a7db44fb1e6281e4a657efee470`,
   optional and disabled for slices 1 and 2.
