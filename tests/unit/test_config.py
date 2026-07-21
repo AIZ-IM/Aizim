@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import dataclass, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,6 +34,44 @@ def write_config(project_root: Path, body: str) -> None:
     (config_dir / "config.toml").write_text(body)
 
 
+@dataclass(frozen=True, slots=True)
+class InvalidEpochPair:
+    base_epoch: str
+    knowledge_epoch: int
+
+
+def run_manifest() -> RunManifest:
+    return RunManifest(
+        run_id="run-1",
+        epoch_pair=EpochPair(base_epoch="a" * 64, knowledge_epoch=3),
+        event_schema_version=1,
+        environment_fingerprint="f" * 64,
+        started_at=datetime(2026, 7, 21, 10, tzinfo=UTC),
+        run_policy=RunPolicy(),
+        resources=ResourcePolicy(),
+        alignment_review=AlignmentReview(),
+        lean_version="4.32.0",
+        toolchain_version="leanprover/lean4:v4.32.0",
+        dependency_versions=(("mcp", "1.28.1"),),
+        lean_lsp_mcp_version="0.28.1",
+        leanclient_version="0.12.1",
+        agent_harness_name="codex-cli",
+        agent_harness_version="0.144.6",
+        agent_harness_binary_hash="1" * 64,
+        model_backend="openai",
+        model_identifier="gpt-5",
+        prompts=(("proof", "proof-v1"),),
+        reasoning_settings=(("effort", "high"),),
+        budgets=(("tokens", 10_000),),
+        timeouts_seconds=(("run", 300.0),),
+        search_permissions=("remote_search",),
+        capability_profile="proof-worker",
+        process_isolation_profile="macos-seatbelt",
+        cache_state="cold",
+        environment_transition_policy="reject",
+    )
+
+
 def test_missing_config_uses_design_defaults(tmp_path: Path) -> None:
     config = load_config(tmp_path, environ={})
 
@@ -46,10 +84,10 @@ def test_missing_config_uses_design_defaults(tmp_path: Path) -> None:
     assert config.resources.max_question_workers == 3
 
 
-def test_config_record_constructor_uses_design_defaults() -> None:
+def test_config_record_constructor_uses_design_defaults(tmp_path: Path) -> None:
     config = AizimConfig()
 
-    assert config.run == load_config(Path("unused"), environ={}).run
+    assert config.run == load_config(tmp_path, environ={}).run
     assert config.resources.max_proof_workers == 2
 
 
@@ -98,38 +136,19 @@ def test_alignment_review_requires_reviewer_metadata() -> None:
 
 
 def test_run_manifest_records_evaluation_boundary() -> None:
-    manifest = RunManifest(
-        run_id="run-1",
-        epoch_pair=EpochPair(base_epoch="a" * 64, knowledge_epoch=3),
-        event_schema_version=1,
-        environment_fingerprint="f" * 64,
-        started_at=datetime(2026, 7, 21, 10, tzinfo=UTC),
-        run_policy=RunPolicy(),
-        resources=ResourcePolicy(),
-        alignment_review=AlignmentReview(),
-        lean_version="4.32.0",
-        toolchain_version="leanprover/lean4:v4.32.0",
-        dependency_versions=(("mcp", "1.28.1"),),
-        lean_lsp_mcp_version="0.28.1",
-        leanclient_version="0.12.1",
-        agent_harness_name="codex-cli",
-        agent_harness_version="0.144.6",
-        agent_harness_binary_hash="1" * 64,
-        model_backend="openai",
-        model_identifier="gpt-5",
-        prompts=(("proof", "proof-v1"),),
-        reasoning_settings=(("effort", "high"),),
-        budgets=(("tokens", 10_000),),
-        timeouts_seconds=(("run", 300.0),),
-        search_permissions=("remote_search",),
-        capability_profile="proof-worker",
-        process_isolation_profile="macos-seatbelt",
-        cache_state="cold",
-        environment_transition_policy="reject",
-    )
+    manifest = run_manifest()
 
     assert manifest.lean_version == "4.32.0"
     assert manifest.model_identifier == "gpt-5"
+
+
+def test_run_manifest_rejects_noncanonical_epoch_record() -> None:
+    # Given
+    invalid_epoch = InvalidEpochPair(base_epoch="a" * 64, knowledge_epoch=3)
+
+    # When / Then
+    with pytest.raises(ValueError):
+        replace(run_manifest(), epoch_pair=invalid_epoch)
 
 
 def test_config_reads_toml_and_environment_model_override(tmp_path: Path) -> None:

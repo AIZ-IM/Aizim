@@ -180,13 +180,15 @@ class Contribution:
             _require_strings(values, field)
         match self.payload_kind:
             case ContributionPayloadKind.PATCH:
-                if not self.patch_body:
+                if self.patch_body is None:
                     raise _ContractError("patch", "requires a body and expected file version")
+                _require_text(self.patch_body, "patch_body")
                 if self.snapshot_body is not None or self.payload_hash is not None:
                     raise _ContractError("patch", "cannot contain snapshot fields")
             case ContributionPayloadKind.SNAPSHOT:
-                if not self.snapshot_body or self.payload_hash is None:
+                if self.snapshot_body is None or self.payload_hash is None:
                     raise _ContractError("snapshot", "requires a body and payload hash")
+                _require_text(self.snapshot_body, "snapshot_body")
                 _require_hash(self.payload_hash, "payload_hash")
                 if sha256_bytes(self.snapshot_body.encode()) != self.payload_hash:
                     raise _ContractError("payload_hash", "does not match snapshot body")
@@ -230,6 +232,12 @@ class KnowledgeDelta:
     new_environment_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
+        for field, epoch in (
+            ("previous_epoch", self.previous_epoch),
+            ("new_epoch", self.new_epoch),
+        ):
+            if type(epoch) is not EpochPair:
+                raise _ContractError(field, "must be an EpochPair")
         if self.new_epoch.knowledge_epoch != self.previous_epoch.knowledge_epoch + 1:
             raise _ContractError("new_epoch", "must advance knowledge_epoch exactly once")
         if self.new_epoch.base_epoch == self.previous_epoch.base_epoch:
@@ -255,6 +263,11 @@ class KnowledgeDelta:
                 if value is None:
                     raise _ContractError(field, "is required for an environment delta")
                 _require_hash(value, field)
+            if self.old_environment_fingerprint == self.new_environment_fingerprint:
+                raise _ContractError(
+                    "new_environment_fingerprint",
+                    "must differ from old_environment_fingerprint",
+                )
         for field, values in (
             ("dependencies", self.dependencies),
             ("assumptions", self.assumptions),

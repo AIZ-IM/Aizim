@@ -4,21 +4,16 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Final, Protocol, assert_never
+from typing import TYPE_CHECKING, Final, assert_never
+
+if TYPE_CHECKING:
+    from ..domain.model import EpochPair
 
 LEAN_TOOLCHAIN: Final = "leanprover/lean4:v4.32.0"
 LEAN_LSP_MCP_VERSION: Final = "0.28.1"
 LEANCLIENT_VERSION: Final = "0.12.1"
 MCP_VERSION: Final = "1.28.1"
 CODEX_CLI_VERSION: Final = "0.144.6"
-
-
-class _EpochPair(Protocol):
-    @property
-    def base_epoch(self) -> str: ...
-
-    @property
-    def knowledge_epoch(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,7 +171,7 @@ class RunPolicy:
 @dataclass(frozen=True, slots=True)
 class RunManifest:
     run_id: str
-    epoch_pair: _EpochPair
+    epoch_pair: EpochPair
     event_schema_version: int
     environment_fingerprint: str
     started_at: datetime
@@ -207,6 +202,10 @@ class RunManifest:
     rejected_transition_requests: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        from ..domain.model import EpochPair
+
+        if type(self.epoch_pair) is not EpochPair:
+            raise ConfigError("epoch_pair", "must be an EpochPair")
         for location, value in (
             ("run_id", self.run_id),
             ("lean_version", self.lean_version),
