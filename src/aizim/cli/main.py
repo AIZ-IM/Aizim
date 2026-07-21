@@ -9,6 +9,7 @@ from .. import __version__
 from ..gateway.sidecar import run_gateway_sidecar, scrub_session_arguments
 from .doctor_command import run_doctor
 from .init_command import run_init
+from .security_probe_command import run_security_probe
 from .state_command import run_state_serve
 from .status_command import run_status
 
@@ -58,6 +59,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     status = commands.add_parser("status")
     status.add_argument("--project", type=Path, default=Path.cwd())
     status.add_argument("--json", action="store_true", dest="as_json")
+    security_probe = commands.add_parser("security-probe")
+    security_probe.add_argument("--project", type=Path, required=True)
+    security_probe.add_argument("--backend", choices=("codex",), required=True)
+    security_probe.add_argument("--no-model", action="store_true", required=True)
     arguments = parser.parse_args(command_line)
     if arguments.command == "init":
         return run_init(arguments.project)
@@ -65,4 +70,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_doctor(arguments.project, arguments.as_json)
     if arguments.command == "status":
         return run_status(arguments.project, arguments.as_json)
+    if arguments.command == "security-probe":
+        return run_security_probe(arguments.project)
     return 0

@@ -3,13 +3,20 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import time
 from contextlib import suppress
 from pathlib import Path
 
 import pytest
 
 from aizim.agents import launcher
-from aizim.agents.launcher import AgentLaunchError, CodexLaunchSpec, launch_codex
+from aizim.agents.launcher import (
+    AgentLaunchError,
+    CodexLaunchSpec,
+    HostCommandSpec,
+    launch_codex,
+    run_host_command,
+)
 
 
 async def _wait_for_file(path: Path) -> None:
@@ -25,6 +32,49 @@ async def _wait_for_process_exit(pid: int) -> None:
             return
         await asyncio.sleep(0.01)
     raise AssertionError(f"process {pid} remained alive")
+
+
+@pytest.mark.parametrize("returncode", [0, 7])
+def test_host_runner_reaps_fd_detached_descendant_before_return(
+    returncode: int, tmp_path: Path
+) -> None:
+    descendant_file = tmp_path / "descendant"
+    command = tmp_path / "host-command.py"
+    command.write_text(
+        "import os, pathlib, time\n"
+        f"descendant = pathlib.Path({str(descendant_file)!r})\n"
+        "child = os.fork()\n"
+        "if child == 0:\n"
+        "    descendant.write_text(str(os.getpid()))\n"
+        "    for descriptor in (0, 1, 2): os.close(descriptor)\n"
+        "    while True: time.sleep(1)\n"
+        "while not descendant.exists(): time.sleep(0.01)\n"
+        "print('parent-output', flush=True)\n"
+        f"raise SystemExit({returncode})\n"
+    )
+    outcome = run_host_command(
+        HostCommandSpec(
+            ("/usr/bin/python3", str(command)),
+            tmp_path,
+            {"PATH": "/usr/bin:/bin"},
+        )
+    )
+    descendant_pid = int(descendant_file.read_text())
+    try:
+        assert outcome.returncode == returncode
+        assert outcome.stdout == b"parent-output\n"
+        assert outcome.stderr == b""
+        with pytest.raises(ProcessLookupError):
+            os.kill(descendant_pid, 0)
+    finally:
+        with suppress(ProcessLookupError):
+            os.killpg(os.getpgid(descendant_pid), signal.SIGKILL)
+        for _attempt in range(100):
+            try:
+                os.kill(descendant_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.01)
 
 
 async def test_cancel_during_term_grace_still_kills_and_reaps_child(

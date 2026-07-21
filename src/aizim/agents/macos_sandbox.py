@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from .macos_profile import compile_macos_profile
+from .macos_profile import compile_macos_profile, validate_macos_profile
 from .process_io import (
     READ_CHUNK_SIZE,
     ProcessOutputLimitError,
@@ -84,9 +84,11 @@ class MacOSSandboxAdapter:
             request.command,
             request.parent_env,
         )
-        return compile_macos_profile(
+        spec = compile_macos_profile(
             self._dependencies.codex_executable, normalized, developer_root
         )
+        validate_macos_profile(spec, project_root, developer_root)
+        return spec
 
     async def launch_probe(self, request: ProbeRequest) -> ProbeReport:
         protected_before = protected_asset_digests(request)

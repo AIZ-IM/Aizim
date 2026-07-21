@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import signal
 from collections.abc import Mapping
@@ -12,10 +13,17 @@ from typing import Final, Literal
 from aizim.async_lifecycle import await_cleanup
 
 from .codex_events import CodexEventError, TransportEventHasher, parse_final_message
-from .process_io import READ_CHUNK_SIZE, drain_process
+from .process_io import (
+    READ_CHUNK_SIZE,
+    ProcessOutputLimitError,
+    ProcessPipeError,
+    communicate_bounded,
+    drain_process,
+)
 
 _JSONL_LINE_LIMIT: Final = 4 * 1024 * 1024
 _STDERR_LIMIT: Final = 256 * 1024
+_HOST_OUTPUT_LIMIT: Final = 64 * 1024
 _TERMINATE_GRACE_SECONDS = 5.0
 
 
@@ -46,6 +54,64 @@ class CodexLaunchOutcome:
     transport_event_hash: str
     final_message_hash: str
     exit_code: int
+
+
+@dataclass(frozen=True, slots=True)
+class HostCommandSpec:
+    argv: tuple[str, ...]
+    cwd: Path
+    environment: Mapping[str, str] = field(repr=False)
+    timeout_seconds: float = 10.0
+    output_limit: int = _HOST_OUTPUT_LIMIT
+
+    def __post_init__(self) -> None:
+        if not self.argv or not Path(self.argv[0]).is_absolute():
+            raise ValueError("host command requires an absolute executable")
+        if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
+            raise ValueError("host command timeout must be finite and positive")
+        if type(self.output_limit) is not int or self.output_limit <= 0:
+            raise ValueError("host command output limit must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class HostCommandOutcome:
+    returncode: int
+    stdout: bytes
+    stderr: bytes
+
+
+def run_host_command(spec: HostCommandSpec) -> HostCommandOutcome:
+    return asyncio.run(_run_host_command(spec))
+
+
+async def _run_host_command(spec: HostCommandSpec) -> HostCommandOutcome:
+    process = await asyncio.create_subprocess_exec(
+        *spec.argv,
+        cwd=spec.cwd,
+        env=dict(spec.environment),
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        start_new_session=True,
+        limit=READ_CHUNK_SIZE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            communicate_bounded(process, b"", spec.output_limit),
+            timeout=spec.timeout_seconds,
+        )
+    except (TimeoutError, ProcessOutputLimitError, ProcessPipeError) as error:
+        await _finish_reaping(process, graceful=False)
+        raise AgentLaunchError("HOST_COMMAND_FAILED") from error
+    except BaseException:
+        await _finish_reaping(process, graceful=False)
+        raise
+    outcome = HostCommandOutcome(process.returncode or 0, stdout, stderr)
+    cleanup = asyncio.create_task(_kill_and_reap(process))
+    interruption = await await_cleanup(cleanup)
+    if interruption is not None:
+        raise interruption
+    return outcome
 
 
 async def launch_codex(spec: CodexLaunchSpec) -> CodexLaunchOutcome:
@@ -183,4 +249,4 @@ async def _finish_reaping(process: asyncio.subprocess.Process, *, graceful: bool
 async def _kill_and_reap(process: asyncio.subprocess.Process) -> None:
     with suppress(ProcessLookupError):
         os.killpg(process.pid, signal.SIGKILL)
-    await drain_process(process)
+    await _drain_process_group(process)

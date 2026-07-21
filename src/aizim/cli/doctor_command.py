@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
+from aizim.agents.launcher import AgentLaunchError, HostCommandSpec, run_host_command
 from aizim.config import (
     CODEX_CLI_VERSION,
     LEAN_LSP_MCP_VERSION,
@@ -49,7 +49,7 @@ def _check(identifier: str, passed: bool, success: str, failure: str) -> DoctorC
     return DoctorCheck(identifier, "PASS" if passed else "FAIL", success if passed else failure)
 
 
-def _command_environment() -> dict[str, str]:
+def scrubbed_command_environment() -> dict[str, str]:
     return {
         name: value
         for name, value in os.environ.items()
@@ -58,23 +58,21 @@ def _command_environment() -> dict[str, str]:
 
 
 def _command(identifier: str, argv: list[str], expected: str, cwd: Path) -> DoctorCheck:
-    environment = _command_environment()
+    environment = scrubbed_command_environment()
     executable = shutil.which(argv[0], path=environment.get("PATH"))
     if executable is None:
         return DoctorCheck(identifier, "FAIL", "required executable is unavailable")
     try:
-        result = subprocess.run(
-            [executable, *argv[1:]],
-            cwd=cwd,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            env=environment,
+        result = run_host_command(
+            HostCommandSpec(
+                argv=(executable, *argv[1:]),
+                cwd=cwd,
+                environment=environment,
+            )
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except (AgentLaunchError, OSError, ValueError):
         return DoctorCheck(identifier, "FAIL", "version check failed")
-    output = result.stdout + result.stderr
+    output = (result.stdout + result.stderr).decode(errors="replace")
     detail = next((line.strip() for line in output.splitlines() if line.strip()), expected)
     passed = result.returncode == 0 and expected in output
     return _check(identifier, passed, detail, "required version is unavailable")
