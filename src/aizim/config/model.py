@@ -14,6 +14,7 @@ LEAN_LSP_MCP_VERSION: Final = "0.28.1"
 LEANCLIENT_VERSION: Final = "0.12.1"
 MCP_VERSION: Final = "1.28.1"
 CODEX_CLI_VERSION: Final = "0.144.6"
+MIN_FREE_DISK_BYTES: Final = 2_147_483_648
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +126,7 @@ class ResourcePolicy:
     lsp_instances: int = 1
     local_loogle: bool = False
     remote_search_max_concurrency: int = 1
+    min_free_disk_bytes: int = MIN_FREE_DISK_BYTES
 
     def __post_init__(self) -> None:
         for location, value in (
@@ -133,10 +135,13 @@ class ResourcePolicy:
             ("scratch_slots", self.scratch_slots),
             ("lsp_instances", self.lsp_instances),
             ("remote_search_max_concurrency", self.remote_search_max_concurrency),
+            ("min_free_disk_bytes", self.min_free_disk_bytes),
         ):
             _sequence(value, location)
         if type(self.local_loogle) is not bool:
             raise ConfigError("local_loogle", "must be a boolean")
+        if self.min_free_disk_bytes != MIN_FREE_DISK_BYTES:
+            raise ConfigError("min_free_disk_bytes", "must equal the fixed 2 GiB floor")
 
 
 @dataclass(frozen=True, slots=True)

@@ -149,6 +149,9 @@ class _EventStore:
     def close(self) -> None:
         self._connection.close()
 
+    def checkpoint(self) -> None:
+        self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+
     def append(self, event: EventEnvelope) -> EventRecord:
         return _append(self._connection, self._reducer, event)
 
@@ -196,8 +199,13 @@ class _EventStore:
         ).fetchone()
         return None if row is None else ProjectionRecord(name, entity_id, row[0], row[1].encode())
 
-    def projections(self) -> tuple[ProjectionRecord, ...]:
-        return _query_projections(self._connection)
+    def projections(self, name: str | None = None) -> tuple[ProjectionRecord, ...]:
+        if name is not None and name not in PROJECTION_NAMES:
+            raise ProjectionAuthorityError(name, "name is not registered")
+        records = _query_projections(self._connection)
+        return records if name is None else tuple(
+            record for record in records if record.projection_name == name
+        )
 
     def canonical_projection_json(self) -> bytes:
         return _projection_json(self.projections())

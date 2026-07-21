@@ -14,6 +14,7 @@ from .model import (
     LEAN_TOOLCHAIN,
     LEANCLIENT_VERSION,
     MCP_VERSION,
+    MIN_FREE_DISK_BYTES,
     AizimConfig,
     ConfigError,
     FormalParticipation,
@@ -114,6 +115,7 @@ def load_config(
                 "lsp_instances",
                 "local_loogle",
                 "remote_search_max_concurrency",
+                "min_free_disk_bytes",
             }
         ),
         "resources",
@@ -127,6 +129,10 @@ def load_config(
                 "leanclient_version",
                 "mcp_version",
                 "codex_cli_version",
+                "schema_version",
+                "platform_adapter",
+                "repl_enabled",
+                "remote_search_enabled",
             }
         ),
         "foundation",
@@ -169,7 +175,23 @@ def load_config(
         remote_search_max_concurrency=_integer(
             resources_table, "remote_search_max_concurrency", 1
         ),
+        min_free_disk_bytes=_integer(
+            resources_table, "min_free_disk_bytes", MIN_FREE_DISK_BYTES
+        ),
     )
+    fixed_foundation = (
+        (_integer(foundation_table, "schema_version", 1), 1, "schema_version"),
+        (_string(foundation_table, "platform_adapter", "macos"), "macos", "platform_adapter"),
+        (_boolean(foundation_table, "repl_enabled", False), False, "repl_enabled"),
+        (
+            _boolean(foundation_table, "remote_search_enabled", False),
+            False,
+            "remote_search_enabled",
+        ),
+    )
+    for actual, required, location in fixed_foundation:
+        if actual != required:
+            raise ConfigError(location, f"must equal fixed foundation value {required!r}")
     file_model = raw.get("model")
     if file_model is not None and type(file_model) is not str:
         raise ConfigError("model", "must be a string")

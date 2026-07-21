@@ -100,6 +100,8 @@ class StateOperations(Protocol):
 
     def query_events(self, run_id: str | None = None) -> tuple[EventRecord, ...]: ...
 
+    def projections(self, name: str | None = None) -> tuple[ProjectionRecord, ...]: ...
+
     def logical_digest(self) -> str: ...
 
     def replay_verify(self) -> ReplayVerification: ...
@@ -157,6 +159,16 @@ def _projection_result(record: ProjectionRecord | None) -> JsonValue:
     }
 
 
+def _projection_document(record: ProjectionRecord) -> dict[str, JsonValue]:
+    state: JsonValue = json.loads(record.state_json)
+    return {
+        "entity_id": record.entity_id,
+        "projection_name": record.projection_name,
+        "state": state,
+        "version": record.version,
+    }
+
+
 def _health(target: StateOperations, request: RpcRequest, trusted: bool) -> RpcResponse:
     del trusted
     _keys(request.params, frozenset())
@@ -188,6 +200,13 @@ def _events(target: StateOperations, request: RpcRequest, trusted: bool) -> RpcR
     )
 
 
+def _projections(target: StateOperations, request: RpcRequest, trusted: bool) -> RpcResponse:
+    del trusted
+    _keys(request.params, frozenset(), frozenset({"projection_name"}))
+    records = target.projections(_optional_text(request.params, "projection_name"))
+    return RpcSuccess([_projection_document(record) for record in records])
+
+
 def _digest(target: StateOperations, request: RpcRequest, trusted: bool) -> RpcResponse:
     del trusted
     _keys(request.params, frozenset())
@@ -207,6 +226,7 @@ _HANDLERS: Final[dict[str, OperationHandler]] = {
     "append_event": _append,
     "query_projection": _projection,
     "query_events": _events,
+    "query_projections": _projections,
     "logical_digest": _digest,
     "replay_verify": _replay,
 }

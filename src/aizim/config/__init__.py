@@ -5,6 +5,7 @@ from .model import (
     LEAN_TOOLCHAIN,
     LEANCLIENT_VERSION,
     MCP_VERSION,
+    MIN_FREE_DISK_BYTES,
     AizimConfig,
     ConfigError,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "LEAN_LSP_MCP_VERSION",
     "LEAN_TOOLCHAIN",
     "MCP_VERSION",
+    "MIN_FREE_DISK_BYTES",
     "AizimConfig",
     "ConfigError",
     "load_config",

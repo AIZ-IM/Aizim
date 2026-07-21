@@ -149,6 +149,9 @@ class StateService:
             finally:
                 self._ownership.close()
 
+    def checkpoint(self) -> None:
+        self._store.checkpoint()
+
     async def aclose(self) -> None:
         rpc = self._rpc
         self._rpc = None
@@ -207,6 +210,9 @@ class StateService:
 
     def query_events(self, run_id: str | None = None) -> tuple[EventRecord, ...]:
         return self._store.query_events(run_id)
+
+    def projections(self, name: str | None = None) -> tuple[ProjectionRecord, ...]:
+        return self._store.projections(name)
 
     def canonical_projection_json(self) -> bytes:
         return self._store.canonical_projection_json()

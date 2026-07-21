@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal_lean"
+CHECK_IDS = {
+    "python",
+    "uv",
+    "lean",
+    "lake",
+    "lean_project",
+    "disk_floor",
+    "runtime_mode",
+    "codex",
+    "sandbox_exec",
+    "lean_lsp_mcp",
+    "leanclient",
+    "state_service",
+}
+
+
+def run_cli(*args: str, environ: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "aizim", *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environ,
+    )
+
+
+def initialized_project(tmp_path: Path) -> Path:
+    root = Path(shutil.copytree(FIXTURE, tmp_path / "lean-project"))
+    assert run_cli("init", str(root)).returncode == 0
+    return root
+
+
+def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
+    tmp_path: Path,
+) -> None:
+    root = initialized_project(tmp_path)
+    environment = dict(os.environ)
+    secret_values = ("api-key-value", "token-value", "credential-value")
+    environment.update(
+        AIZIM_TEST_API_KEY=secret_values[0],
+        AIZIM_TEST_TOKEN=secret_values[1],
+        AIZIM_TEST_CREDENTIAL=secret_values[2],
+    )
+
+    result = run_cli("doctor", "--project", str(root), "--json", environ=environment)
+    document = json.loads(result.stdout)
+
+    assert result.returncode == 0
+    assert document["ready"] is True
+    assert {check["id"] for check in document["checks"]} == CHECK_IDS
+    assert {check["status"] for check in document["checks"]} <= {"PASS", "WARN", "FAIL"}
+    assert all(secret not in result.stdout + result.stderr for secret in secret_values)
+
+
+def test_doctor_human_output_ends_ready(tmp_path: Path) -> None:
+    root = initialized_project(tmp_path)
+
+    result = run_cli("doctor", "--project", str(root))
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines()[-1] == "READY"
+    assert all(line == line.rstrip() for line in result.stdout.splitlines())
+    assert all(line.split(maxsplit=1)[0] in {"PASS", "WARN", "FAIL", "READY"}
+               for line in result.stdout.splitlines())
+
+
+def test_doctor_wrong_foundation_pin_is_not_ready_without_leaking_config(
+    tmp_path: Path,
+) -> None:
+    root = initialized_project(tmp_path)
+    config = root / ".aizim" / "config.toml"
+    config.write_text(config.read_text().replace("0.28.1", "0.28.0"))
+
+    result = run_cli("doctor", "--project", str(root), "--json")
+    document = json.loads(result.stdout)
+
+    assert result.returncode == 2
+    assert document["ready"] is False
+    assert any(check["status"] == "FAIL" for check in document["checks"])
+    assert "0.28.0" not in result.stdout
+
+
+def test_doctor_invalid_project_keeps_the_stable_check_ids(tmp_path: Path) -> None:
+    result = run_cli("doctor", "--project", str(tmp_path), "--json")
+    document = json.loads(result.stdout)
+
+    assert result.returncode == 2
+    assert document["ready"] is False
+    assert {check["id"] for check in document["checks"]} == CHECK_IDS

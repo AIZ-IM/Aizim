@@ -123,6 +123,29 @@ def test_default_resource_policy_matches_current_mac_budget() -> None:
     assert policy.lsp_instances == 1
     assert not policy.local_loogle
     assert policy.remote_search_max_concurrency == 1
+    assert policy.min_free_disk_bytes == 2_147_483_648
+
+
+def test_foundation_operating_profile_is_fixed_and_loadable(tmp_path: Path) -> None:
+    write_config(
+        tmp_path,
+        (
+            "[foundation]\n"
+            "schema_version = 1\n"
+            'platform_adapter = "macos"\n'
+            "repl_enabled = false\n"
+            "remote_search_enabled = false\n"
+        ),
+    )
+
+    config = load_config(tmp_path, environ={})
+
+    assert config.resources.min_free_disk_bytes == 2_147_483_648
+
+
+def test_disk_floor_cannot_be_disabled() -> None:
+    with pytest.raises(ValueError):
+        ResourcePolicy(min_free_disk_bytes=0)
 
 
 def test_alignment_review_requires_reviewer_metadata() -> None:
