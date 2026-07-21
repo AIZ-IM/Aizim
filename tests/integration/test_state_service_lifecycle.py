@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import asyncio  # noqa: ANYIO_OK -- exercises the asyncio Unix-server lifecycle
 import socket
 import subprocess
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Final
 
 import pytest
 
+from aizim.domain.serialization import canonical_json
 from aizim.state import StateService, StateServiceConfig
-from aizim.state.rpc import SocketPathError
+from aizim.state import rpc as rpc_module
+from aizim.state.rpc import (
+    RpcRequest,
+    SocketPathError,
+)
 from aizim.state.service import StateServiceLifecycleError
 
 _CRASH_EXIT: Final = 47
@@ -61,6 +68,27 @@ def project_root() -> Iterator[Path]:
 
 def _service(project_root: Path) -> StateService:
     return StateService(StateServiceConfig(project_root, "service-session"))
+
+
+async def _shutdown(service: StateService, peer: asyncio.StreamWriter) -> None:
+    close_task = asyncio.create_task(service.aclose())
+    try:
+        await asyncio.wait_for(asyncio.shield(close_task), timeout=0.25)
+    except TimeoutError:
+        peer.close()
+        await peer.wait_closed()
+        await close_task
+        raise
+
+
+async def _round_trip(
+    reader: asyncio.StreamReader, writer: asyncio.StreamWriter, request: RpcRequest
+) -> None:
+    encoded = canonical_json(request)
+    writer.write(len(encoded).to_bytes(4, "big") + encoded)
+    await writer.drain()
+    response_size = int.from_bytes(await reader.readexactly(4), "big")
+    await reader.readexactly(response_size)
 
 
 @contextmanager
@@ -190,3 +218,93 @@ async def test_close_preserves_replacement_socket_inode(project_root: Path) -> N
         await service.aclose()
         replacement.close()
         socket_path.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_shutdown_with_idle_client_closes_peer_and_allows_restart(
+    project_root: Path,
+) -> None:
+    # Given
+    service = _service(project_root)
+    await service.start()
+    reader, writer = await asyncio.open_unix_connection(str(service.socket_path))
+    await asyncio.sleep(0)
+
+    try:
+        # When
+        await _shutdown(service, writer)
+
+        # Then
+        assert await asyncio.wait_for(reader.read(), timeout=0.25) == b""
+        async with _service(project_root) as restarted:
+            assert restarted.health().event_schema_version == 1
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_with_authenticated_persistent_client_preserves_restart_state(
+    project_root: Path,
+) -> None:
+    # Given
+    service = _service(project_root)
+    await service.start()
+    reader, writer = await asyncio.open_unix_connection(str(service.socket_path))
+    await _round_trip(
+        reader,
+        writer,
+        RpcRequest(
+            operation="append_event",
+            session_id="service-session",
+            params={
+                "event_type": "RunCreated",
+                "actor": "lifecycle-test",
+                "run_id": "persistent-run",
+                "causation_id": None,
+                "payload": {},
+            },
+        ),
+    )
+
+    try:
+        # When
+        await _shutdown(service, writer)
+
+        # Then
+        assert await asyncio.wait_for(reader.read(), timeout=0.25) == b""
+        async with _service(project_root) as restarted:
+            assert restarted.query_projection("runs", "persistent-run") is not None
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_chmod_failure_removes_identity_recorded_socket(
+    project_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given
+    if sys.version_info >= (3, 13):
+        monkeypatch.setattr(
+            rpc_module.asyncio,
+            "start_unix_server",
+            partial(asyncio.start_unix_server, cleanup_socket=False),
+        )
+
+    def reject_chmod(socket_path: Path, mode: int) -> None:
+        raise PermissionError("injected socket chmod failure")
+
+    monkeypatch.setattr(Path, "chmod", reject_chmod)
+    service = _service(project_root)
+
+    try:
+        # When / Then
+        with pytest.raises(PermissionError, match="injected socket chmod failure"):
+            await service.start()
+        assert not service.socket_path.exists()
+    finally:
+        await service.aclose()
+        service.socket_path.unlink(missing_ok=True)

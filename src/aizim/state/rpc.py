@@ -125,6 +125,18 @@ class RpcServer:
         self._dispatch = dispatch
         self._server: asyncio.AbstractServer | None = None
         self._owned_socket: SocketIdentity | None = None
+        self._writers: set[asyncio.StreamWriter] = set()
+        self._handlers: set[asyncio.Task[None]] = set()
+        self._closing = False
+
+    def _accept_connection(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        self._writers.add(writer)
+        handler = asyncio.create_task(self._handle_connection(reader, writer))
+        self._handlers.add(handler)
+        if self._closing:
+            writer.close()
 
     async def start(self) -> None:
         self._socket_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,30 +145,59 @@ class RpcServer:
         except SocketOwnershipError as error:
             raise SocketPathError(error.reason) from error
         server = await asyncio.start_unix_server(
-            self._handle_connection, path=str(self._socket_path)
+            self._accept_connection, path=str(self._socket_path)
         )
+        owned_socket: SocketIdentity | None = None
         try:
             owned_socket = record_owned_socket(self._socket_path)
             self._socket_path.chmod(0o600)
         except (OSError, SocketOwnershipError):
             server.close()
-            await server.wait_closed()
+            try:
+                await server.wait_closed()
+            finally:
+                if owned_socket is not None:
+                    remove_owned_socket(self._socket_path, owned_socket)
             raise
+        self._closing = False
         self._server = server
         self._owned_socket = owned_socket
+
+    async def _close_connections(self) -> BaseException | None:
+        failure: BaseException | None = None
+        while self._handlers:
+            for writer in tuple(self._writers):
+                writer.close()
+            handlers = tuple(self._handlers)
+            done, _ = await asyncio.wait(handlers)
+            for handler in done:
+                if not handler.cancelled():
+                    error = handler.exception()
+                    if failure is None and error is not None:
+                        failure = error
+        return failure
 
     async def close(self) -> None:
         server = self._server
         owned_socket = self._owned_socket
-        self._server = None
-        self._owned_socket = None
+        failure: BaseException | None = None
         try:
             if server is not None:
+                self._closing = True
                 server.close()
+                failure = await self._close_connections()
                 await server.wait_closed()
+                await asyncio.sleep(0)
+                late_failure = await self._close_connections()
+                if failure is None:
+                    failure = late_failure
         finally:
+            self._server = None
+            self._owned_socket = None
             if owned_socket is not None:
                 remove_owned_socket(self._socket_path, owned_socket)
+        if failure is not None:
+            raise failure
 
     async def _handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -195,7 +236,13 @@ class RpcServer:
                 await _write_response(writer, self._dispatch(request, trusted))
         finally:
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            finally:
+                self._writers.discard(writer)
+                handler = asyncio.current_task()
+                if handler is not None:
+                    self._handlers.discard(handler)
 
 
 async def start_rpc_server(
