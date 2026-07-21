@@ -31,6 +31,14 @@ def _sha256_payload(value: JsonValue) -> bool:
     return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
+def _string_list_payload(value: JsonValue) -> bool:
+    if type(value) is not list or not value:
+        return False
+    if any(type(item) is not str or not item for item in value):
+        return False
+    return len(value) == len(set(value))
+
+
 def _timestamp_payload(value: JsonValue) -> bool:
     if type(value) is not str or not value.endswith("Z"):
         return False
@@ -46,7 +54,7 @@ _FIELD_VALIDATORS: Final[dict[str, Callable[[JsonValue], bool]]] = {
     "expected_version": _integer_payload,
     "knowledge_epoch": _integer_payload,
     "manifest": lambda value: type(value) is dict,
-    "operations": lambda value: type(value) is list,
+    "operations": _string_list_payload,
     "state_version": _integer_payload,
     "version": _integer_payload,
 }
@@ -108,9 +116,9 @@ _CODECS: Final = {
         ("worker_id",), ("reason_code", "artifact_hash"), {"artifact_hash": _sha256_payload}
     ),
     "CapabilityMinted": _codec(
-        ("worker_id", "role"),
-        ("token_hash", "lease_id", "operations", "expires_at"),
-        {"token_hash": _sha256_payload, "expires_at": _timestamp_payload},
+        ("worker_id", "role", "operations", "expires_at"),
+        ("lease_id",),
+        {"expires_at": _timestamp_payload},
     ),
     "CapabilityDenied": _codec(
         ("reason_code", "role", "worker_id", "operation", "request_id")

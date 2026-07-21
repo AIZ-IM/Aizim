@@ -6,6 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from types import TracebackType
 
+from aizim.domain.serialization import JsonValue
+
+from .capabilities import CapabilityRecord, canonical_timestamp
 from .event_payload import thaw_payload
 from .events import (
     EVENT_SCHEMA_VERSION,
@@ -156,18 +159,45 @@ class StateService:
             self.close()
 
     def append_event(self, command: AppendEventCommand) -> EventRecord:
-        occurred_at = self._dependencies.clock()
-        event = EventEnvelope(
+        return self._store.append(self._event(command))
+
+    def persist_capability(self, capability: CapabilityRecord) -> EventRecord:
+        payload: dict[str, JsonValue] = {
+            "worker_id": capability.worker_id,
+            "role": capability.role,
+            "operations": list(capability.operations),
+            "expires_at": canonical_timestamp(capability.expires_at),
+        }
+        if capability.lease_id is not None:
+            payload["lease_id"] = capability.lease_id
+        event = self._event(
+            AppendEventCommand(
+                event_type="CapabilityMinted",
+                actor="capability_issuer",
+                run_id=capability.run_id,
+                causation_id=None,
+                payload=payload,
+            )
+        )
+        return self._store.persist_capability(capability, event)
+
+    def capability_record(self, token_hash: str) -> CapabilityRecord | None:
+        return self._store.capability_record(token_hash)
+
+    def revoke_capability(self, token_hash: str) -> bool:
+        return self._store.revoke_capability(token_hash, self._dependencies.clock())
+
+    def _event(self, command: AppendEventCommand) -> EventEnvelope:
+        return EventEnvelope(
             event_id=self._dependencies.event_ids(),
             schema_version=EVENT_SCHEMA_VERSION,
             event_type=command.event_type,
-            occurred_at=occurred_at,
+            occurred_at=self._dependencies.clock(),
             actor=command.actor,
             run_id=command.run_id,
             causation_id=command.causation_id,
             payload=thaw_payload(command.payload),
         )
-        return self._store.append(event)
 
     def health(self) -> StoreHealth:
         return self._store.health()

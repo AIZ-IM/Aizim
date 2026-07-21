@@ -1,3 +1,4 @@
+from .capabilities import CapabilityRecord, CapabilityRecordError
 from .events import (
     EVENT_SCHEMA_VERSION,
     EventEnvelope,
@@ -18,6 +19,8 @@ __all__ = [
     "EVENT_SCHEMA_VERSION",
     "PROJECTION_NAMES",
     "AppendEventCommand",
+    "CapabilityRecord",
+    "CapabilityRecordError",
     "DuplicateEventError",
     "EventEnvelope",
     "EventValidationError",

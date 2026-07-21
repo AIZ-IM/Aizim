@@ -26,7 +26,6 @@ _HASH_CASES: Final = (
         {"project_id": "p", "base_epoch": _HASH, "knowledge_epoch": 0},
     ),
     ("WorkerCrashed", "artifact_hash", {"worker_id": "w"}),
-    ("CapabilityMinted", "token_hash", {"worker_id": "w", "role": "proof_worker"}),
     ("SandboxProbeFailed", "artifact_hash", {"probe_id": "p", "reason_code": "failed"}),
     ("DocumentEdited", "content_hash", {"document_id": "d"}),
     ("DocumentEditRecovered", "content_hash", {"document_id": "d"}),
@@ -48,7 +47,11 @@ _TIMESTAMP_CASES: Final = (
     ("RunAborted", "ended_at", {}),
     ("WorkerStarted", "started_at", {"worker_id": "w"}),
     ("WorkerStopped", "stopped_at", {"worker_id": "w"}),
-    ("CapabilityMinted", "expires_at", {"worker_id": "w", "role": "proof_worker"}),
+    (
+        "CapabilityMinted",
+        "expires_at",
+        {"worker_id": "w", "role": "formalizer", "operations": ["project.read"]},
+    ),
     ("LeaseGranted", "expires_at", {"lease_id": "l", "worker_id": "w", "document_id": "d"}),
     ("LeanRuntimeStarted", "started_at", {"runtime_id": "r"}),
 )
@@ -133,6 +136,36 @@ def test_event_payload_is_recursively_detached_and_immutable() -> None:
     assert isinstance(frozen_manifest, MappingProxyType)
     assert frozen_manifest["labels"] == ("original",)
     assert event_as_dict(event)["payload"] == {"manifest": {"labels": ["original"]}}
+
+
+def test_capability_minted_event_rejects_token_digest_material() -> None:
+    with pytest.raises(EventValidationError):
+        _event(
+            "CapabilityMinted",
+            {
+                "worker_id": "worker-1",
+                "role": "formalizer",
+                "operations": ["project.read"],
+                "expires_at": _TIMESTAMP,
+                "token_hash": _HASH,
+            },
+        )
+
+
+@pytest.mark.parametrize("operations", [[], ["project.read", "project.read"]])
+def test_capability_minted_event_requires_unique_nonempty_operations(
+    operations: list[JsonValue],
+) -> None:
+    with pytest.raises(EventValidationError):
+        _event(
+            "CapabilityMinted",
+            {
+                "worker_id": "worker-1",
+                "role": "formalizer",
+                "operations": operations,
+                "expires_at": _TIMESTAMP,
+            },
+        )
 
 
 def test_serialized_event_payload_is_a_detached_mutable_document() -> None:

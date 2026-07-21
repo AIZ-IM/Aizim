@@ -53,11 +53,17 @@ class PublicationState(StrEnum):
 
 
 class AgentRole(StrEnum):
-    CONDUCTOR = "conductor"
-    QUESTION_WORKER = "question_worker"
-    PROOF_WORKER = "proof_worker"
-    PROMOTION_SERVICE = "promotion_service"
-    ALIGNMENT_REVIEWER = "alignment_reviewer"
+    RESEARCH_CONDUCTOR = "research_conductor"
+    LITERATURE_SCOUT = "literature_scout"
+    BOUNDARY_MAPPER = "boundary_mapper"
+    CONJECTURE_GENERATOR = "conjecture_generator"
+    NOVELTY_AUDITOR = "novelty_auditor"
+    FORMALIZER = "formalizer"
+    FORMAL_PLANNER = "formal_planner"
+    PROOF_EXPLORER = "proof_explorer"
+    LEMMA_INVENTOR = "lemma_inventor"
+    COUNTEREXAMPLE_AGENT = "counterexample_agent"
+    LEARNING_AGENT = "learning_agent"
 
 
 @dataclass(frozen=True, slots=True)

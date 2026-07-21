@@ -2,18 +2,15 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Final
 
 from aizim.domain.serialization import canonical_json
 
-from .events import (
-    EVENT_SCHEMA_VERSION,
-    EventEnvelope,
-    IncompatibleEventSchemaError,
-    event_as_dict,
-)
+from .capabilities import CapabilityRecord, CapabilityRow, capability_from_row
+from .events import EVENT_SCHEMA_VERSION, EventEnvelope, IncompatibleEventSchemaError
 from .projections import PROJECTION_NAMES, ProjectionRecord, ProjectionReducer
 from .store_contracts import (
     DuplicateEventError,
@@ -27,6 +24,13 @@ from .store_contracts import (
     _projection_json,
     _projection_records,
     continue_initialization,
+)
+from .store_mutations import (
+    EventMutation,
+    apply_event_mutation,
+    insert_capability,
+    revoke_capability,
+    revoke_lease_capabilities,
 )
 
 _SCHEMA_PATH: Final = Path(__file__).with_name("sql") / "001_foundation.sql"
@@ -116,47 +120,19 @@ def _query_projections(connection: sqlite3.Connection) -> tuple[ProjectionRecord
 def _append(
     connection: sqlite3.Connection, reducer: ProjectionReducer, event: EventEnvelope
 ) -> EventRecord:
-    document = event_as_dict(event)
     try:
         connection.execute("BEGIN IMMEDIATE")
         with connection:
-            cursor = connection.execute(
-                "INSERT INTO events(event_id,schema_version,event_type,occurred_at,actor,"
-                "run_id,causation_id,payload_json) VALUES(?,?,?,?,?,?,?,?)",
-                (
-                    document["event_id"],
-                    document["schema_version"],
-                    document["event_type"],
-                    document["occurred_at"],
-                    document["actor"],
-                    document["run_id"],
-                    document["causation_id"],
-                    canonical_json(document["payload"]).decode(),
-                ),
-            )
-            sequence = cursor.lastrowid
-            if sequence is None:
-                raise ProjectionAuthorityError("events", "insert did not allocate a sequence")
             snapshots = _query_projections(connection)
-            for change in reducer(snapshots, event):
-                if change.projection_name not in PROJECTION_NAMES:
-                    raise ProjectionAuthorityError(change.projection_name, "name is not registered")
-                connection.execute(
-                    "INSERT INTO projections(projection_name,entity_id,version,state_json) "
-                    "VALUES(?,?,?,?) ON CONFLICT(projection_name,entity_id) DO UPDATE SET "
-                    "version=excluded.version,state_json=excluded.state_json",
-                    (
-                        change.projection_name,
-                        change.entity_id,
-                        change.version,
-                        change.state_json.decode(),
-                    ),
-                )
+            record = apply_event_mutation(
+                connection, EventMutation(reducer, event, snapshots)
+            )
+            revoke_lease_capabilities(connection, event)
     except sqlite3.IntegrityError as error:
         if "events.event_id" in str(error):
             raise DuplicateEventError(event.event_id) from None
         raise ProjectionAuthorityError("unknown", "database constraint rejected mutation") from None
-    return EventRecord(sequence=sequence, envelope=event)
+    return record
 
 
 class _EventStore:
@@ -175,6 +151,37 @@ class _EventStore:
 
     def append(self, event: EventEnvelope) -> EventRecord:
         return _append(self._connection, self._reducer, event)
+
+    def persist_capability(
+        self, capability: CapabilityRecord, event: EventEnvelope
+    ) -> EventRecord:
+        try:
+            self._connection.execute("BEGIN IMMEDIATE")
+            with self._connection:
+                insert_capability(self._connection, capability)
+                snapshots = _query_projections(self._connection)
+                return apply_event_mutation(
+                    self._connection, EventMutation(self._reducer, event, snapshots)
+                )
+        except sqlite3.IntegrityError as error:
+            if "events.event_id" in str(error):
+                raise DuplicateEventError(event.event_id) from None
+            raise ProjectionAuthorityError(
+                "capability_tokens", "database constraint rejected mutation"
+            ) from None
+
+    def capability_record(self, token_hash: str) -> CapabilityRecord | None:
+        row: CapabilityRow | None = self._connection.execute(
+            "SELECT token_hash,run_id,worker_id,role,lease_id,operations_json,"
+            "expires_at,revoked_at FROM capability_tokens WHERE token_hash=?",
+            (token_hash,),
+        ).fetchone()
+        return None if row is None else capability_from_row(row)
+
+    def revoke_capability(self, token_hash: str, revoked_at: datetime) -> bool:
+        self._connection.execute("BEGIN IMMEDIATE")
+        with self._connection:
+            return revoke_capability(self._connection, token_hash, revoked_at)
 
     def query_events(self, run_id: str | None = None) -> tuple[EventRecord, ...]:
         return _query_events(self._connection, run_id)
