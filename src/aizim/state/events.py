@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final, TypedDict
 
-from aizim.domain.serialization import JsonValue, canonical_json
+from aizim.domain.serialization import JsonValue
+
+from .event_payload import FrozenJsonObject, freeze_payload, thaw_payload
+from .schema_v1 import EventValidationError, validate_payload
 
 EVENT_SCHEMA_VERSION: Final = 1
 _EVENT_FIELDS: Final = frozenset(
@@ -26,15 +29,6 @@ _ULID_ALPHABET: Final = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
 @dataclass(frozen=True, slots=True)
-class EventValidationError(ValueError):
-    location: str
-    reason: str
-
-    def __str__(self) -> str:
-        return f"{self.location}: {self.reason}"
-
-
-@dataclass(frozen=True, slots=True)
 class IncompatibleEventSchemaError(RuntimeError):
     source_version: int
 
@@ -42,105 +36,7 @@ class IncompatibleEventSchemaError(RuntimeError):
         return f"INCOMPATIBLE_EVENT_SCHEMA: unsupported event schema {self.source_version}"
 
 
-def _text_payload(value: JsonValue) -> bool:
-    return type(value) is str and bool(value)
-
-
-def _integer_payload(value: JsonValue) -> bool:
-    return type(value) is int and value >= 0
-
-
-_FIELD_VALIDATORS: Final[dict[str, Callable[[JsonValue], bool]]] = {
-    "expected_version": _integer_payload,
-    "knowledge_epoch": _integer_payload,
-    "manifest": lambda value: type(value) is dict,
-    "operations": lambda value: type(value) is list,
-    "state_version": _integer_payload,
-    "version": _integer_payload,
-}
-
-
-@dataclass(frozen=True, slots=True)
-class _PayloadCodec:
-    required: frozenset[str]
-    optional: frozenset[str]
-
-    def validate(self, event_type: str, payload: dict[str, JsonValue]) -> None:
-        missing = self.required - payload.keys()
-        unknown = payload.keys() - self.required - self.optional
-        if missing:
-            raise EventValidationError(event_type, f"missing fields: {', '.join(sorted(missing))}")
-        if unknown:
-            raise EventValidationError(event_type, f"unknown fields: {', '.join(sorted(unknown))}")
-        for field, value in payload.items():
-            validator = _FIELD_VALIDATORS.get(field, _text_payload)
-            if not validator(value):
-                raise EventValidationError(event_type, f"field {field} has an invalid type")
-        canonical_json(payload)
-
-
-def _codec(
-    required: tuple[str, ...] = (), optional: tuple[str, ...] = ()
-) -> _PayloadCodec:
-    return _PayloadCodec(frozenset(required), frozenset(optional))
-
-
-_CODECS: Final = {
-    "ProjectInitialized": _codec(
-        ("project_id", "base_epoch", "knowledge_epoch"), ("environment_fingerprint",)
-    ),
-    "RunCreated": _codec(optional=("manifest", "status")),
-    "RunCompleted": _codec(optional=("outcome", "ended_at")),
-    "RunAborted": _codec(optional=("reason_code", "ended_at")),
-    "WorkerRegistered": _codec(("worker_id",), ("role", "status")),
-    "WorkerStarted": _codec(("worker_id",), ("role", "started_at")),
-    "WorkerStopped": _codec(("worker_id",), ("reason_code", "stopped_at")),
-    "WorkerCrashed": _codec(("worker_id",), ("reason_code", "artifact_hash")),
-    "CapabilityMinted": _codec(
-        ("worker_id", "role"), ("token_hash", "lease_id", "operations", "expires_at")
-    ),
-    "CapabilityDenied": _codec(
-        ("reason_code", "role", "worker_id", "operation", "request_id")
-    ),
-    "SandboxProbeStarted": _codec(("probe_id",), ("profile",)),
-    "SandboxProbeDenied": _codec(("probe_id", "reason_code"), ("operation",)),
-    "SandboxProbePassed": _codec(("probe_id",), ("operation",)),
-    "SandboxProbeFailed": _codec(("probe_id", "reason_code"), ("artifact_hash",)),
-    "LeaseGranted": _codec(("lease_id", "worker_id", "document_id"), ("expires_at",)),
-    "LeaseReleased": _codec(("lease_id",), ("reason_code",)),
-    "LeaseRecovered": _codec(("lease_id",), ("reason_code",)),
-    "DocumentEditPrepared": _codec(("document_id",), ("lease_id", "expected_version")),
-    "DocumentEdited": _codec(("document_id",), ("version", "content_hash", "lease_id")),
-    "DocumentEditRecovered": _codec(("document_id",), ("version", "content_hash")),
-    "FormalActionRecorded": _codec(
-        ("action_id",),
-        ("worker_id", "document_id", "input_hash", "output_hash", "verdict"),
-    ),
-    "ContributionSubmitted": _codec(("contribution_id",), ("worker_id", "lease_id")),
-    "ContributionRebased": _codec(
-        ("contribution_id", "source_contribution_id"), ("base_epoch",)
-    ),
-    "ContributionEnqueued": _codec(("contribution_id",), ("state",)),
-    "PromotionStateChanged": _codec(("contribution_id", "state"), ("state_version",)),
-    "PromotionFailed": _codec(("contribution_id", "reason_code"), ("artifact_hash",)),
-    "DeclarationPublished": _codec(
-        ("declaration_id",), ("name", "type", "content_hash", "contribution_id")
-    ),
-    "KnowledgeDeltaPublished": _codec(
-        ("delta_id", "base_epoch", "knowledge_epoch"), ("declaration_id",)
-    ),
-    "LeanRuntimeStarted": _codec(("runtime_id",), ("mode", "started_at")),
-    "LeanRuntimeCrashed": _codec(("runtime_id", "reason_code"), ("artifact_hash",)),
-    "LeanRuntimeRestarted": _codec(("runtime_id",), ("previous_runtime_id",)),
-    "EnvironmentTransitionProposed": _codec(("transition_id",), ("fingerprint",)),
-    "EnvironmentTransitionApproved": _codec(("transition_id",), ("reviewer",)),
-    "EnvironmentTransitionRejected": _codec(("transition_id",), ("reason_code",)),
-    "AlignmentReviewed": _codec(("review_id",), ("verdict", "reviewer", "kind")),
-    "InterventionRecorded": _codec(("intervention_id",), ("kind", "actor", "reason")),
-}
-
-
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class EventEnvelope:
     event_id: str
     schema_version: int
@@ -149,27 +45,42 @@ class EventEnvelope:
     actor: str
     run_id: str | None
     causation_id: str | None
-    payload: dict[str, JsonValue]
+    payload: FrozenJsonObject
 
-    def __post_init__(self) -> None:
-        _text(self.event_id, "event_id")
-        if len(self.event_id) != 26 or any(char not in _ULID_ALPHABET for char in self.event_id):
+    def __init__(
+        self,
+        event_id: str,
+        schema_version: int,
+        event_type: str,
+        occurred_at: datetime,
+        actor: str,
+        run_id: str | None,
+        causation_id: str | None,
+        payload: dict[str, JsonValue],
+    ) -> None:
+        _text(event_id, "event_id")
+        if len(event_id) != 26 or any(char not in _ULID_ALPHABET for char in event_id):
             raise EventValidationError("event_id", "must be a 26-character Crockford ULID")
-        if self.schema_version != EVENT_SCHEMA_VERSION:
-            raise IncompatibleEventSchemaError(self.schema_version)
-        _text(self.event_type, "event_type")
-        _text(self.actor, "actor")
-        if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() != timedelta(0):
+        if schema_version != EVENT_SCHEMA_VERSION:
+            raise IncompatibleEventSchemaError(schema_version)
+        _text(event_type, "event_type")
+        _text(actor, "actor")
+        if occurred_at.tzinfo is None or occurred_at.utcoffset() != timedelta(0):
             raise EventValidationError("occurred_at", "must be timezone-aware UTC")
-        for location, value in (("run_id", self.run_id), ("causation_id", self.causation_id)):
+        for location, value in (("run_id", run_id), ("causation_id", causation_id)):
             if value is not None:
                 _text(value, location)
-        codec = _CODECS.get(self.event_type)
-        if codec is None:
-            raise EventValidationError("event_type", f"unknown event type {self.event_type!r}")
-        if type(self.payload) is not dict:
+        if type(payload) is not dict:
             raise EventValidationError("payload", "must be a JSON object")
-        codec.validate(self.event_type, self.payload)
+        validate_payload(event_type, payload)
+        object.__setattr__(self, "event_id", event_id)
+        object.__setattr__(self, "schema_version", schema_version)
+        object.__setattr__(self, "event_type", event_type)
+        object.__setattr__(self, "occurred_at", occurred_at)
+        object.__setattr__(self, "actor", actor)
+        object.__setattr__(self, "run_id", run_id)
+        object.__setattr__(self, "causation_id", causation_id)
+        object.__setattr__(self, "payload", freeze_payload(payload))
 
 
 class EventDocument(TypedDict):
@@ -225,7 +136,7 @@ def event_as_dict(event: EventEnvelope) -> EventDocument:
         actor=event.actor,
         run_id=event.run_id,
         causation_id=event.causation_id,
-        payload=event.payload,
+        payload=thaw_payload(event.payload),
     )
 
 

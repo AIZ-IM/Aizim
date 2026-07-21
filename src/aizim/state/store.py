@@ -1,73 +1,41 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Final
 
-from aizim.domain.serialization import JsonValue, canonical_json, sha256_bytes
+from aizim.domain.serialization import canonical_json
 
 from .events import (
     EVENT_SCHEMA_VERSION,
     EventEnvelope,
-    EventValidationError,
     IncompatibleEventSchemaError,
     event_as_dict,
-    upcast,
 )
-from .projections import (
-    AUDIT_PROJECTIONS,
-    PROJECTION_NAMES,
-    ProjectionRecord,
-    ProjectionReducer,
+from .projections import PROJECTION_NAMES, ProjectionRecord, ProjectionReducer
+from .store_contracts import (
+    DuplicateEventError,
+    EventRecord,
+    InitializationCheckpoint,
+    ProjectionAuthorityError,
+    ReplayVerification,
+    StoreHealth,
+    _event_record,
+    _logical_digest,
+    _projection_json,
+    _projection_records,
+    continue_initialization,
 )
 
 _SCHEMA_PATH: Final = Path(__file__).with_name("sql") / "001_foundation.sql"
 
 
-@dataclass(frozen=True, slots=True)
-class DuplicateEventError(RuntimeError):
-    event_id: str
-
-    def __str__(self) -> str:
-        return f"duplicate event id: {self.event_id}"
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectionAuthorityError(RuntimeError):
-    projection_name: str
-    reason: str
-
-    def __str__(self) -> str:
-        return f"projection {self.projection_name}: {self.reason}"
-
-
-@dataclass(frozen=True, slots=True)
-class StoreHealth:
-    journal_mode: str
-    foreign_keys: bool
-    synchronous: str
-    busy_timeout_ms: int
-    event_schema_version: int
-
-
-@dataclass(frozen=True, slots=True)
-class EventRecord:
-    sequence: int
-    envelope: EventEnvelope
-
-
-@dataclass(frozen=True, slots=True)
-class ReplayVerification:
-    matched: bool
-    projection_json: bytes
-    logical_digest: str
-
-
-def _connect(database_path: Path) -> sqlite3.Connection:
+def _connect(
+    database_path: Path,
+    before_initialization_commit: InitializationCheckpoint = continue_initialization,
+) -> sqlite3.Connection:
     connection = sqlite3.connect(database_path, isolation_level=None)
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("PRAGMA foreign_keys=ON")
@@ -75,7 +43,7 @@ def _connect(database_path: Path) -> sqlite3.Connection:
     connection.execute("PRAGMA busy_timeout=5000")
     initialized = False
     try:
-        _initialize(connection)
+        _initialize(connection, before_initialization_commit)
         initialized = True
         return connection
     finally:
@@ -83,13 +51,18 @@ def _connect(database_path: Path) -> sqlite3.Connection:
             connection.close()
 
 
-def _initialize(connection: sqlite3.Connection) -> None:
+def _initialize(
+    connection: sqlite3.Connection,
+    before_initialization_commit: InitializationCheckpoint,
+) -> None:
     user_version = connection.execute("PRAGMA user_version").fetchone()[0]
     if user_version == 0:
-        connection.executescript(_SCHEMA_PATH.read_text())
-        connection.execute(f"PRAGMA user_version={EVENT_SCHEMA_VERSION}")
         connection.execute("BEGIN IMMEDIATE")
         with connection:
+            for statement in _SCHEMA_PATH.read_text().split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(f"PRAGMA user_version={EVENT_SCHEMA_VERSION}")
             connection.execute(
                 "INSERT INTO metadata(key,value_json) VALUES(?,?)",
                 ("event_schema_version", str(EVENT_SCHEMA_VERSION)),
@@ -99,6 +72,7 @@ def _initialize(connection: sqlite3.Connection) -> None:
                 "VALUES(?,?,?,?)",
                 ("epochs", "global", 0, canonical_json({"knowledge_epoch": 0}).decode()),
             )
+            before_initialization_commit()
     elif user_version != EVENT_SCHEMA_VERSION:
         raise IncompatibleEventSchemaError(user_version)
     metadata = connection.execute(
@@ -113,26 +87,6 @@ def _initialize(connection: sqlite3.Connection) -> None:
     if future is not None:
         raise IncompatibleEventSchemaError(future)
     _query_events(connection)
-
-
-def _event_record(
-    row: tuple[int, str, int, str, str, str, str | None, str | None, str],
-) -> EventRecord:
-    sequence, event_id, version, event_type, occurred_at, actor, run_id, causation_id, raw = row
-    payload: JsonValue = json.loads(raw)
-    if type(payload) is not dict:
-        raise EventValidationError("payload", "stored payload must be a JSON object")
-    document: dict[str, JsonValue] = {
-        "event_id": event_id,
-        "schema_version": version,
-        "event_type": event_type,
-        "occurred_at": occurred_at,
-        "actor": actor,
-        "run_id": run_id,
-        "causation_id": causation_id,
-        "payload": payload,
-    }
-    return EventRecord(sequence=sequence, envelope=upcast(document))
 
 
 def _query_events(
@@ -156,10 +110,7 @@ def _query_projections(connection: sqlite3.Connection) -> tuple[ProjectionRecord
         "SELECT projection_name,entity_id,version,state_json "
         "FROM projections ORDER BY projection_name,entity_id"
     ).fetchall()
-    return tuple(
-        ProjectionRecord(name, entity_id, version, state_json.encode())
-        for name, entity_id, version, state_json in rows
-    )
+    return _projection_records(rows)
 
 
 def _append(
@@ -208,31 +159,15 @@ def _append(
     return EventRecord(sequence=sequence, envelope=event)
 
 
-def _projection_json(records: tuple[ProjectionRecord, ...]) -> bytes:
-    return canonical_json(
-        tuple(
-            {
-                "entity_id": record.entity_id,
-                "projection_name": record.projection_name,
-                "state_json": record.state_json.decode(),
-                "version": record.version,
-            }
-            for record in records
-        )
-    )
-
-
-def _logical_digest(records: tuple[ProjectionRecord, ...]) -> str:
-    protected = tuple(
-        record for record in records if record.projection_name not in AUDIT_PROJECTIONS
-    )
-    return sha256_bytes(_projection_json(protected))
-
-
 class _EventStore:
-    def __init__(self, database_path: Path, reducer: ProjectionReducer) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        reducer: ProjectionReducer,
+        before_initialization_commit: InitializationCheckpoint,
+    ) -> None:
         database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = _connect(database_path)
+        self._connection = _connect(database_path, before_initialization_commit)
         self._reducer = reducer
 
     def close(self) -> None:

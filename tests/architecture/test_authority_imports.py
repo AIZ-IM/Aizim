@@ -83,7 +83,9 @@ def test_task_three_authored_files_stay_within_pure_loc_limit() -> None:
         *(REPOSITORY_ROOT / "src" / "aizim" / "state").glob("*.py"),
         REPOSITORY_ROOT / "tests" / "unit" / "test_event_store.py",
         REPOSITORY_ROOT / "tests" / "unit" / "test_event_replay.py",
+        REPOSITORY_ROOT / "tests" / "unit" / "test_event_contract.py",
         REPOSITORY_ROOT / "tests" / "integration" / "test_state_service_rpc.py",
+        REPOSITORY_ROOT / "tests" / "integration" / "test_state_service_lifecycle.py",
         Path(__file__),
     )
     oversized: list[str] = []

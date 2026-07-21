@@ -2,24 +2,32 @@ from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK -- the foundation contract requires asyncio Unix servers
 import json
-import stat
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, Protocol
+from typing import Final, Protocol
 
 from aizim.domain.serialization import JsonValue, canonical_json
 
+from .operations import (
+    RpcErrorBody,
+    RpcFailure,
+    RpcProtocolError,
+    RpcRequest,
+    RpcResponse,
+    RpcSuccess,
+    rpc_failure,
+)
+from .service_ownership import (
+    SocketIdentity,
+    SocketOwnershipError,
+    reclaim_stale_socket,
+    record_owned_socket,
+    remove_owned_socket,
+)
+
 MAX_FRAME_BYTES: Final = 1024 * 1024
 _REQUEST_FIELDS: Final = frozenset({"operation", "params", "session_id"})
-
-
-@dataclass(frozen=True, slots=True)
-class RpcProtocolError(ValueError):
-    code: str
-
-    def __str__(self) -> str:
-        return self.code
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,50 +38,11 @@ class SocketPathError(RuntimeError):
         return self.reason
 
 
-@dataclass(frozen=True, slots=True)
-class RpcRequest:
-    operation: str
-    params: dict[str, JsonValue]
-    session_id: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class RpcErrorBody:
-    code: str
-    message: str
-    event_id: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class RpcSuccess:
-    ok: Literal[True]
-    result: JsonValue
-
-    def __init__(self, result: JsonValue) -> None:
-        object.__setattr__(self, "ok", True)
-        object.__setattr__(self, "result", result)
-
-
-@dataclass(frozen=True, slots=True)
-class RpcFailure:
-    ok: Literal[False]
-    error: RpcErrorBody
-
-    def __init__(self, error: RpcErrorBody) -> None:
-        object.__setattr__(self, "ok", False)
-        object.__setattr__(self, "error", error)
-
-
-type RpcResponse = RpcSuccess | RpcFailure
 type Dispatch = Callable[[RpcRequest, bool], RpcResponse]
 
 
 class RequestDispatcher(Protocol):
     def __call__(self, request: RpcRequest, trusted: bool) -> RpcResponse: ...
-
-
-def rpc_failure(code: str, message: str, event_id: str | None = None) -> RpcFailure:
-    return RpcFailure(RpcErrorBody(code=code, message=message, event_id=event_id))
 
 
 def _json_document(body: bytes) -> dict[str, JsonValue]:
@@ -155,33 +124,39 @@ class RpcServer:
         self._service_session = service_session
         self._dispatch = dispatch
         self._server: asyncio.AbstractServer | None = None
+        self._owned_socket: SocketIdentity | None = None
 
     async def start(self) -> None:
         self._socket_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            mode = self._socket_path.lstat().st_mode
-        except FileNotFoundError:
-            mode = None
-        if mode is not None:
-            if not stat.S_ISSOCK(mode):
-                raise SocketPathError("state socket path is occupied by a non-socket entry")
-            self._socket_path.unlink()
-        self._server = await asyncio.start_unix_server(
+            reclaim_stale_socket(self._socket_path)
+        except SocketOwnershipError as error:
+            raise SocketPathError(error.reason) from error
+        server = await asyncio.start_unix_server(
             self._handle_connection, path=str(self._socket_path)
         )
-        self._socket_path.chmod(0o600)
+        try:
+            owned_socket = record_owned_socket(self._socket_path)
+            self._socket_path.chmod(0o600)
+        except (OSError, SocketOwnershipError):
+            server.close()
+            await server.wait_closed()
+            raise
+        self._server = server
+        self._owned_socket = owned_socket
 
     async def close(self) -> None:
-        if self._server is not None:
-            self._server.close()
-            await self._server.wait_closed()
-            self._server = None
+        server = self._server
+        owned_socket = self._owned_socket
+        self._server = None
+        self._owned_socket = None
         try:
-            mode = self._socket_path.lstat().st_mode
-        except FileNotFoundError:
-            return
-        if stat.S_ISSOCK(mode):
-            self._socket_path.unlink()
+            if server is not None:
+                server.close()
+                await server.wait_closed()
+        finally:
+            if owned_socket is not None:
+                remove_owned_socket(self._socket_path, owned_socket)
 
     async def _handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
