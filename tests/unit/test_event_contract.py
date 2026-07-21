@@ -14,7 +14,9 @@ from aizim.state import (
     StateService,
     StateServiceConfig,
 )
+from aizim.state.capabilities import CapabilityRecord
 from aizim.state.events import EventEnvelope, event_as_dict
+from aizim.state.store_contracts import ProjectionAuthorityError
 
 _HASH: Final = "a" * 64
 _TIMESTAMP: Final = "2026-07-21T10:00:00Z"
@@ -138,18 +140,59 @@ def test_event_payload_is_recursively_detached_and_immutable() -> None:
     assert event_as_dict(event)["payload"] == {"manifest": {"labels": ["original"]}}
 
 
-def test_capability_minted_event_rejects_token_digest_material() -> None:
-    with pytest.raises(EventValidationError):
-        _event(
-            "CapabilityMinted",
-            {
-                "worker_id": "worker-1",
-                "role": "formalizer",
-                "operations": ["project.read"],
-                "expires_at": _TIMESTAMP,
-                "token_hash": _HASH,
-            },
-        )
+def test_schema_v1_accepts_exact_parent_capability_minted_shape() -> None:
+    payload: dict[str, JsonValue] = {
+        "worker_id": "worker-1",
+        "role": "formalizer",
+        "token_hash": _HASH,
+    }
+
+    event = _event("CapabilityMinted", payload)
+
+    assert event_as_dict(event)["payload"] == payload
+
+
+def test_exact_parent_capability_minted_event_survives_restart(tmp_path: Path) -> None:
+    payload: dict[str, JsonValue] = {
+        "worker_id": "worker-1",
+        "role": "formalizer",
+        "token_hash": _HASH,
+    }
+    command = AppendEventCommand("CapabilityMinted", "supervisor", "run-1", None, payload)
+    with StateService(StateServiceConfig(tmp_path, "parent-writer")) as service:
+        service.append_event(command)
+
+    with StateService(StateServiceConfig(tmp_path, "current-reader")) as restarted:
+        events = restarted.query_events("run-1")
+        replay = restarted.replay_verify()
+
+    assert len(events) == 1
+    assert event_as_dict(events[0].envelope)["payload"] == payload
+    assert replay.matched
+
+
+@pytest.mark.parametrize("event_type", ["LeaseReleased", "LeaseRecovered"])
+def test_runless_lease_terminal_event_rolls_back_and_keeps_capability_live(
+    tmp_path: Path, event_type: str
+) -> None:
+    capability = CapabilityRecord(
+        token_hash=_HASH,
+        run_id="run-1",
+        worker_id="worker-1",
+        role="formalizer",
+        lease_id="lease-1",
+        operations=("project.read",),
+        expires_at=datetime(2026, 7, 22, tzinfo=UTC),
+    )
+    command = AppendEventCommand(event_type, "broker", None, None, {"lease_id": "lease-1"})
+    with StateService(StateServiceConfig(tmp_path, "service-session")) as service:
+        service.persist_capability(capability)
+        before = service.query_events()
+        with pytest.raises(ProjectionAuthorityError):
+            service.append_event(command)
+        assert service.query_events() == before
+        assert service.query_projection("leases", "lease-1") is None
+        assert service.capability_record(_HASH) == capability
 
 
 @pytest.mark.parametrize("operations", [[], ["project.read", "project.read"]])

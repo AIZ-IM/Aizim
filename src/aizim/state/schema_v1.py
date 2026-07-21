@@ -116,9 +116,9 @@ _CODECS: Final = {
         ("worker_id",), ("reason_code", "artifact_hash"), {"artifact_hash": _sha256_payload}
     ),
     "CapabilityMinted": _codec(
-        ("worker_id", "role", "operations", "expires_at"),
-        ("lease_id",),
-        {"expires_at": _timestamp_payload},
+        ("worker_id", "role"),
+        ("token_hash", "lease_id", "operations", "expires_at"),
+        {"token_hash": _sha256_payload, "expires_at": _timestamp_payload},
     ),
     "CapabilityDenied": _codec(
         ("reason_code", "role", "worker_id", "operation", "request_id")

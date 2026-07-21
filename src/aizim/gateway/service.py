@@ -29,6 +29,8 @@ type GatewayTarget = Callable[[AuthorizedCall], JsonValue | Awaitable[JsonValue]
 type GatewayResult = GatewaySuccess | GatewayFailure
 _PUBLIC_DENIAL = "operation is not allowed for this worker"
 _TOKEN_SHAPED = re.compile(r"[A-Za-z0-9_-]{32,}")
+_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
+_REDACTED = "<redacted>"
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +55,26 @@ class CapabilityDependencies:
     request_ids: Callable[[], str]
 
 
-def _safe_label(value: str | None) -> str:
-    if type(value) is not str or not value or len(value) > 128:
-        return "<invalid>"
+def _safe_identifier(value: str | None) -> str:
+    if type(value) is not str or _IDENTIFIER.fullmatch(value) is None:
+        return _REDACTED
     if _TOKEN_SHAPED.search(value) is not None:
-        return "<redacted>"
+        return _REDACTED
     return value
+
+
+def _safe_role(value: str | None) -> str:
+    try:
+        return AgentRole(value).value
+    except (TypeError, ValueError):
+        return _REDACTED
+
+
+def _safe_operation(value: GatewayTool | str) -> str:
+    try:
+        return GatewayTool(value).value
+    except (TypeError, ValueError):
+        return _REDACTED
 
 
 class CapabilityGateway:
@@ -107,19 +123,20 @@ class CapabilityGateway:
         operation: GatewayTool | str,
         persisted_run: str | None = None,
     ) -> GatewayFailure:
-        operation_name = operation.value if isinstance(operation, GatewayTool) else operation
         event = self._state.append_event(
             AppendEventCommand(
                 event_type="CapabilityDenied",
                 actor="capability_gateway",
-                run_id=_safe_label(persisted_run if persisted_run is not None else session.run_id),
+                run_id=_safe_identifier(
+                    persisted_run if persisted_run is not None else session.run_id
+                ),
                 causation_id=None,
                 payload={
                     "reason_code": reason,
-                    "role": _safe_label(session.role),
-                    "worker_id": _safe_label(session.worker_id),
-                    "operation": _safe_label(operation_name),
-                    "request_id": _safe_label(request_id),
+                    "role": _safe_role(session.role),
+                    "worker_id": _safe_identifier(session.worker_id),
+                    "operation": _safe_operation(operation),
+                    "request_id": _safe_identifier(request_id),
                 },
             )
         )

@@ -93,11 +93,13 @@ def revoke_capability(
 def revoke_lease_capabilities(
     connection: MutationConnection, event: EventEnvelope
 ) -> None:
-    if event.event_type not in {"LeaseReleased", "LeaseRecovered"} or event.run_id is None:
+    if event.event_type not in {"LeaseReleased", "LeaseRecovered"}:
         return
+    if event.run_id is None:
+        raise ProjectionAuthorityError("run_id", "lease terminal event requires a run")
     lease_id = event.payload.get("lease_id")
     if type(lease_id) is not str:
-        return
+        raise ProjectionAuthorityError("lease_id", "lease terminal event requires a lease")
     connection.execute(
         "UPDATE capability_tokens SET revoked_at=? "
         "WHERE run_id=? AND lease_id=? AND revoked_at IS NULL",

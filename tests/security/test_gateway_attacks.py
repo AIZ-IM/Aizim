@@ -239,3 +239,43 @@ async def test_operation_and_target_failures_never_fall_through(
 
     assert isinstance(result, GatewayFailure)
     assert denial.payload["reason_code"] == reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "unsafe"),
+    [
+        ("worker_id", "/Users/example/private/secret.txt"),
+        ("role", "research_conductor\nsecret"),
+        ("run_id", "../../private/state.sqlite3"),
+        ("operation", "tinysecret"),
+    ],
+)
+async def test_denial_audit_labels_never_persist_untrusted_free_form_values(
+    project_root: Path, field: str, unsafe: str
+) -> None:
+    clock = Clock()
+    with StateService(
+        StateServiceConfig(project_root, "trusted"),
+        StateDependencies(clock=clock.utc_now, event_ids=Ids("event")),
+    ) as state:
+        raw_token = CapabilityIssuer(state).mint(grant())
+        request = presented(None if field == "run_id" else raw_token)
+        operation: GatewayTool | str = GatewayTool.STATE_QUERY
+        if field == "operation":
+            operation = unsafe
+        else:
+            request = replace(request, **{field: unsafe})
+        result = await CapabilityGateway(
+            state,
+            {GatewayTool.STATE_QUERY: lambda call: None},
+            GatewayLimits(10, 60.0, 10),
+            CapabilityDependencies(clock.utc_now, clock.monotonic, Ids("request")),
+        ).call(request, operation, {})
+        denial = state.query_events()[-1].envelope
+
+    document = event_as_dict(denial)
+    assert isinstance(result, GatewayFailure)
+    assert document["run_id"] != unsafe
+    assert unsafe not in document["payload"].values()
+    assert unsafe not in repr(document) + repr(result)
