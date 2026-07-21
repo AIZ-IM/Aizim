@@ -64,6 +64,7 @@ class BrokerRegistration:
     sidecar_executable_sha256: str
     expires_at: datetime
     raw_token: str
+    lease_id: str | None = None
 
     def __post_init__(self) -> None:
         for name, value in (("run_id", self.run_id), ("worker_id", self.worker_id)):
@@ -81,6 +82,8 @@ class BrokerRegistration:
             raise ValueError("expires_at must be a timezone-aware UTC datetime")
         if type(self.raw_token) is not str or not self.raw_token:
             raise ValueError("raw_token must be a non-empty string")
+        if self.lease_id is not None and (type(self.lease_id) is not str or not self.lease_id):
+            raise ValueError("lease_id must be a non-empty string when present")
 
     def __repr__(self) -> str:
         return "BrokerRegistration(raw_token=<redacted>, claims=<redacted>)"
@@ -131,7 +134,10 @@ async def redeem_session(socket_path: Path, session_id: str) -> RedeemedSession:
             raise SessionDeniedError
         session = value.get("session")
         if type(session) is not dict or session.keys() != {
-            "raw_token", "run_id", "worker_id", "role"
+            "raw_token",
+            "run_id",
+            "worker_id",
+            "role",
         }:
             raise SessionDeniedError
         return RedeemedSession(

@@ -1,3 +1,6 @@
+from .backend import AgentBackend, AgentRequest, AgentResult, BackendIdentity
+from .codex_backend import CodexBackend, CodexBackendDependencies
+from .fake_backend import FakeAgentBackend, FakeToolAction
 from .sandbox import (
     ProbeAttempt,
     ProbeOperation,
@@ -16,6 +19,14 @@ from .workspace_view import (
 )
 
 __all__ = [
+    "AgentBackend",
+    "AgentRequest",
+    "AgentResult",
+    "BackendIdentity",
+    "CodexBackend",
+    "CodexBackendDependencies",
+    "FakeAgentBackend",
+    "FakeToolAction",
     "ProbeAttempt",
     "ProbeOperation",
     "ProbeReport",

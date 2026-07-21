@@ -23,6 +23,7 @@ from .peer_identity import (
 )
 from .service import CapabilityDependencies, CapabilityGateway, GatewayLimits
 from .session_broker import GatewaySessionBroker
+from .transport import GatewayTransport, GatewayTransportError, connect_gateway
 
 __all__ = [
     "ROLE_CAPABILITIES",
@@ -42,10 +43,13 @@ __all__ = [
     "GatewaySessionBroker",
     "GatewaySuccess",
     "GatewayTool",
+    "GatewayTransport",
+    "GatewayTransportError",
     "PeerIdentity",
     "PeerIdentityError",
     "RedeemedSession",
     "SessionDeniedError",
     "advertised_tools",
+    "connect_gateway",
     "redeem_session",
 ]

@@ -8,13 +8,12 @@ STORE_PATH = REPOSITORY_ROOT / "src" / "aizim" / "state" / "store.py"
 SERVICE_PATH = REPOSITORY_ROOT / "src" / "aizim" / "state" / "service.py"
 AGENT_ROOT = REPOSITORY_ROOT / "src" / "aizim" / "agents"
 MACOS_SANDBOX_PATH = AGENT_ROOT / "macos_sandbox.py"
+LAUNCHER_PATH = AGENT_ROOT / "launcher.py"
 
 
 def _python_sources() -> tuple[Path, ...]:
     roots = tuple(
-        path
-        for name in ("src", "tests", "scripts")
-        if (path := REPOSITORY_ROOT / name).is_dir()
+        path for name in ("src", "tests", "scripts") if (path := REPOSITORY_ROOT / name).is_dir()
     )
     return tuple(sorted(source for root in roots for source in root.rglob("*.py")))
 
@@ -31,9 +30,7 @@ def _event_store_call(node: ast.AST) -> bool:
     if not isinstance(node, ast.Call):
         return False
     direct_call = isinstance(node.func, ast.Name) and node.func.id == "_EventStore"
-    attribute_call = (
-        isinstance(node.func, ast.Attribute) and node.func.attr == "_EventStore"
-    )
+    attribute_call = isinstance(node.func, ast.Attribute) and node.func.attr == "_EventStore"
     return direct_call or attribute_call
 
 
@@ -85,9 +82,7 @@ def test_only_state_service_instantiates_private_event_store() -> None:
             if isinstance(node, ast.ClassDef) and node.name == "StateService"
         )
         allowed = {
-            id(node)
-            for service_class in service_classes
-            for node in ast.walk(service_class)
+            id(node) for service_class in service_classes for node in ast.walk(service_class)
         }
         violations.extend(
             f"{path.relative_to(REPOSITORY_ROOT)}:{call.lineno}"
@@ -163,11 +158,12 @@ def test_task_five_authored_files_stay_within_pure_loc_limit() -> None:
     assert oversized == []
 
 
-def test_only_macos_sandbox_launches_task_six_processes() -> None:
+def test_only_macos_sandbox_and_agent_launcher_create_processes() -> None:
+    assert LAUNCHER_PATH.is_file()
     violations: list[str] = []
     for path in AGENT_ROOT.glob("*.py"):
         tree = ast.parse(path.read_text(), filename=str(path))
-        if path != MACOS_SANDBOX_PATH:
+        if path not in {MACOS_SANDBOX_PATH, LAUNCHER_PATH}:
             violations.extend(
                 f"{path.relative_to(REPOSITORY_ROOT)}:{node.lineno}"
                 for node in ast.walk(tree)
@@ -178,11 +174,38 @@ def test_only_macos_sandbox_launches_task_six_processes() -> None:
 
 def test_task_six_authored_files_stay_within_pure_loc_limit() -> None:
     paths = (
+        REPOSITORY_ROOT / "src" / "aizim" / "async_lifecycle.py",
         *AGENT_ROOT.glob("*.py"),
         REPOSITORY_ROOT / "tests" / "unit" / "test_workspace_view.py",
         REPOSITORY_ROOT / "tests" / "unit" / "test_sandbox_profile.py",
         REPOSITORY_ROOT / "tests" / "security" / "test_macos_sandbox.py",
         Path(__file__),
+    )
+    oversized = []
+    for path in paths:
+        pure_lines = sum(
+            bool(line.strip()) and not line.lstrip().startswith("#")
+            for line in path.read_text().splitlines()
+        )
+        if pure_lines > 250:
+            oversized.append(f"{path.relative_to(REPOSITORY_ROOT)}:{pure_lines}")
+    assert oversized == []
+
+
+def test_task_seven_authored_files_stay_within_pure_loc_limit() -> None:
+    paths = (
+        REPOSITORY_ROOT / "src" / "aizim" / "async_lifecycle.py",
+        *AGENT_ROOT.glob("*.py"),
+        *(REPOSITORY_ROOT / "src" / "aizim" / "gateway").glob("*.py"),
+        REPOSITORY_ROOT / "tests" / "unit" / "test_fake_backend.py",
+        REPOSITORY_ROOT / "tests" / "unit" / "test_codex_launch_spec.py",
+        REPOSITORY_ROOT / "tests" / "unit" / "test_codex_cleanup.py",
+        REPOSITORY_ROOT / "tests" / "unit" / "test_codex_event_limits.py",
+        REPOSITORY_ROOT / "tests" / "unit" / "test_gateway_frame_limits.py",
+        REPOSITORY_ROOT / "tests" / "integration" / "test_gateway_sidecar.py",
+        REPOSITORY_ROOT / "tests" / "integration" / "test_gateway_transport_lifecycle.py",
+        REPOSITORY_ROOT / "tests" / "security" / "test_sidecar_isolation.py",
+        REPOSITORY_ROOT / "tests" / "security" / "test_agent_launcher_lifecycle.py",
     )
     oversized = []
     for path in paths:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import socket
 from contextlib import suppress
@@ -12,7 +11,6 @@ from pathlib import Path
 from typing import Final, cast
 
 from aizim.domain import AgentRole
-from aizim.domain.serialization import JsonValue
 from aizim.state.service_ownership import (
     SocketIdentity,
     SocketOwnershipError,
@@ -29,6 +27,13 @@ from .peer_identity import (
     PeerSocket,
     write_frame,
 )
+from .transport import (
+    GatewayCaller,
+    GatewayChannelClaims,
+    GatewayChannelContext,
+    serve_gateway_channel,
+)
+from .transport_frames import decode_session_request
 
 _DENIAL: Final = {
     "ok": False,
@@ -43,29 +48,27 @@ class _PendingSession:
     role: AgentRole
     image_hash: str
     expires_at: datetime
+    lease_id: str | None
     secret: bytearray
+
+    def channel(self, gateway: GatewayCaller) -> GatewayChannelContext:
+        claims = GatewayChannelClaims(self.run_id, self.worker_id, self.role, self.lease_id)
+        return GatewayChannelContext(gateway, claims, self.secret)
 
     def clear(self) -> None:
         self.secret[:] = b"\0" * len(self.secret)
 
 
-def _decode_request(body: bytes) -> str | None:
-    try:
-        value: JsonValue = json.loads(body.decode())
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    if type(value) is not dict or value.keys() != {"session_id"}:
-        return None
-    session_id = value["session_id"]
-    return session_id if type(session_id) is str and bool(session_id) else None
-
-
 class GatewaySessionBroker:
     def __init__(
-        self, socket_path: Path, dependencies: BrokerDependencies | None = None
+        self,
+        socket_path: Path,
+        dependencies: BrokerDependencies | None = None,
+        gateway: GatewayCaller | None = None,
     ) -> None:
         self.socket_path = socket_path
         self._dependencies = BrokerDependencies() if dependencies is None else dependencies
+        self._gateway = gateway
         self._owner_euid = os.geteuid()
         self._registrations: dict[str, _PendingSession] = {}
         self._server: asyncio.AbstractServer | None = None
@@ -91,6 +94,7 @@ class GatewaySessionBroker:
             registration.role,
             registration.sidecar_executable_sha256,
             registration.expires_at,
+            registration.lease_id,
             bytearray(registration.raw_token.encode()),
         )
         return session_id
@@ -159,12 +163,15 @@ class GatewaySessionBroker:
             except asyncio.IncompleteReadError:
                 await write_frame(writer, _DENIAL)
                 return
-            session_id = _decode_request(body)
-            pending = None if session_id is None else self._registrations.pop(session_id, None)
+            request = decode_session_request(body)
+            if request is None:
+                await write_frame(writer, _DENIAL)
+                return
+            pending = self._registrations.pop(request[0], None)
             if pending is None:
                 await write_frame(writer, _DENIAL)
                 return
-            response: object = _DENIAL
+            response, channel = _DENIAL, False
             try:
                 peer_socket = cast(PeerSocket | None, writer.get_extra_info("socket"))
                 if peer_socket is not None:
@@ -174,7 +181,7 @@ class GatewaySessionBroker:
                         and compare_digest(identity.executable_sha256, pending.image_hash)
                         and self._dependencies.clock() < pending.expires_at
                     )
-                    if valid:
+                    if valid and (not request[1] or self._gateway is not None):
                         response = {
                             "ok": True,
                             "session": {
@@ -184,11 +191,15 @@ class GatewaySessionBroker:
                                 "role": pending.role.value,
                             },
                         }
+                        channel = request[1]
             except (OSError, RuntimeError, UnicodeError, ValueError):
                 response = _DENIAL
+            try:
+                await write_frame(writer, response)
+                if channel and self._gateway is not None:
+                    await serve_gateway_channel(reader, writer, pending.channel(self._gateway))
             finally:
                 pending.clear()
-            await write_frame(writer, response)
         except ConnectionError:
             return
         finally:
@@ -208,6 +219,8 @@ class GatewaySessionBroker:
         while self._handlers:
             for writer in tuple(self._writers):
                 writer.close()
+            for handler in tuple(self._handlers):
+                handler.cancel()
             await self._drained.wait()
 
     async def _cleanup(self) -> None:
