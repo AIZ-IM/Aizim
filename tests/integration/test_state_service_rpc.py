@@ -13,6 +13,7 @@ from anyio.to_thread import run_sync
 
 from aizim.domain.serialization import canonical_json
 from aizim.state import StateDependencies, StateService, StateServiceConfig
+from aizim.state import rpc as rpc_module
 from aizim.state.rpc import (
     MAX_FRAME_BYTES,
     RpcFailure,
@@ -40,13 +41,11 @@ def project_root() -> Iterator[Path]:
 
 
 def _service(project_root: Path, session: str = "service-session") -> StateService:
-    return StateService(
-        StateServiceConfig(project_root=project_root, service_session=session),
-        StateDependencies(
-            clock=lambda: datetime(2026, 7, 21, 10, tzinfo=UTC),
-            event_ids=MonotoneIds(),
-        ),
+    config = StateServiceConfig(project_root=project_root, service_session=session)
+    dependencies = StateDependencies(
+        clock=lambda: datetime(2026, 7, 21, 10, tzinfo=UTC), event_ids=MonotoneIds()
     )
+    return StateService(config, dependencies)
 
 
 def _receive_exact(client: socket.socket, size: int) -> bytes:
@@ -78,17 +77,12 @@ async def test_completed_handler_failure_is_reported_after_socket_cleanup(
 ) -> None:
     # Given
     socket_path = project_root / ".aizim" / "run" / "state.sock"
-    handler_done = asyncio.Event()
-    failure = RuntimeError("injected dispatch failure")
+    handler_done, failure = asyncio.Event(), RuntimeError("injected dispatch failure")
     loop = asyncio.get_running_loop()
-    previous_handler = loop.get_exception_handler()
-    unhandled_messages: list[str] = []
-    loop.set_exception_handler(
-        lambda _loop, context: unhandled_messages.append(str(context.get("message", "")))
-    )
+    previous_handler, unhandled_messages = loop.get_exception_handler(), list[str]()
+    loop.set_exception_handler(lambda _, ctx: unhandled_messages.append(str(ctx.get("message"))))
 
-    def fail_dispatch(request: RpcRequest, trusted: bool) -> RpcSuccess:
-        del request, trusted
+    def fail_dispatch(_request: RpcRequest, _trusted: bool) -> RpcSuccess:
         handler = asyncio.current_task()
         assert handler is not None
         handler.add_done_callback(lambda _completed: handler_done.set())
@@ -109,8 +103,7 @@ async def test_completed_handler_failure_is_reported_after_socket_cleanup(
         # When / Then
         with pytest.raises(RuntimeError, match="injected dispatch failure") as raised:
             await server.close()
-        assert raised.value is failure
-        assert not socket_path.exists()
+        assert raised.value is failure and not socket_path.exists()
         await server.close()
 
         restarted = RpcServer(socket_path, "service-session", fail_dispatch)
@@ -121,6 +114,53 @@ async def test_completed_handler_failure_is_reported_after_socket_cleanup(
         writer.close()
         await writer.wait_closed()
         await server.close()
+        loop.set_exception_handler(previous_handler)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_close_finishes_cleanup_before_propagating(project_root: Path) -> None:
+    # Given
+    socket_path = project_root / ".aizim" / "run" / "state.sock"
+    real_sleep, parked, release = asyncio.sleep, asyncio.Event(), asyncio.Event()
+    loop = asyncio.get_running_loop()
+    previous_handler, contexts = loop.get_exception_handler(), list[str]()
+    loop.set_exception_handler(lambda _, ctx: contexts.append(str(ctx.get("message"))))
+    server = RpcServer(socket_path, "service-session", lambda _request, _trusted: RpcSuccess({}))
+    await server.start()
+    raw_server = server._server
+    assert raw_server is not None
+    reader, writer = await asyncio.open_unix_connection(str(socket_path))
+
+    async def block_preclose(_delay: float) -> None:
+        parked.set()
+        await release.wait()
+
+    try:
+        # When
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(rpc_module.asyncio, "sleep", block_preclose)
+            close_task = asyncio.create_task(server.close())
+            async with asyncio.timeout(0.25):
+                while not parked.is_set() or not server._handlers:
+                    await real_sleep(0)
+            close_task.cancel()
+            await real_sleep(0)
+            close_task.cancel()
+        release.set()
+
+        # Then
+        with pytest.raises(asyncio.CancelledError):
+            await close_task
+        assert not raw_server.is_serving() and not server._handlers and not server._writers
+        assert not socket_path.exists() and await asyncio.wait_for(reader.read(), 0.25) == b""
+        await server.close()
+        assert not contexts and asyncio.all_tasks() == {asyncio.current_task()}
+    finally:
+        release.set()
+        for peer in (*server._writers, writer, raw_server):
+            peer.close()
+        await asyncio.gather(raw_server.wait_closed(), writer.wait_closed())
+        await asyncio.gather(*server._handlers, return_exceptions=True)
         loop.set_exception_handler(previous_handler)
 
 

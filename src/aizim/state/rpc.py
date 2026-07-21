@@ -82,11 +82,7 @@ def _decode_request(body: bytes) -> RpcRequest:
     params = document["params"]
     if type(params) is not dict:
         raise RpcProtocolError("MALFORMED_FRAME")
-    return RpcRequest(
-        operation=_text(document, "operation"),
-        params=params,
-        session_id=_optional_text(document, "session_id"),
-    )
+    return RpcRequest(_text(document, "operation"), params, _optional_text(document, "session_id"))
 
 
 def _decode_response(body: bytes) -> RpcResponse:
@@ -99,21 +95,19 @@ def _decode_response(body: bytes) -> RpcResponse:
         raise RpcProtocolError("MALFORMED_FRAME")
     if error.keys() != {"code", "message", "event_id"}:
         raise RpcProtocolError("MALFORMED_FRAME")
-    return RpcFailure(
-        RpcErrorBody(
-            code=_text(error, "code"),
-            message=_text(error, "message"),
-            event_id=_optional_text(error, "event_id"),
-        )
+    error_body = RpcErrorBody(
+        code=_text(error, "code"),
+        message=_text(error, "message"),
+        event_id=_optional_text(error, "event_id"),
     )
+    return RpcFailure(error_body)
 
 
 async def _write_response(writer: asyncio.StreamWriter, response: RpcResponse) -> None:
     encoded = canonical_json(response)
     if len(encoded) > MAX_FRAME_BYTES:
-        encoded = canonical_json(
-            rpc_failure("RESPONSE_TOO_LARGE", "response exceeds the service frame limit")
-        )
+        failure = rpc_failure("RESPONSE_TOO_LARGE", "response exceeds the service frame limit")
+        encoded = canonical_json(failure)
     writer.write(len(encoded).to_bytes(4, "big") + encoded)
     await writer.drain()
 
@@ -144,12 +138,11 @@ class RpcServer:
             writer.close()
 
     def _handler_done(self, handler: asyncio.Task[None]) -> None:
-        if not handler.cancelled():
-            failure = handler.exception()
-            if failure is not None:
-                failure = failure.with_traceback(None)
-                if self._handler_failure is None:
-                    self._handler_failure = failure
+        failure = None if handler.cancelled() else handler.exception()
+        if failure is not None:
+            failure = failure.with_traceback(None)
+            if self._handler_failure is None:
+                self._handler_failure = failure
         self._handlers.discard(handler)
         if not self._handlers:
             self._handlers_drained.set()
@@ -185,7 +178,7 @@ class RpcServer:
                 writer.close()
             await self._handlers_drained.wait()
 
-    async def close(self) -> None:
+    async def _cleanup(self) -> None:
         server = self._server
         owned_socket = self._owned_socket
         try:
@@ -206,6 +199,25 @@ class RpcServer:
         self._handler_failure = None
         if failure is not None:
             raise failure
+
+    async def close(self) -> None:
+        # Eager start preserves the extracted pre-close barrier's caller-turn ordering.
+        loop = asyncio.get_running_loop()
+        cleanup_task = asyncio.Task(self._cleanup(), loop=loop, eager_start=True)
+        interruption: asyncio.CancelledError | None = None
+        while not cleanup_task.done():
+            try:
+                await asyncio.wait((cleanup_task,))
+            except asyncio.CancelledError as error:
+                interruption = error if interruption is None else interruption
+        if interruption is None:
+            cleanup_task.result()
+            return
+        try:
+            cleanup_task.result()
+        except BaseException as cleanup_error:  # noqa: BROAD_EXCEPT_OK -- cleanup boundary
+            raise cleanup_error from interruption
+        raise interruption
 
     async def _handle_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
