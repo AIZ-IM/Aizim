@@ -8,6 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+import aizim.cli.init_command as init_command
+from aizim.runtime.layout import ProjectLayout
+from aizim.state import StateDependencies, StateService, StateServiceConfig
+
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal_lean"
 
 
@@ -127,4 +133,67 @@ def test_init_rejects_symlinked_state_lock_without_touching_target(
 
     assert result.returncode == 2
     assert outside.read_text() == "outside\n"
+    assert stat.S_IMODE(outside.stat().st_mode) == 0o644
+
+
+def test_database_and_sidecars_are_private_during_initialization(tmp_path: Path) -> None:
+    root = copy_project(tmp_path)
+    layout = ProjectLayout.from_lean_project(root)
+    layout.prepare_runtime()
+    observed: dict[str, int] = {}
+
+    def inspect_modes() -> None:
+        for suffix in ("", "-wal", "-shm"):
+            path = Path(f"{layout.database_path}{suffix}")
+            observed[suffix] = stat.S_IMODE(path.stat().st_mode)
+
+    dependencies = StateDependencies(before_initialization_commit=inspect_modes)
+    with StateService(StateServiceConfig(root, "mode-test"), dependencies):
+        pass
+
+    assert observed == {"": 0o600, "-wal": 0o600, "-shm": 0o600}
+
+
+def test_init_rejects_lock_replaced_after_layout_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = copy_project(tmp_path)
+    assert run_cli("init", str(root)).returncode == 0
+    outside = tmp_path / "outside.lock"
+    outside.write_text("outside\n")
+    outside.chmod(0o644)
+    real_service = StateService
+
+    def replace_then_open(config: StateServiceConfig) -> StateService:
+        lock = root / ".aizim" / "run" / "state.lock"
+        lock.unlink()
+        lock.symlink_to(outside)
+        return real_service(config)
+
+    monkeypatch.setattr(init_command, "StateService", replace_then_open)
+
+    assert init_command.run_init(root) == 2
+    assert outside.read_text() == "outside\n"
+    assert stat.S_IMODE(outside.stat().st_mode) == 0o644
+
+
+def test_init_rejects_database_replaced_after_layout_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = copy_project(tmp_path)
+    assert run_cli("init", str(root)).returncode == 0
+    outside = tmp_path / "outside.sqlite3"
+    outside.touch(mode=0o644)
+    real_service = StateService
+
+    def replace_then_open(config: StateServiceConfig) -> StateService:
+        database = root / ".aizim" / "state.sqlite3"
+        database.unlink()
+        database.symlink_to(outside)
+        return real_service(config)
+
+    monkeypatch.setattr(init_command, "StateService", replace_then_open)
+
+    assert init_command.run_init(root) == 2
+    assert outside.read_bytes() == b""
     assert stat.S_IMODE(outside.stat().st_mode) == 0o644

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from aizim.domain.serialization import JsonValue
 from aizim.runtime.layout import ProjectLayout
+from aizim.runtime.state_process import StateProcessError, validate_live_state_process
 from aizim.state import StateService, StateServiceConfig
 from aizim.state.operations import RpcRequest, RpcSuccess
 from aizim.state.projections import ProjectionRecord
@@ -54,17 +55,30 @@ async def _rpc_projections(layout: ProjectLayout) -> tuple[ProjectionDocument, .
     return tuple(_rpc_document(item) for item in response.result)
 
 
-async def _rpc_health(layout: ProjectLayout) -> None:
+async def _rpc_health(layout: ProjectLayout) -> JsonValue:
     response = await rpc_call(layout.run_root / "state.sock", RpcRequest("health", {}, None))
     if not isinstance(response, RpcSuccess):
         raise StateClientError("state health query failed")
+    return response.result
 
 
 def load_projections(layout: ProjectLayout) -> tuple[ProjectionDocument, ...]:
     if (layout.run_root / "state.sock").exists():
         try:
-            return asyncio.run(_rpc_projections(layout))
-        except (OSError, EOFError) as error:
+            validate_live_state_process(
+                layout.run_root / "state.pid", layout.run_root / "state.sock"
+            )
+            if asyncio.run(_rpc_health(layout)) != {
+                "event_schema_version": 1,
+                "ready": True,
+            }:
+                raise StateClientError("live state schema is incompatible")
+            records = asyncio.run(_rpc_projections(layout))
+            validate_live_state_process(
+                layout.run_root / "state.pid", layout.run_root / "state.sock"
+            )
+            return records
+        except (StateProcessError, OSError, EOFError) as error:
             raise StateClientError("live state service is unavailable") from error
     if not layout.database_path.is_file():
         raise StateClientError("Aizim state is not initialized")
@@ -78,9 +92,17 @@ def load_projections(layout: ProjectLayout) -> tuple[ProjectionDocument, ...]:
 def check_state_health(layout: ProjectLayout) -> None:
     if (layout.run_root / "state.sock").exists():
         try:
-            asyncio.run(_rpc_health(layout))
+            validate_live_state_process(
+                layout.run_root / "state.pid", layout.run_root / "state.sock"
+            )
+            response = asyncio.run(_rpc_health(layout))
+            if response != {"event_schema_version": 1, "ready": True}:
+                raise StateClientError("live state schema is incompatible")
+            validate_live_state_process(
+                layout.run_root / "state.pid", layout.run_root / "state.sock"
+            )
             return
-        except (OSError, EOFError) as error:
+        except (StateProcessError, OSError, EOFError) as error:
             raise StateClientError("live state service is unavailable") from error
     if not layout.database_path.is_file():
         raise StateClientError("Aizim state is not initialized")

@@ -62,6 +62,21 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def validate_live_state_process(pid_path: Path, socket_path: Path) -> None:
+    pid, pid_identity = _read_pid(pid_path)
+    if not _alive(pid) or _identity(pid_path) != pid_identity:
+        raise StateProcessError("state service PID is not live and stable")
+    try:
+        socket_status = socket_path.lstat()
+    except OSError as error:
+        raise StateProcessError("state socket is unavailable") from error
+    if (
+        not stat.S_ISSOCK(socket_status.st_mode)
+        or stat.S_IMODE(socket_status.st_mode) != 0o600
+    ):
+        raise StateProcessError("state socket is not a private Unix socket")
+
+
 def _remove_owned(path: Path, identity: FileIdentity) -> None:
     if _identity(path) == identity:
         path.unlink()

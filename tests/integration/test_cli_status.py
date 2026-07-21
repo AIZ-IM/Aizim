@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
+
+from aizim.cli.state_client import StateClientError, check_state_health
 from aizim.domain.serialization import JsonValue
+from aizim.runtime.layout import ProjectLayout
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal_lean"
@@ -81,6 +88,42 @@ def wait_for(path: Path, process: subprocess.Popen[str]) -> None:
     assert path.exists() and process.poll() is None
 
 
+def fake_health_server(
+    socket_path: Path, schema_version: int
+) -> tuple[socket.socket, threading.Thread]:
+    listener = socket.socket(socket.AF_UNIX)
+    listener.bind(str(socket_path))
+    socket_path.chmod(0o600)
+    listener.listen()
+    listener.settimeout(0.5)
+
+    def serve() -> None:
+        try:
+            connection, _address = listener.accept()
+            with connection:
+                size = int.from_bytes(connection.recv(4), "big")
+                remaining = size
+                while remaining:
+                    remaining -= len(connection.recv(remaining))
+                body = json.dumps(
+                    {
+                        "ok": True,
+                        "result": {
+                            "event_schema_version": schema_version,
+                            "ready": True,
+                        },
+                    },
+                    separators=(",", ":"),
+                ).encode()
+                connection.sendall(len(body).to_bytes(4, "big") + body)
+        except OSError:
+            pass
+
+    thread = threading.Thread(target=serve)
+    thread.start()
+    return listener, thread
+
+
 def test_status_json_has_stable_empty_shape_and_initial_epoch(tmp_path: Path) -> None:
     root = initialized_project(tmp_path)
 
@@ -130,7 +173,7 @@ def test_state_serve_refuses_second_owner_serves_status_and_cleans_on_sigterm() 
             second = subprocess.run(
                 command, check=False, capture_output=True, text=True, timeout=5
             )
-            assert second.returncode == 2
+            assert second.returncode == 3
             status = run_cli("status", "--project", str(root), "--json")
             assert status.returncode == 0
             assert set(json.loads(status.stdout)) == STATUS_KEYS
@@ -148,5 +191,37 @@ def test_state_serve_reports_corrupt_state_without_a_traceback(tmp_path: Path) -
 
     result = run_cli("state", "serve", "--project", str(root))
 
-    assert result.returncode == 2
+    assert result.returncode == 6
     assert result.stderr == "aizim state serve: service failed\n"
+
+
+def test_status_reports_corrupt_state_as_runtime_failure(tmp_path: Path) -> None:
+    root = initialized_project(tmp_path)
+    (root / ".aizim" / "state.sqlite3").write_bytes(b"not a database")
+
+    result = run_cli("status", "--project", str(root), "--json")
+
+    assert result.returncode == 6
+    assert result.stderr == "aizim status: state is unavailable\n"
+
+
+@pytest.mark.parametrize(("has_pid", "schema_version"), [(False, 1), (True, 2)])
+def test_live_health_requires_owned_pid_and_schema_one(
+    has_pid: bool, schema_version: int
+) -> None:
+    with TemporaryDirectory(prefix="aizim-health-", dir="/tmp") as directory:
+        root = initialized_project(Path(directory))
+        layout = ProjectLayout.from_lean_project(root)
+        socket_path = layout.run_root / "state.sock"
+        pid_path = layout.run_root / "state.pid"
+        if has_pid:
+            pid_path.write_text(f"{os.getpid()}\n")
+            pid_path.chmod(0o600)
+        listener, thread = fake_health_server(socket_path, schema_version)
+        try:
+            with pytest.raises(StateClientError):
+                check_state_health(layout)
+        finally:
+            listener.close()
+            thread.join(timeout=1)
+            socket_path.unlink(missing_ok=True)

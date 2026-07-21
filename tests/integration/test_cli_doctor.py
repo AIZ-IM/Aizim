@@ -44,6 +44,11 @@ def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
     tmp_path: Path,
 ) -> None:
     root = initialized_project(tmp_path)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text("#!/bin/sh\nprintf 'uv %s\\n' \"$AIZIM_TEST_TOKEN\"\n")
+    fake_uv.chmod(0o755)
     environment = dict(os.environ)
     secret_values = ("api-key-value", "token-value", "credential-value")
     environment.update(
@@ -51,6 +56,7 @@ def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
         AIZIM_TEST_TOKEN=secret_values[1],
         AIZIM_TEST_CREDENTIAL=secret_values[2],
     )
+    environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
 
     result = run_cli("doctor", "--project", str(root), "--json", environ=environment)
     document = json.loads(result.stdout)
@@ -97,3 +103,16 @@ def test_doctor_invalid_project_keeps_the_stable_check_ids(tmp_path: Path) -> No
     assert result.returncode == 2
     assert document["ready"] is False
     assert {check["id"] for check in document["checks"]} == CHECK_IDS
+
+
+def test_doctor_readiness_failure_uses_exit_three(tmp_path: Path) -> None:
+    root = initialized_project(tmp_path)
+    empty_path = tmp_path / "empty-bin"
+    empty_path.mkdir()
+    environment = dict(os.environ, PATH=str(empty_path))
+
+    result = run_cli("doctor", "--project", str(root), "--json", environ=environment)
+    document = json.loads(result.stdout)
+
+    assert result.returncode == 3
+    assert document["ready"] is False

@@ -61,10 +61,17 @@ class StateOwnership:
 
 def acquire_state_ownership(lock_path: Path) -> StateOwnership:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    create_flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     try:
+        descriptor = os.open(lock_path, create_flags, 0o600)
+    except FileExistsError:
+        descriptor = os.open(lock_path, os.O_RDWR | os.O_NOFOLLOW)
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+            raise StateOwnershipError("state lock is not a private regular file")
         os.fchmod(descriptor, 0o600)
-    except OSError:
+    except (OSError, StateOwnershipError):
         os.close(descriptor)
         raise
     try:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import sqlite3
+import stat
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
@@ -36,23 +38,61 @@ from .store_mutations import (
 _SCHEMA_PATH: Final = Path(__file__).with_name("sql") / "001_foundation.sql"
 
 
+def _database_guard(database_path: Path) -> int:
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    try:
+        descriptor = os.open(database_path, flags, 0o600)
+    except FileExistsError:
+        descriptor = os.open(database_path, os.O_RDWR | os.O_NOFOLLOW)
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+            raise OSError("state database is not a private regular file")
+        os.fchmod(descriptor, 0o600)
+    except OSError:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _guard_matches(database_path: Path, descriptor: int) -> bool:
+    try:
+        current = database_path.lstat()
+    except OSError:
+        return False
+    guarded = os.fstat(descriptor)
+    return (
+        stat.S_ISREG(current.st_mode)
+        and current.st_nlink == 1
+        and (current.st_dev, current.st_ino) == (guarded.st_dev, guarded.st_ino)
+    )
+
+
 def _connect(
     database_path: Path,
     before_initialization_commit: InitializationCheckpoint = continue_initialization,
 ) -> sqlite3.Connection:
-    connection = sqlite3.connect(database_path, isolation_level=None)
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute("PRAGMA foreign_keys=ON")
-    connection.execute("PRAGMA synchronous=FULL")
-    connection.execute("PRAGMA busy_timeout=5000")
-    initialized = False
+    guard = _database_guard(database_path)
     try:
-        _initialize(connection, before_initialization_commit)
-        initialized = True
-        return connection
+        connection = sqlite3.connect(database_path, isolation_level=None)
+        initialized = False
+        try:
+            if not _guard_matches(database_path, guard):
+                raise OSError("state database changed while opening")
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA foreign_keys=ON")
+            connection.execute("PRAGMA synchronous=FULL")
+            connection.execute("PRAGMA busy_timeout=5000")
+            _initialize(connection, before_initialization_commit)
+            if not _guard_matches(database_path, guard):
+                raise OSError("state database changed during initialization")
+            initialized = True
+            return connection
+        finally:
+            if not initialized:
+                connection.close()
     finally:
-        if not initialized:
-            connection.close()
+        os.close(guard)
 
 
 def _initialize(

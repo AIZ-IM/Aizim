@@ -59,10 +59,14 @@ def run_status(project: Path, as_json: bool) -> int:
     try:
         layout = ProjectLayout.from_lean_project(project)
         layout.validate_runtime()
-        document = status_document(load_projections(layout))
-    except (LayoutError, StateClientError, OSError, RuntimeError, ValueError):
+    except (LayoutError, OSError, RuntimeError, ValueError):
         print("aizim status: state is unavailable", file=sys.stderr)
         return 2
+    try:
+        document = status_document(load_projections(layout))
+    except (StateClientError, OSError, RuntimeError, ValueError):
+        print("aizim status: state is unavailable", file=sys.stderr)
+        return 6
     if as_json:
         print(json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
         return 0

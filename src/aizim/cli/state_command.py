@@ -6,13 +6,12 @@ import signal
 import sys
 from pathlib import Path
 
-from aizim.runtime.layout import ProjectLayout
-from aizim.runtime.state_process import acquire_state_process
+from aizim.runtime.layout import LayoutError, ProjectLayout
+from aizim.runtime.state_process import StateProcessError, acquire_state_process
 from aizim.state import StateService, StateServiceConfig
 
 
 async def _serve(layout: ProjectLayout) -> None:
-    layout.validate_runtime()
     ownership = acquire_state_process(
         layout.run_root / "state.pid", layout.run_root / "state.sock"
     )
@@ -42,8 +41,16 @@ async def _serve(layout: ProjectLayout) -> None:
 def run_state_serve(project: Path) -> int:
     try:
         layout = ProjectLayout.from_lean_project(project)
-        asyncio.run(_serve(layout))
-    except Exception:
+        layout.validate_runtime()
+    except (LayoutError, OSError, RuntimeError, ValueError):
         print("aizim state serve: service failed", file=sys.stderr)
         return 2
+    try:
+        asyncio.run(_serve(layout))
+    except StateProcessError:
+        print("aizim state serve: service failed", file=sys.stderr)
+        return 3
+    except Exception:
+        print("aizim state serve: service failed", file=sys.stderr)
+        return 6
     return 0

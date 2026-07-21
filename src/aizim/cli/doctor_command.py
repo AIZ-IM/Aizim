@@ -35,6 +35,7 @@ _CHECK_IDS = (
     "leanclient",
     "state_service",
 )
+_SECRET_MARKERS = ("KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +49,17 @@ def _check(identifier: str, passed: bool, success: str, failure: str) -> DoctorC
     return DoctorCheck(identifier, "PASS" if passed else "FAIL", success if passed else failure)
 
 
+def _command_environment() -> dict[str, str]:
+    return {
+        name: value
+        for name, value in os.environ.items()
+        if not any(marker in name.upper() for marker in _SECRET_MARKERS)
+    }
+
+
 def _command(identifier: str, argv: list[str], expected: str, cwd: Path) -> DoctorCheck:
-    executable = shutil.which(argv[0])
+    environment = _command_environment()
+    executable = shutil.which(argv[0], path=environment.get("PATH"))
     if executable is None:
         return DoctorCheck(identifier, "FAIL", "required executable is unavailable")
     try:
@@ -60,6 +70,7 @@ def _command(identifier: str, argv: list[str], expected: str, cwd: Path) -> Doct
             capture_output=True,
             text=True,
             timeout=10,
+            env=environment,
         )
     except (OSError, subprocess.TimeoutExpired):
         return DoctorCheck(identifier, "FAIL", "version check failed")
@@ -118,11 +129,13 @@ def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
 
 
 def run_doctor(project: Path, as_json: bool) -> int:
+    invalid = False
     try:
         layout = ProjectLayout.from_lean_project(project)
         layout.validate_runtime()
         checks = doctor_checks(layout)
     except (LayoutError, OSError, RuntimeError, ValueError):
+        invalid = True
         checks = tuple(
             DoctorCheck(identifier, "FAIL", "project readiness is unavailable")
             for identifier in _CHECK_IDS
@@ -135,4 +148,4 @@ def run_doctor(project: Path, as_json: bool) -> int:
         for check in checks:
             print(f"{check.status} {check.id} {check.detail}")
         print("READY" if ready else "NOT READY")
-    return 0 if ready else 2
+    return 0 if ready else 2 if invalid else 3
