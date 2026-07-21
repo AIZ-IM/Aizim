@@ -74,7 +74,9 @@ def _connect(
 ) -> sqlite3.Connection:
     guard = _database_guard(database_path)
     try:
-        connection = sqlite3.connect(database_path, isolation_level=None)
+        connection = sqlite3.connect(
+            database_path.as_uri() + "?mode=rw", isolation_level=None, uri=True
+        )
         initialized = False
         try:
             if not _guard_matches(database_path, guard):

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 import aizim.cli.init_command as init_command
+import aizim.state.store as state_store
 from aizim.runtime.layout import ProjectLayout
 from aizim.state import StateDependencies, StateService, StateServiceConfig
 
@@ -197,3 +198,25 @@ def test_init_rejects_database_replaced_after_layout_validation(
     assert init_command.run_init(root) == 2
     assert outside.read_bytes() == b""
     assert stat.S_IMODE(outside.stat().st_mode) == 0o644
+
+
+def test_database_connect_cannot_create_replacement_symlink_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = copy_project(tmp_path)
+    layout = ProjectLayout.from_lean_project(root)
+    layout.prepare_runtime()
+    outside = tmp_path / "outside.sqlite3"
+    real_guard = state_store._database_guard
+
+    def guard_then_replace(database_path: Path) -> int:
+        descriptor = real_guard(database_path)
+        database_path.unlink()
+        database_path.symlink_to(outside)
+        return descriptor
+
+    monkeypatch.setattr(state_store, "_database_guard", guard_then_replace)
+
+    with pytest.raises(state_store.sqlite3.Error):
+        StateService(StateServiceConfig(root, "database-race"))
+    assert not outside.exists()

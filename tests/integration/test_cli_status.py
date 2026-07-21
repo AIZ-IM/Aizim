@@ -195,6 +195,18 @@ def test_state_serve_reports_corrupt_state_without_a_traceback(tmp_path: Path) -
     assert result.stderr == "aizim state serve: service failed\n"
 
 
+def test_state_serve_reports_direct_live_owner_as_preflight_failure(
+    tmp_path: Path,
+) -> None:
+    root = initialized_project(tmp_path)
+
+    with StateService(StateServiceConfig(root, "direct-owner")):
+        result = run_cli("state", "serve", "--project", str(root))
+
+    assert result.returncode == 3
+    assert result.stderr == "aizim state serve: service failed\n"
+
+
 def test_status_reports_corrupt_state_as_runtime_failure(tmp_path: Path) -> None:
     root = initialized_project(tmp_path)
     (root / ".aizim" / "state.sqlite3").write_bytes(b"not a database")

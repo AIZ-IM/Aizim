@@ -9,6 +9,7 @@ from pathlib import Path
 from aizim.runtime.layout import LayoutError, ProjectLayout
 from aizim.runtime.state_process import StateProcessError, acquire_state_process
 from aizim.state import StateService, StateServiceConfig
+from aizim.state.service import StateServiceLifecycleError
 
 
 async def _serve(layout: ProjectLayout) -> None:
@@ -47,7 +48,7 @@ def run_state_serve(project: Path) -> int:
         return 2
     try:
         asyncio.run(_serve(layout))
-    except StateProcessError:
+    except (StateProcessError, StateServiceLifecycleError):
         print("aizim state serve: service failed", file=sys.stderr)
         return 3
     except Exception:
