@@ -24,8 +24,10 @@ from aizim.domain import AgentRole, sha256_file
 def request(tmp_path: Path, *, model: str | None = "gpt-5.2-codex") -> AgentRequest:
     view = tmp_path / "aizim-view-fixture"
     scratch = tmp_path / "aizim-scratch-fixture"
+    project = tmp_path / "canonical-project"
     view.mkdir()
     scratch.mkdir()
+    project.mkdir()
     return AgentRequest(
         run_id="run-7",
         worker_id="worker-7",
@@ -35,7 +37,7 @@ def request(tmp_path: Path, *, model: str | None = "gpt-5.2-codex") -> AgentRequ
         view_root=view,
         scratch_root=scratch,
         gateway_session_id="session-7",
-        gateway_broker_socket=tmp_path / ".aizim" / "run" / "gateway.sock",
+        gateway_broker_socket=project / ".aizim" / "run" / "gateway.sock",
         timeout_seconds=30.0,
     )
 
@@ -44,14 +46,18 @@ def sandbox_spec(agent_request: AgentRequest) -> SandboxLaunchSpec:
     return compile_macos_profile(
         Path("/opt/aizim/bin/codex"),
         SandboxRequest(
-            agent_request.view_root.parent / "canonical-project",
+            agent_request.gateway_broker_socket.parents[2],
             agent_request.view_root,
             agent_request.scratch_root,
             ("/usr/bin/true",),
             {"PATH": "/usr/bin", "OPENAI_API_KEY": "launcher-owned-credential"},
         ),
-        Path("/Library/Developer/CommandLineTools"),
+        developer_root(agent_request),
     )
+
+
+def developer_root(agent_request: AgentRequest) -> Path:
+    return agent_request.view_root.parent / "approved-developer-root"
 
 
 def _mcp_table(argv: tuple[str, ...]) -> dict[str, object]:
@@ -64,7 +70,7 @@ def test_codex_launch_reuses_profile_and_adds_required_sidecar(tmp_path: Path) -
     sandbox = sandbox_spec(agent_request)
     sidecar = Path("/opt/aizim/bin/aizim-gateway-sidecar")
 
-    launch = build_codex_launch_spec(agent_request, sandbox, sidecar)
+    launch = build_codex_launch_spec(agent_request, sandbox, sidecar, developer_root(agent_request))
 
     assert launch.argv[:9] == sandbox.argv[:9]
     assert launch.argv.index("--strict-config") < launch.argv.index("exec")
@@ -112,6 +118,7 @@ def test_codex_launch_omits_model_and_all_bypass_routes(tmp_path: Path) -> None:
         agent_request,
         sandbox_spec(agent_request),
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+        developer_root(agent_request),
     )
 
     forbidden = (
@@ -180,7 +187,10 @@ async def test_launcher_executes_fake_codex_with_parent_environment_split(
         },
     )
     launch = build_codex_launch_spec(
-        agent_request, sandbox, Path("/opt/aizim/bin/aizim-gateway-sidecar")
+        agent_request,
+        sandbox,
+        Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+        developer_root(agent_request),
     )
 
     outcome = await launch_codex(launch)
@@ -230,6 +240,7 @@ async def test_codex_backend_has_verified_identity_and_always_finalizes(
         codex_executable=executable,
         codex_version=lambda _path: "codex-cli 0.144.6",
         sandbox=lambda _request: replace(base, argv=(str(executable), *base.argv[1:])),
+        developer_root=developer_root(agent_request),
         sidecar_executable=Path("/opt/aizim/bin/aizim-gateway-sidecar"),
         launch=launch,
         revoke=revoke,

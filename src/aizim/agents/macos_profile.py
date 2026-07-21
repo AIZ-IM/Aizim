@@ -60,7 +60,11 @@ def compile_macos_profile(
     )
 
 
-def validate_macos_profile(spec: SandboxLaunchSpec) -> None:
+def validate_macos_profile(
+    spec: SandboxLaunchSpec,
+    project_root: Path,
+    developer_root: Path,
+) -> None:
     argv = spec.argv
     expected_environment = {
         "PATH": _BASE_PATH,
@@ -71,6 +75,8 @@ def validate_macos_profile(spec: SandboxLaunchSpec) -> None:
     if (
         spec.profile_id != _PROFILE_ID
         or spec.cwd != spec.view_root
+        or not project_root.is_absolute()
+        or not developer_root.is_absolute()
         or dict(spec.shell_env) != expected_environment
         or len(argv) < 10
         or argv[9] != "sandbox"
@@ -86,12 +92,17 @@ def validate_macos_profile(spec: SandboxLaunchSpec) -> None:
         or overrides[1] != 'approval_policy="never"'
         or overrides[3] != _environment_override(spec.shell_env)
         or spec.policy_hash != expected_hash
-        or not _permission_is_strict(overrides[2], spec)
+        or not _permission_is_strict(overrides[2], spec, project_root, developer_root)
     ):
         raise ValueError("invalid macOS sandbox profile")
 
 
-def _permission_is_strict(value: str, spec: SandboxLaunchSpec) -> bool:
+def _permission_is_strict(
+    value: str,
+    spec: SandboxLaunchSpec,
+    project_root: Path,
+    developer_root: Path,
+) -> bool:
     try:
         document = tomllib.loads(value)
         profile = document["permissions"][_PROFILE_ID]
@@ -107,27 +118,18 @@ def _permission_is_strict(value: str, spec: SandboxLaunchSpec) -> bool:
         or network != {"enabled": False}
     ):
         return False
-    view, scratch = str(spec.view_root), str(spec.scratch_root)
-    if filesystem.get(":minimal") != "read" or filesystem.get(view) != "read":
-        return False
-    if filesystem.get(scratch) != "write":
-        return False
-    writes = {path for path, access in filesystem.items() if access == "write"}
-    denied = {path for path, access in filesystem.items() if access == "deny"}
-    known_access = all(access in {"read", "write", "deny"} for access in filesystem.values())
-    if writes != {scratch} or not known_access:
-        return False
-    roots = {
-        path
-        for path in denied
-        if f"{path}/**" in denied and f"{path}/.aizim" in denied and f"{path}/.aizim/**" in denied
+    project = str(project_root)
+    expected_filesystem = {
+        ":minimal": "read",
+        str(developer_root): "read",
+        str(spec.view_root): "read",
+        str(spec.scratch_root): "write",
+        f"{project}/.aizim": "deny",
+        f"{project}/.aizim/**": "deny",
+        project: "deny",
+        f"{project}/**": "deny",
     }
-    if len(roots) != 1:
-        return False
-    project = roots.pop()
-    expected_denials = {project, f"{project}/**", f"{project}/.aizim", f"{project}/.aizim/**"}
-    reads = {path for path, access in filesystem.items() if access == "read"}
-    return denied == expected_denials and len(reads - {":minimal", view}) == 1
+    return filesystem == expected_filesystem
 
 
 def _permission_override(request: SandboxRequest, developer_root: Path) -> str:

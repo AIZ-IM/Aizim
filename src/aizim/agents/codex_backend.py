@@ -34,6 +34,7 @@ class CodexBackendDependencies:
     codex_executable: Path
     codex_version: CodexVersion = field(repr=False)
     sandbox: SandboxCompiler = field(repr=False)
+    developer_root: Path
     sidecar_executable: Path
     launch: CodexLauncher = field(repr=False)
     revoke: AgentFinalizer = field(repr=False)
@@ -51,6 +52,11 @@ class CodexBackend:
             raise CodexBackendError("UNSUPPORTED_CODEX_VERSION")
         if not dependencies.sidecar_executable.is_absolute():
             raise CodexBackendError("SIDECAR_EXECUTABLE_INVALID")
+        if (
+            not dependencies.developer_root.is_absolute()
+            or dependencies.developer_root != dependencies.developer_root.resolve()
+        ):
+            raise CodexBackendError("DEVELOPER_ROOT_INVALID")
         self._dependencies = dependencies
         self._executable = executable
         self._image_hash = sha256_file(executable)
@@ -85,7 +91,12 @@ class CodexBackend:
             raise CodexBackendError("CODEX_IMAGE_CHANGED") from error
         if launch_path != self._executable or launch_hash != self._image_hash:
             raise CodexBackendError("CODEX_EXECUTABLE_MISMATCH")
-        spec = build_codex_launch_spec(request, sandbox, self._dependencies.sidecar_executable)
+        spec = build_codex_launch_spec(
+            request,
+            sandbox,
+            self._dependencies.sidecar_executable,
+            self._dependencies.developer_root,
+        )
         outcome = await self._dependencies.launch(spec)
         return AgentResult(
             request.worker_id,
@@ -118,6 +129,7 @@ def build_codex_launch_spec(
     request: AgentRequest,
     sandbox: SandboxLaunchSpec,
     sidecar_executable: Path,
+    developer_root: Path,
 ) -> CodexLaunchSpec:
     if (
         sandbox.cwd != request.view_root
@@ -127,8 +139,9 @@ def build_codex_launch_spec(
     ):
         raise CodexBackendError("SANDBOX_SPEC_MISMATCH")
     try:
-        validate_macos_profile(sandbox)
-    except ValueError as error:
+        project_root = _project_root(request)
+        validate_macos_profile(sandbox, project_root, developer_root)
+    except (OSError, ValueError) as error:
         raise CodexBackendError("SANDBOX_SPEC_INVALID") from error
     sandbox_command = 9
     schema_path = Path(__file__).with_name("codex_result.schema.json").resolve()
@@ -165,6 +178,22 @@ def build_codex_launch_spec(
         final_path,
         schema_path,
     )
+
+
+def _project_root(request: AgentRequest) -> Path:
+    socket_path = request.gateway_broker_socket
+    if (
+        not socket_path.is_absolute()
+        or socket_path.name != "gateway.sock"
+        or socket_path.parent.name != "run"
+        or socket_path.parent.parent.name != ".aizim"
+    ):
+        raise ValueError("gateway socket does not identify the canonical project")
+    project_root = socket_path.parents[2]
+    resolved = project_root.resolve(strict=True)
+    if resolved != project_root:
+        raise ValueError("canonical project root is not resolved")
+    return resolved
 
 
 def _mcp_override(request: AgentRequest, sidecar_executable: Path) -> str:

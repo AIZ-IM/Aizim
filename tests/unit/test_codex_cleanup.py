@@ -24,8 +24,10 @@ from aizim.domain import AgentRole
 
 def _request(tmp_path: Path) -> AgentRequest:
     view, scratch = tmp_path / "view", tmp_path / "scratch"
+    project = tmp_path / "canonical-project"
     view.mkdir()
     scratch.mkdir()
+    project.mkdir()
     return AgentRequest(
         "run-7",
         "worker-7",
@@ -35,7 +37,7 @@ def _request(tmp_path: Path) -> AgentRequest:
         view,
         scratch,
         "session-7",
-        tmp_path / "gateway.sock",
+        project / ".aizim" / "run" / "gateway.sock",
         30.0,
     )
 
@@ -44,14 +46,18 @@ def _sandbox(request: AgentRequest, executable: Path) -> SandboxLaunchSpec:
     return compile_macos_profile(
         executable,
         SandboxRequest(
-            request.view_root.parent / "canonical-project",
+            request.gateway_broker_socket.parents[2],
             request.view_root,
             request.scratch_root,
             ("/usr/bin/true",),
             {"PATH": "/usr/bin"},
         ),
-        Path("/Library/Developer/CommandLineTools"),
+        _developer_root(request),
     )
+
+
+def _developer_root(request: AgentRequest) -> Path:
+    return request.view_root.parent / "approved-developer-root"
 
 
 def test_parent_owned_result_path_is_outside_model_writable_scratch(tmp_path: Path) -> None:
@@ -63,6 +69,7 @@ def test_parent_owned_result_path_is_outside_model_writable_scratch(tmp_path: Pa
         request,
         _sandbox(request, executable),
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+        _developer_root(request),
     )
 
     assert spec.final_message_path.parent == request.view_root
@@ -98,6 +105,7 @@ def test_launch_spec_rejects_a_weakened_compiled_profile(tmp_path: Path, weakeni
             request,
             replace(sandbox, argv=argv),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+            _developer_root(request),
         )
 
 
@@ -109,6 +117,7 @@ async def test_launcher_rejects_a_dangling_result_symlink_before_spawn(tmp_path:
         request,
         _sandbox(request, executable),
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+        _developer_root(request),
     )
     outside = tmp_path / "outside"
     os.symlink(outside, spec.final_message_path)
@@ -149,6 +158,7 @@ async def test_repeated_cancellation_cannot_skip_revoke_or_cleanup(tmp_path: Pat
             executable,
             lambda _path: "codex-cli 0.144.6",
             lambda _request: replace(sandbox),
+            _developer_root(request),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
             launch,
             revoke,
@@ -191,6 +201,7 @@ async def test_replaced_codex_is_rejected_before_the_sandbox_compiler(tmp_path: 
             executable,
             lambda _path: "codex-cli 0.144.6",
             compile_sandbox,
+            _developer_root(request),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
             unreachable_launch,
             finalize,
@@ -202,3 +213,39 @@ async def test_replaced_codex_is_rejected_before_the_sandbox_compiler(tmp_path: 
     with pytest.raises(CodexBackendError, match="CODEX_IMAGE_CHANGED"):
         await backend.run(request)
     assert not compiled
+
+
+@pytest.mark.parametrize("binding", ("project", "developer"))
+def test_launch_spec_rejects_profile_roots_outside_authorized_bindings(
+    tmp_path: Path, binding: str
+) -> None:
+    request = _request(tmp_path)
+    executable = tmp_path / "codex"
+    executable.write_text("fixture")
+    developer_root = _developer_root(request)
+    sandbox = compile_macos_profile(
+        executable,
+        SandboxRequest(
+            request.gateway_broker_socket.parents[2],
+            request.view_root,
+            request.scratch_root,
+            ("/usr/bin/true",),
+            {"PATH": "/usr/bin"},
+        ),
+        developer_root,
+    )
+    expected = request.gateway_broker_socket.parents[2] if binding == "project" else developer_root
+    replacement = tmp_path / f"unapproved-{binding}"
+    argv = tuple(value.replace(str(expected), str(replacement)) for value in sandbox.argv)
+    overrides = argv[2:9:2]
+    policy_hash = hashlib.sha256(
+        json.dumps(overrides, ensure_ascii=False, separators=(",", ":")).encode()
+    ).hexdigest()
+
+    with pytest.raises(CodexBackendError, match="SANDBOX_SPEC_INVALID"):
+        build_codex_launch_spec(
+            request,
+            replace(sandbox, argv=argv, policy_hash=policy_hash),
+            Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+            developer_root,
+        )

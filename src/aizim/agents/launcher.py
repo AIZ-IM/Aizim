@@ -154,9 +154,25 @@ async def _terminate_and_reap(process: asyncio.subprocess.Process) -> None:
     with suppress(ProcessLookupError):
         os.killpg(process.pid, signal.SIGTERM)
     try:
-        await asyncio.wait_for(drain_process(process), timeout=_TERMINATE_GRACE_SECONDS)
+        await asyncio.wait_for(_drain_process_group(process), timeout=_TERMINATE_GRACE_SECONDS)
     except TimeoutError:
         await _kill_and_reap(process)
+
+
+async def _drain_process_group(process: asyncio.subprocess.Process) -> None:
+    await drain_process(process)
+    while _process_group_exists(process.pid):
+        await asyncio.sleep(0.01)
+
+
+def _process_group_exists(process_group: int) -> bool:
+    try:
+        os.killpg(process_group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 async def _finish_reaping(process: asyncio.subprocess.Process, *, graceful: bool) -> None:

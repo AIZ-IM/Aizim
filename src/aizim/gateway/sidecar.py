@@ -85,8 +85,10 @@ async def _serve(socket_path: Path, session_id: str) -> None:
 
 
 def run_gateway_sidecar(socket_path: Path, session_id: str) -> int:
+    operation = _serve(socket_path, session_id)
+    session_id = ""
     try:
-        asyncio.run(_serve(socket_path, session_id))
+        asyncio.run(operation)
     except Exception:
         return 6
     return 0
@@ -97,4 +99,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--broker-socket", type=Path, required=True)
     parser.add_argument("--session-id", required=True)
     arguments = parser.parse_args(tuple(sys.argv[1:] if argv is None else argv))
-    return run_gateway_sidecar(arguments.broker_socket, arguments.session_id)
+    session_ids = [arguments.session_id]
+    arguments.session_id = ""
+    if argv is None:
+        for index, value in enumerate(sys.argv[:-1]):
+            if value == "--session-id":
+                sys.argv[index + 1] = ""
+    return run_gateway_sidecar(arguments.broker_socket, session_ids.pop())
