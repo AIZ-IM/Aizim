@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 import signal
-import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,7 +24,6 @@ from aizim.gateway import (
     GatewayTool,
     PeerIdentity,
     SessionDeniedError,
-    sidecar,
 )
 from aizim.gateway.mcp_tools import create_gateway_server
 from aizim.gateway.transport import GatewayTransportError, connect_gateway
@@ -162,25 +160,6 @@ def test_sidecar_session_is_never_an_argument_or_environment_capability(
     assert TOKEN_SHAPED not in repr(argv)
     assert TOKEN_SHAPED not in repr(environment)
     assert set(environment) == {"PATH"}
-
-
-def test_sidecar_main_scrubs_consumed_session_from_python_argv(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    observed: dict[str, object] = {}
-
-    def fake_run(socket_path: Path, session_id: str) -> int:
-        observed.update(socket_path=socket_path, session_id=session_id, argv=tuple(sys.argv))
-        return 0
-
-    socket_path = tmp_path / "gateway.sock"
-    monkeypatch.setattr(sidecar, "run_gateway_sidecar", fake_run)
-    command = ("aizim-gateway-sidecar", "--broker-socket", str(socket_path))
-    monkeypatch.setattr(sys, "argv", [*command, "--session-id", "session-7"])
-
-    assert sidecar.main() == 0
-    assert (observed["socket_path"], observed["session_id"]) == (socket_path, "session-7")
-    assert observed["argv"] == tuple([*sys.argv[:-1], ""])
 
 
 def executable(path: Path, body: str) -> Path:

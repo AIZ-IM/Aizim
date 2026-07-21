@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .. import __version__
-from ..gateway.sidecar import run_gateway_sidecar
+from ..gateway.sidecar import run_gateway_sidecar, scrub_session_arguments
 from .doctor_command import run_doctor
 from .init_command import run_init
 from .state_command import run_state_serve
@@ -24,22 +24,29 @@ def _run_hidden_state(argv: Sequence[str]) -> int:
     return 0
 
 
-def _run_hidden_gateway(argv: Sequence[str]) -> int:
+def _run_hidden_gateway(command_line: list[str], process_argv: list[str] | None) -> int:
     parser = argparse.ArgumentParser(prog="aizim gateway")
     commands = parser.add_subparsers(dest="gateway_command", required=True)
     sidecar = commands.add_parser("sidecar")
     sidecar.add_argument("--broker-socket", type=Path, required=True)
     sidecar.add_argument("--session-id", required=True)
-    arguments = parser.parse_args(argv)
-    return run_gateway_sidecar(arguments.broker_socket, arguments.session_id)
+    arguments = parser.parse_args(command_line[1:])
+    session_ids = [arguments.session_id]
+    arguments.session_id = ""
+    scrub_session_arguments(command_line)
+    if process_argv is not None:
+        scrub_session_arguments(process_argv)
+    return run_gateway_sidecar(arguments.broker_socket, session_ids.pop())
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    command_line = tuple(sys.argv[1:] if argv is None else argv)
-    if command_line[:1] == ("state",):
+    process_argv = sys.argv if argv is None else None
+    command_line = list(sys.argv[1:] if argv is None else argv)
+    argv = None
+    if command_line[:1] == ["state"]:
         return _run_hidden_state(command_line[1:])
-    if command_line[:1] == ("gateway",):
-        return _run_hidden_gateway(command_line[1:])
+    if command_line[:1] == ["gateway"]:
+        return _run_hidden_gateway(command_line, process_argv)
     parser = argparse.ArgumentParser(prog="aizim")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command")
