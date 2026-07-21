@@ -127,6 +127,9 @@ class RpcServer:
         self._owned_socket: SocketIdentity | None = None
         self._writers: set[asyncio.StreamWriter] = set()
         self._handlers: set[asyncio.Task[None]] = set()
+        self._handlers_drained = asyncio.Event()
+        self._handlers_drained.set()
+        self._handler_failure: BaseException | None = None
         self._closing = False
 
     def _accept_connection(
@@ -135,8 +138,21 @@ class RpcServer:
         self._writers.add(writer)
         handler = asyncio.create_task(self._handle_connection(reader, writer))
         self._handlers.add(handler)
+        self._handlers_drained.clear()
+        handler.add_done_callback(self._handler_done)
         if self._closing:
             writer.close()
+
+    def _handler_done(self, handler: asyncio.Task[None]) -> None:
+        if not handler.cancelled():
+            failure = handler.exception()
+            if failure is not None:
+                failure = failure.with_traceback(None)
+                if self._handler_failure is None:
+                    self._handler_failure = failure
+        self._handlers.discard(handler)
+        if not self._handlers:
+            self._handlers_drained.set()
 
     async def start(self) -> None:
         self._socket_path.parent.mkdir(parents=True, exist_ok=True)
@@ -163,39 +179,31 @@ class RpcServer:
         self._server = server
         self._owned_socket = owned_socket
 
-    async def _close_connections(self) -> BaseException | None:
-        failure: BaseException | None = None
+    async def _close_connections(self) -> None:
         while self._handlers:
             for writer in tuple(self._writers):
                 writer.close()
-            handlers = tuple(self._handlers)
-            done, _ = await asyncio.wait(handlers)
-            for handler in done:
-                if not handler.cancelled():
-                    error = handler.exception()
-                    if failure is None and error is not None:
-                        failure = error
-        return failure
+            await self._handlers_drained.wait()
 
     async def close(self) -> None:
         server = self._server
         owned_socket = self._owned_socket
-        failure: BaseException | None = None
         try:
             if server is not None:
                 self._closing = True
+                await asyncio.sleep(0)
                 server.close()
-                failure = await self._close_connections()
+                await self._close_connections()
                 await server.wait_closed()
                 await asyncio.sleep(0)
-                late_failure = await self._close_connections()
-                if failure is None:
-                    failure = late_failure
+                await self._close_connections()
         finally:
             self._server = None
             self._owned_socket = None
             if owned_socket is not None:
                 remove_owned_socket(self._socket_path, owned_socket)
+        failure = self._handler_failure
+        self._handler_failure = None
         if failure is not None:
             raise failure
 
@@ -240,9 +248,6 @@ class RpcServer:
                 await writer.wait_closed()
             finally:
                 self._writers.discard(writer)
-                handler = asyncio.current_task()
-                if handler is not None:
-                    self._handlers.discard(handler)
 
 
 async def start_rpc_server(

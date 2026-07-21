@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio  # noqa: ANYIO_OK -- exercises the asyncio Unix-server lifecycle
 import socket
 import stat
 from collections.abc import Iterator
@@ -10,11 +11,13 @@ from tempfile import TemporaryDirectory
 import pytest
 from anyio.to_thread import run_sync
 
+from aizim.domain.serialization import canonical_json
 from aizim.state import StateDependencies, StateService, StateServiceConfig
 from aizim.state.rpc import (
     MAX_FRAME_BYTES,
     RpcFailure,
     RpcRequest,
+    RpcServer,
     RpcSuccess,
     rpc_call,
 )
@@ -67,6 +70,58 @@ def _raw_exchange(socket_path: Path, declared_size: int, body: bytes) -> bytes:
             client.sendall(body)
         response_size = int.from_bytes(_receive_exact(client, 4), "big")
         return _receive_exact(client, response_size)
+
+
+@pytest.mark.asyncio
+async def test_completed_handler_failure_is_reported_after_socket_cleanup(
+    project_root: Path,
+) -> None:
+    # Given
+    socket_path = project_root / ".aizim" / "run" / "state.sock"
+    handler_done = asyncio.Event()
+    failure = RuntimeError("injected dispatch failure")
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+    unhandled_messages: list[str] = []
+    loop.set_exception_handler(
+        lambda _loop, context: unhandled_messages.append(str(context.get("message", "")))
+    )
+
+    def fail_dispatch(request: RpcRequest, trusted: bool) -> RpcSuccess:
+        del request, trusted
+        handler = asyncio.current_task()
+        assert handler is not None
+        handler.add_done_callback(lambda _completed: handler_done.set())
+        raise failure
+
+    server = RpcServer(socket_path, "service-session", fail_dispatch)
+    await server.start()
+    reader, writer = await asyncio.open_unix_connection(str(socket_path))
+    encoded = canonical_json(RpcRequest(operation="health", params={}, session_id=None))
+
+    try:
+        writer.write(len(encoded).to_bytes(4, "big") + encoded)
+        await writer.drain()
+        async with asyncio.timeout(0.25):
+            assert await reader.read() == b""
+            await handler_done.wait()
+
+        # When / Then
+        with pytest.raises(RuntimeError, match="injected dispatch failure") as raised:
+            await server.close()
+        assert raised.value is failure
+        assert not socket_path.exists()
+        await server.close()
+
+        restarted = RpcServer(socket_path, "service-session", fail_dispatch)
+        await restarted.start()
+        await restarted.close()
+        assert "Task exception was never retrieved" not in unhandled_messages
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        await server.close()
+        loop.set_exception_handler(previous_handler)
 
 
 @pytest.mark.asyncio

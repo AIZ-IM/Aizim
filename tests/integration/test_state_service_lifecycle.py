@@ -70,17 +70,6 @@ def _service(project_root: Path) -> StateService:
     return StateService(StateServiceConfig(project_root, "service-session"))
 
 
-async def _shutdown(service: StateService, peer: asyncio.StreamWriter) -> None:
-    close_task = asyncio.create_task(service.aclose())
-    try:
-        await asyncio.wait_for(asyncio.shield(close_task), timeout=0.25)
-    except TimeoutError:
-        peer.close()
-        await peer.wait_closed()
-        await close_task
-        raise
-
-
 async def _round_trip(
     reader: asyncio.StreamReader, writer: asyncio.StreamWriter, request: RpcRequest
 ) -> None:
@@ -228,11 +217,11 @@ async def test_shutdown_with_idle_client_closes_peer_and_allows_restart(
     service = _service(project_root)
     await service.start()
     reader, writer = await asyncio.open_unix_connection(str(service.socket_path))
-    await asyncio.sleep(0)
 
     try:
         # When
-        await _shutdown(service, writer)
+        async with asyncio.timeout(0.25):
+            await service.aclose()
 
         # Then
         assert await asyncio.wait_for(reader.read(), timeout=0.25) == b""
@@ -270,7 +259,8 @@ async def test_shutdown_with_authenticated_persistent_client_preserves_restart_s
 
     try:
         # When
-        await _shutdown(service, writer)
+        async with asyncio.timeout(0.25):
+            await service.aclose()
 
         # Then
         assert await asyncio.wait_for(reader.read(), timeout=0.25) == b""
