@@ -1,0 +1,6 @@
+name = "AttackProbeProject"
+version = "0.1.0"
+defaultTargets = ["AttackProbeProject"]
+
+[[lean_lib]]
+name = "AttackProbeProject"

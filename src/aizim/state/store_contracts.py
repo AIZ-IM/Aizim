@@ -100,6 +100,18 @@ def _projection_json(records: tuple[ProjectionRecord, ...]) -> bytes:
 
 def _logical_digest(records: tuple[ProjectionRecord, ...]) -> str:
     protected = tuple(
-        record for record in records if record.projection_name not in AUDIT_PROJECTIONS
+        record
+        for record in records
+        if record.projection_name not in AUDIT_PROJECTIONS and not _sandbox_probe_audit(record)
     )
     return sha256_bytes(_projection_json(protected))
+
+
+def _sandbox_probe_audit(record: ProjectionRecord) -> bool:
+    if record.projection_name != "resources":
+        return False
+    state: JsonValue = json.loads(record.state_json)
+    return type(state) is dict and state.get("event_type") in (
+        "SandboxProbeStarted",
+        "SandboxProbePassed",
+    )

@@ -6,6 +6,8 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).parents[2]
 STORE_PATH = REPOSITORY_ROOT / "src" / "aizim" / "state" / "store.py"
 SERVICE_PATH = REPOSITORY_ROOT / "src" / "aizim" / "state" / "service.py"
+AGENT_ROOT = REPOSITORY_ROOT / "src" / "aizim" / "agents"
+MACOS_SANDBOX_PATH = AGENT_ROOT / "macos_sandbox.py"
 
 
 def _python_sources() -> tuple[Path, ...]:
@@ -33,6 +35,24 @@ def _event_store_call(node: ast.AST) -> bool:
         isinstance(node.func, ast.Attribute) and node.func.attr == "_EventStore"
     )
     return direct_call or attribute_call
+
+
+def _launches_process(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and (node.func.value.id, node.func.attr)
+        in {
+            ("asyncio", "create_subprocess_exec"),
+            ("asyncio", "create_subprocess_shell"),
+            ("os", "popen"),
+            ("os", "system"),
+            ("subprocess", "Popen"),
+            ("subprocess", "call"),
+            ("subprocess", "run"),
+        }
+    )
 
 
 def test_only_store_module_imports_sqlite3() -> None:
@@ -131,6 +151,38 @@ def test_task_five_authored_files_stay_within_pure_loc_limit() -> None:
         REPOSITORY_ROOT / "tests" / "integration" / "test_cli_init.py",
         REPOSITORY_ROOT / "tests" / "integration" / "test_cli_doctor.py",
         REPOSITORY_ROOT / "tests" / "integration" / "test_cli_status.py",
+    )
+    oversized = []
+    for path in paths:
+        pure_lines = sum(
+            bool(line.strip()) and not line.lstrip().startswith("#")
+            for line in path.read_text().splitlines()
+        )
+        if pure_lines > 250:
+            oversized.append(f"{path.relative_to(REPOSITORY_ROOT)}:{pure_lines}")
+    assert oversized == []
+
+
+def test_only_macos_sandbox_launches_task_six_processes() -> None:
+    violations: list[str] = []
+    for path in AGENT_ROOT.glob("*.py"):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        if path != MACOS_SANDBOX_PATH:
+            violations.extend(
+                f"{path.relative_to(REPOSITORY_ROOT)}:{node.lineno}"
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and _launches_process(node)
+            )
+    assert violations == []
+
+
+def test_task_six_authored_files_stay_within_pure_loc_limit() -> None:
+    paths = (
+        *AGENT_ROOT.glob("*.py"),
+        REPOSITORY_ROOT / "tests" / "unit" / "test_workspace_view.py",
+        REPOSITORY_ROOT / "tests" / "unit" / "test_sandbox_profile.py",
+        REPOSITORY_ROOT / "tests" / "security" / "test_macos_sandbox.py",
+        Path(__file__),
     )
     oversized = []
     for path in paths:

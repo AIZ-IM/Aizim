@@ -239,3 +239,56 @@ def test_keyboard_interrupt_cannot_expose_partial_write(tmp_path: Path) -> None:
     with StateService(_config(tmp_path)) as restarted:
         assert restarted.query_events() == ()
         assert restarted.query_projection("project", "project-1") is None
+
+
+def test_sandbox_probe_audit_events_do_not_change_protected_digest(
+    tmp_path: Path,
+) -> None:
+    with StateService(_config(tmp_path)) as service:
+        before = service.logical_digest()
+        service.append_event(
+            AppendEventCommand(
+                "SandboxProbeStarted",
+                "sandbox_adapter",
+                "run-1",
+                None,
+                {"probe_id": "probe-1:start", "profile": "aizim-worker"},
+            )
+        )
+        service.append_event(
+            AppendEventCommand(
+                "SandboxProbeDenied",
+                "sandbox_adapter",
+                "run-1",
+                None,
+                {
+                    "probe_id": "probe-1:read_state_database",
+                    "reason_code": "SANDBOX_ENFORCED",
+                    "operation": "read_state_database",
+                },
+            )
+        )
+        service.append_event(
+            AppendEventCommand(
+                "SandboxProbePassed",
+                "sandbox_adapter",
+                "run-1",
+                None,
+                {
+                    "probe_id": "probe-1:read_allowed_view",
+                    "operation": "read_allowed_view",
+                },
+            )
+        )
+        service.append_event(
+            AppendEventCommand(
+                "SandboxProbeFailed",
+                "sandbox_adapter",
+                "run-1",
+                None,
+                {"probe_id": "probe-1:failed", "reason_code": "PROBE_FAILED"},
+            )
+        )
+
+        assert service.logical_digest() == before
+        assert service.replay_verify().matched
