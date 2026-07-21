@@ -13,6 +13,13 @@ from pathlib import Path
 from typing import Final
 
 from .macos_profile import compile_macos_profile
+from .process_io import (
+    READ_CHUNK_SIZE,
+    ProcessOutputLimitError,
+    ProcessPipeError,
+    communicate_bounded,
+    drain_process,
+)
 from .sandbox import (
     ProbeOperation,
     ProbeReport,
@@ -221,6 +228,7 @@ def _ephemeral_root(path: Path, prefix: str) -> Path:
 
 
 async def _execute(spec: SandboxLaunchSpec, timeout_seconds: float) -> tuple[bytes, bytes]:
+    source = Path(__file__).with_name("attack_probe.py").read_bytes()
     process = await asyncio.create_subprocess_exec(
         *spec.argv,
         cwd=spec.cwd,
@@ -229,21 +237,23 @@ async def _execute(spec: SandboxLaunchSpec, timeout_seconds: float) -> tuple[byt
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         start_new_session=True,
+        limit=READ_CHUNK_SIZE,
     )
-    source = Path(__file__).with_name("attack_probe.py").read_bytes()
     try:
         stdout, stderr = await asyncio.wait_for(
-            process.communicate(source), timeout=timeout_seconds
+            communicate_bounded(process, source, _OUTPUT_LIMIT), timeout=timeout_seconds
         )
     except BaseException as error:
         with suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
-        await process.communicate()
+        await drain_process(process)
         if isinstance(error, TimeoutError):
             raise SandboxProbeError("PROBE_TIMEOUT") from error
+        if isinstance(error, ProcessOutputLimitError):
+            raise SandboxProbeError("PROBE_OUTPUT_LIMIT") from error
+        if isinstance(error, ProcessPipeError):
+            raise SandboxProbeError("PROBE_PIPE_FAILED") from error
         raise
     if process.returncode != 0:
         raise SandboxProbeError("PROBE_PROCESS_FAILED")
-    if len(stdout) > _OUTPUT_LIMIT or len(stderr) > _OUTPUT_LIMIT:
-        raise SandboxProbeError("PROBE_OUTPUT_LIMIT")
     return stdout, stderr
