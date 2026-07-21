@@ -130,6 +130,7 @@ def test_mint_is_atomic_opaque_and_persistent_across_restart(tmp_path: Path) -> 
 @pytest.mark.parametrize(
     "invalid_grant",
     [
+        lambda: replace(grant(), operations=()),
         lambda: replace(grant(), operations=(GatewayTool.STATE_APPEND,)),
         lambda: replace(
             grant(), operations=(GatewayTool.STATE_QUERY, GatewayTool.STATE_QUERY)

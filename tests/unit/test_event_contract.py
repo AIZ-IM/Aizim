@@ -152,12 +152,17 @@ def test_schema_v1_accepts_exact_parent_capability_minted_shape() -> None:
     assert event_as_dict(event)["payload"] == payload
 
 
-def test_exact_parent_capability_minted_event_survives_restart(tmp_path: Path) -> None:
+@pytest.mark.parametrize("operations", [None, [], ["project.read", "project.read"], [None]])
+def test_exact_parent_capability_minted_event_survives_restart(
+    tmp_path: Path, operations: list[JsonValue] | None
+) -> None:
     payload: dict[str, JsonValue] = {
         "worker_id": "worker-1",
         "role": "formalizer",
         "token_hash": _HASH,
     }
+    if operations is not None:
+        payload["operations"] = operations
     command = AppendEventCommand("CapabilityMinted", "supervisor", "run-1", None, payload)
     with StateService(StateServiceConfig(tmp_path, "parent-writer")) as service:
         service.append_event(command)
@@ -193,22 +198,6 @@ def test_runless_lease_terminal_event_rolls_back_and_keeps_capability_live(
         assert service.query_events() == before
         assert service.query_projection("leases", "lease-1") is None
         assert service.capability_record(_HASH) == capability
-
-
-@pytest.mark.parametrize("operations", [[], ["project.read", "project.read"]])
-def test_capability_minted_event_requires_unique_nonempty_operations(
-    operations: list[JsonValue],
-) -> None:
-    with pytest.raises(EventValidationError):
-        _event(
-            "CapabilityMinted",
-            {
-                "worker_id": "worker-1",
-                "role": "formalizer",
-                "operations": operations,
-                "expires_at": _TIMESTAMP,
-            },
-        )
 
 
 def test_serialized_event_payload_is_a_detached_mutable_document() -> None:
