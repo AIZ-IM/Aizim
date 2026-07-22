@@ -103,7 +103,20 @@ def test_real_codex_shared_smoke_is_kernel_verified_and_replayable(tmp_path: Pat
     assert alignment["verdict"] == "aligned"
     assert event_types.count("DeclarationPublished") == 2
     assert event_types.count("PromotionVerificationRecorded") == 2
-    assert event_types.count("AgentRunCompleted") == 3
+    completions = sorted(
+        worker_id
+        for record in events
+        if record.envelope.event_type == "AgentRunCompleted"
+        and type(worker_id := record.envelope.payload["worker_id"]) is str
+    )
+    starts = sorted(
+        worker_id
+        for record in events
+        if record.envelope.event_type == "WorkerStarted"
+        and type(worker_id := record.envelope.payload["worker_id"]) is str
+    )
+    assert completions == ["alignment-auditor", "prover-a", "prover-b", "prover-b"]
+    assert starts == ["prover-a", "prover-b", "prover-b"]
     assert event_types.count("WorkerStopped") == 3
     assert event_types.count("LeaseReleased") == 3
     assert event_types.count("LeanRuntimeStopped") == 1

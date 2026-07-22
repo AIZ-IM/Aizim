@@ -35,7 +35,6 @@ def compile_macos_profile(
         permission,
         environment,
     )
-    policy_document = json.dumps(overrides, ensure_ascii=False, separators=(",", ":")).encode()
     argv = (
         str(codex_executable),
         *(item for override in overrides for item in ("-c", override)),
@@ -56,7 +55,7 @@ def compile_macos_profile(
         view_root=request.view_root,
         scratch_root=request.scratch_root,
         profile_id=_PROFILE_ID,
-        policy_hash=hashlib.sha256(policy_document).hexdigest(),
+        policy_hash=_policy_contract_hash(),
     )
 
 
@@ -84,14 +83,11 @@ def validate_macos_profile(
     ):
         raise ValueError("invalid macOS sandbox profile")
     overrides = argv[2:9:2]
-    expected_hash = hashlib.sha256(
-        json.dumps(overrides, ensure_ascii=False, separators=(",", ":")).encode()
-    ).hexdigest()
     if (
         overrides[0] != f"default_permissions={_toml_string(_PROFILE_ID)}"
         or overrides[1] != 'approval_policy="never"'
         or overrides[3] != _environment_override(spec.shell_env)
-        or spec.policy_hash != expected_hash
+        or spec.policy_hash != _policy_contract_hash()
         or not _permission_is_strict(overrides[2], spec, project_root, developer_root)
     ):
         raise ValueError("invalid macOS sandbox profile")
@@ -147,6 +143,31 @@ def _permission_override(request: SandboxRequest, developer_root: Path) -> str:
         f"{_toml_string(path)}={_toml_string(permission)}" for path, permission in filesystem
     )
     return f"permissions.{_PROFILE_ID}={{filesystem={{{entries}}},network={{enabled=false}}}}"
+
+
+def _policy_contract_hash() -> str:
+    scratch = Path("/__aizim_contract__/scratch")
+    request = SandboxRequest(
+        Path("/__aizim_contract__/project"),
+        Path("/__aizim_contract__/view"),
+        scratch,
+        (),
+        {},
+    )
+    environment = {
+        "PATH": _BASE_PATH,
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "TMPDIR": str(scratch),
+    }
+    contract = (
+        f"default_permissions={_toml_string(_PROFILE_ID)}",
+        'approval_policy="never"',
+        _permission_override(request, Path("/__aizim_contract__/developer")),
+        _environment_override(environment),
+    )
+    body = json.dumps(contract, ensure_ascii=False, separators=(",", ":")).encode()
+    return hashlib.sha256(body).hexdigest()
 
 
 def _environment_override(environment: Mapping[str, str]) -> str:

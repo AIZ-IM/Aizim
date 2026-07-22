@@ -27,6 +27,7 @@ from aizim.state.event_payload import thaw_payload
 from aizim.state.events import utc_now
 
 from .codex_worker import CodexWorkspaceBackend
+from .worker_lifecycle import record_agent_result
 
 _AUDITOR_PROMPT = Path(__file__).parent.parent / "agents" / "prompts" / "alignment_auditor.md"
 
@@ -102,6 +103,7 @@ async def audit_alignment(
                 token = ""
             finally:
                 alias.close()
+    record_agent_result(state, run_id, f"alignment-{run_id}", result)
     verdict = _verdict(result.status, result.summary)
     record_machine_alignment(
         state, run_id, "codex-alignment-auditor", verdict, actor="codex_alignment_auditor"

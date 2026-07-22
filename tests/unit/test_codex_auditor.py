@@ -24,7 +24,15 @@ class AlignedBackend:
 
     async def run(self, request: AgentRequest) -> AgentResult:
         self.request = request
-        return AgentResult(request.worker_id, "submitted", "aligned", "b" * 64, "c" * 64, 0)
+        return AgentResult(
+            request.worker_id,
+            "submitted",
+            "aligned",
+            "b" * 64,
+            "c" * 64,
+            0,
+            "d" * 64,
+        )
 
 
 def _project(tmp_path: Path) -> Path:
@@ -102,6 +110,14 @@ async def test_codex_alignment_auditor_records_a_machine_verdict(
             "reviewer": "codex-alignment-auditor",
             "verdict": "aligned",
         }
+        completion = next(
+            record.envelope.payload
+            for record in state.query_events("shared-audit")
+            if record.envelope.event_type == "AgentRunCompleted"
+        )
+        assert completion["worker_id"] == "alignment-auditor"
+        assert completion["execution_id"] == "alignment-shared-audit"
+        assert completion["policy_hash"] == "d" * 64
         assert backend.request is not None
         assert backend.request.role is AgentRole.FORMALIZER
         assert backend.request.timeout_seconds == 60.0

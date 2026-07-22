@@ -5,6 +5,7 @@ import asyncio
 from aizim.agents import AgentResult
 from aizim.async_lifecycle import await_cleanup
 from aizim.domain import FileLease
+from aizim.domain.serialization import JsonValue
 from aizim.lean import DocumentBroker
 from aizim.state import AppendEventCommand, StateService
 
@@ -12,20 +13,23 @@ from aizim.state import AppendEventCommand, StateService
 def record_agent_result(
     state: StateService, run_id: str, execution_id: str, result: AgentResult
 ) -> None:
+    payload: dict[str, JsonValue] = {
+        "worker_id": result.worker_id,
+        "execution_id": execution_id,
+        "status": result.status,
+        "transport_event_hash": result.transport_event_hash,
+        "final_message_hash": result.final_message_hash,
+        "exit_code": result.exit_code,
+    }
+    if result.policy_hash is not None:
+        payload["policy_hash"] = result.policy_hash
     state.append_event(
         AppendEventCommand(
             "AgentRunCompleted",
             "worker_runner",
             run_id,
             None,
-            {
-                "worker_id": result.worker_id,
-                "execution_id": execution_id,
-                "status": result.status,
-                "transport_event_hash": result.transport_event_hash,
-                "final_message_hash": result.final_message_hash,
-                "exit_code": result.exit_code,
-            },
+            payload,
         )
     )
 

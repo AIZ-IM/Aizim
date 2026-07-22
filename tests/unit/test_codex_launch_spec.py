@@ -255,6 +255,7 @@ async def test_codex_backend_has_verified_identity_and_always_finalizes(
     if mode == "success":
         result = await backend.run(agent_request)
         assert result.status == "submitted"
+        assert result.policy_hash == base.policy_hash
     else:
         expected = {
             "failure": AgentLaunchError,

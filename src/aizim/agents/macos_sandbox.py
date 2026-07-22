@@ -113,7 +113,7 @@ class MacOSSandboxAdapter:
         except ValueError as error:
             raise SandboxProbeError("INVALID_PROBE_OUTPUT") from error
         for attempt in attempts:
-            append_probe_event(request, attempt)
+            append_probe_event(request, attempt, spec.policy_hash)
         logical_after = request.event_sink.logical_digest()
         protected_after = protected_asset_digests(request)
         expected = tuple(ProbeOperation)

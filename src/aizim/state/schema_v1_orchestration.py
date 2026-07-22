@@ -45,10 +45,12 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
                     "final_message_hash",
                     "exit_code",
                 ),
-                validators={
+                ("policy_hash",),
+                {
                     "transport_event_hash": sha256_payload,
                     "final_message_hash": sha256_payload,
                     "exit_code": integer_payload,
+                    "policy_hash": sha256_payload,
                 },
             ),
             "PromotionVerificationRecorded": codec(
@@ -61,10 +63,12 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
                     "axiom_verification_hash",
                     "axiom_verification_verdict",
                 ),
-                validators={
+                ("source_scan_hash", "source_scan_verdict"),
+                {
                     "diagnostics_hash": sha256_payload,
                     "build_hash": sha256_payload,
                     "axiom_verification_hash": sha256_payload,
+                    "source_scan_hash": sha256_payload,
                 },
             ),
             "LeanRuntimeStopped": codec(("runtime_id",)),

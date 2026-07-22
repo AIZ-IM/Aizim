@@ -16,6 +16,7 @@ from aizim.knowledge import (
     PromotionService,
     SnapshotPayload,
 )
+from aizim.knowledge.promotion_evidence import record_verification
 from aizim.state import (
     AppendEventCommand,
     PublicationQueueState,
@@ -33,7 +34,14 @@ class _Verifier:
     async def verify(self, source: bytes, theorem_name: str) -> PromotionEvidence:
         assert b"theorem candidate : True" in source
         assert theorem_name.startswith("AizimSmoke.Research.candidate_")
-        return PromotionEvidence((), ("propext",), "True", ("Std",), ("propext",))
+        return PromotionEvidence(
+            (),
+            ("propext",),
+            "True",
+            ("Std",),
+            ("propext",),
+            axiom_response_hash="c" * 64,
+        )
 
     async def materialize(
         self, source: bytes, epoch_pair: EpochPair, publication_sequence: int
@@ -117,6 +125,20 @@ def test_verified_contribution_publishes_one_atomic_knowledge_delta(tmp_path: Pa
         events = service.query_events("run-1")
         assert [event.envelope.event_type for event in events].count("DeclarationPublished") == 1
         assert [event.envelope.event_type for event in events].count("KnowledgeDeltaPublished") == 1
+        verification = next(
+            event
+            for event in events
+            if event.envelope.event_type == "PromotionVerificationRecorded"
+        )
+        declaration = next(
+            event for event in events if event.envelope.event_type == "DeclarationPublished"
+        )
+        assert verification.sequence < declaration.sequence
+        assert verification.envelope.payload["source_scan_verdict"] == "pass"
+        assert (
+            verification.envelope.payload["source_scan_hash"]
+            == verification.envelope.payload["axiom_verification_hash"]
+        )
         deltas = KnowledgeReader(service).read(0)
         assert len(deltas) == 1
         assert deltas[0].new_epoch.knowledge_epoch == 1
@@ -132,6 +154,21 @@ def test_verified_contribution_publishes_one_atomic_knowledge_delta(tmp_path: Pa
         epochs = service.query_projection("epochs", "global")
         assert epochs is not None
         assert json.loads(epochs.state_json)["knowledge_epoch"] == 1
+    finally:
+        service.close()
+
+
+def test_missing_trusted_scan_response_is_recorded_as_failed(tmp_path: Path) -> None:
+    # Given
+    service = _service(tmp_path)
+    evidence = PromotionEvidence((), ("propext",), "True", ("Std",), ("propext",))
+    try:
+        # When
+        record_verification(service, "run-1", "contribution-1", evidence)
+        payload = service.query_events("run-1")[-1].envelope.payload
+
+        # Then
+        assert payload["source_scan_verdict"] == "failed"
     finally:
         service.close()
 

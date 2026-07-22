@@ -122,7 +122,7 @@ def probe_document(request: ProbeRequest) -> str:
     )
 
 
-def append_probe_event(request: ProbeRequest, attempt: ProbeAttempt) -> None:
+def append_probe_event(request: ProbeRequest, attempt: ProbeAttempt, policy_hash: str) -> None:
     probe_id = f"{request.probe_id}:{attempt.operation.value}"
     payload: dict[str, JsonValue]
     if attempt.verdict == "denied":
@@ -131,10 +131,15 @@ def append_probe_event(request: ProbeRequest, attempt: ProbeAttempt) -> None:
             "probe_id": probe_id,
             "reason_code": attempt.reason_code,
             "operation": attempt.operation.value,
+            "policy_hash": policy_hash,
         }
     else:
         event_type = "SandboxProbePassed"
-        payload = {"probe_id": probe_id, "operation": attempt.operation.value}
+        payload = {
+            "probe_id": probe_id,
+            "operation": attempt.operation.value,
+            "policy_hash": policy_hash,
+        }
     request.event_sink.append_event(
         AppendEventCommand(
             event_type=event_type,

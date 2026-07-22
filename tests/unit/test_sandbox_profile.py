@@ -4,6 +4,7 @@ import asyncio
 import os
 import shutil
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -117,12 +118,31 @@ def test_profile_compiles_one_deterministic_inline_permission_table(
     assert "do-not-render" not in repr(sandbox_request)
 
 
-def test_policy_hash_changes_with_roots(tmp_path: Path) -> None:
+def test_policy_contract_hash_is_stable_across_concrete_roots(tmp_path: Path) -> None:
     adapter = MacOSSandboxAdapter(dependencies())
     first = adapter.compile(request(tmp_path / "one"))
     second = adapter.compile(request(tmp_path / "two"))
 
-    assert first.policy_hash != second.policy_hash
+    assert first.policy_hash == second.policy_hash
+
+
+def test_contract_hash_does_not_mask_concrete_root_tampering(tmp_path: Path) -> None:
+    adapter = MacOSSandboxAdapter(dependencies())
+    sandbox_request = request(tmp_path)
+    spec = adapter.compile(sandbox_request)
+    tampered_argv = tuple(
+        value.replace(str(sandbox_request.view_root), str(tmp_path / "other-view"))
+        if value.startswith("permissions.aizim-worker=")
+        else value
+        for value in spec.argv
+    )
+
+    with pytest.raises(ValueError, match="invalid macOS sandbox profile"):
+        macos_sandbox.validate_macos_profile(
+            replace(spec, argv=tampered_argv),
+            sandbox_request.project_root,
+            dependencies().developer_root(),
+        )
 
 
 @pytest.mark.parametrize(

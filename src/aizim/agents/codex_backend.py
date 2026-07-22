@@ -105,6 +105,7 @@ class CodexBackend:
             outcome.transport_event_hash,
             outcome.final_message_hash,
             outcome.exit_code,
+            sandbox.policy_hash,
         )
 
     async def _finish(self, request: AgentRequest, failure: BaseException | None) -> None:

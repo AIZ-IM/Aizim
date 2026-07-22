@@ -38,6 +38,7 @@ class AgentResult:
     transport_event_hash: str
     final_message_hash: str
     exit_code: int
+    policy_hash: str | None = None
 
 
 class AgentBackend(Protocol):

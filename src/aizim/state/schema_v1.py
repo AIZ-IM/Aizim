@@ -137,8 +137,12 @@ _CODECS: Final = {
     ),
     "CapabilityDenied": _codec(("reason_code", "role", "worker_id", "operation", "request_id")),
     "SandboxProbeStarted": _codec(("probe_id",), ("profile",)),
-    "SandboxProbeDenied": _codec(("probe_id", "reason_code"), ("operation",)),
-    "SandboxProbePassed": _codec(("probe_id",), ("operation",)),
+    "SandboxProbeDenied": _codec(
+        ("probe_id", "reason_code"), ("operation", "policy_hash"), {"policy_hash": _sha256_payload}
+    ),
+    "SandboxProbePassed": _codec(
+        ("probe_id",), ("operation", "policy_hash"), {"policy_hash": _sha256_payload}
+    ),
     "SandboxProbeFailed": _codec(
         ("probe_id", "reason_code"), ("artifact_hash",), {"artifact_hash": _sha256_payload}
     ),

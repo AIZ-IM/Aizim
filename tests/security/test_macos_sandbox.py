@@ -132,6 +132,7 @@ def test_real_macos_sandbox_denies_all_protected_surfaces() -> None:
                 probe_id = event.payload["probe_id"]
                 assert isinstance(probe_id, str)
                 probe_ids.append(probe_id)
+                assert event.payload["policy_hash"] == report.policy_hash
             assert probe_ids == [f"probe-1:{operation.value}" for operation in ProbeOperation]
             serialized = repr(report) + repr(events)
             assert secret not in serialized

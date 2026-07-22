@@ -23,7 +23,12 @@ _EVENT_KINDS: Final[dict[str, tuple[str, ...]]] = {
     "LeaseReleased": ("lease",),
     "DocumentEdited": ("accepted_document_action",),
     "ContributionSubmitted": ("contribution",),
-    "PromotionVerificationRecorded": ("diagnostics", "build", "axiom_verification"),
+    "PromotionVerificationRecorded": (
+        "diagnostics",
+        "build",
+        "source_scan",
+        "axiom_verification",
+    ),
     "PromotionPrepared": ("promotion",),
     "DeclarationPublished": ("publication",),
     "KnowledgeDeltaPublished": ("epoch", "delta"),

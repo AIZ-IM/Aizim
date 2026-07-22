@@ -80,6 +80,7 @@ def test_fake_run_writes_registered_replayable_formal_trace(tmp_path: Path) -> N
         "contribution",
         "diagnostics",
         "build",
+        "source_scan",
         "axiom_verification",
         "publication",
         "epoch",
@@ -91,10 +92,11 @@ def test_fake_run_writes_registered_replayable_formal_trace(tmp_path: Path) -> N
     verification = {
         record.kind: record.source_event_type
         for record in trace
-        if record.kind in {"diagnostics", "build", "axiom_verification"}
+        if record.kind in {"diagnostics", "build", "source_scan", "axiom_verification"}
     }
     assert verification == {
         "diagnostics": "PromotionVerificationRecorded",
         "build": "PromotionVerificationRecorded",
+        "source_scan": "PromotionVerificationRecorded",
         "axiom_verification": "PromotionVerificationRecorded",
     }
