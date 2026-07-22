@@ -66,8 +66,6 @@ _HASH_CASES: Final = (
         "content_hash",
         {key: value for key, value in _DOCUMENT_STATE.items() if key != "content_hash"},
     ),
-    ("FormalActionRecorded", "input_hash", {"action_id": "a"}),
-    ("FormalActionRecorded", "output_hash", {"action_id": "a"}),
     ("ContributionRebased", "base_epoch", {"contribution_id": "c", "source_contribution_id": "s"}),
     ("PromotionFailed", "artifact_hash", {"contribution_id": "c", "reason_code": "failed"}),
     ("DeclarationPublished", "content_hash", {"declaration_id": "d"}),

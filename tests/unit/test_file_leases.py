@@ -180,7 +180,19 @@ def test_state_document_transactions_reject_atomically_and_replay(tmp_path: Path
                 "lean_runtime",
                 lease.run_id,
                 None,
-                {"action_id": "action-1"},
+                {
+                    "action_id": "action-1",
+                    "worker_id": lease.worker_id,
+                    "document_id": lease.document_id,
+                    "input_hash": "a" * 64,
+                    "output_hash": "b" * 64,
+                    "verdict": "success",
+                    "document_version": 1,
+                    "base_epoch": epoch.base_epoch,
+                    "knowledge_epoch": epoch.knowledge_epoch,
+                    "started_at": "2026-07-21T10:00:00Z",
+                    "completed_at": "2026-07-21T10:00:00Z",
+                },
             )
         )
         assert service.query_projection("formal_actions", "action-1") is not None

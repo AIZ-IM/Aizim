@@ -144,6 +144,17 @@ class DocumentBroker:
         except Exception:
             raise DocumentBrokerError("DOCUMENT_RELEASE_FAILED") from None
 
+    async def _trusted_runtime_document(
+        self, run_id: str, worker_id: str, lease_id: str, document_id: str
+    ) -> tuple[DocumentState, Path, Path]:
+        await self._ensure_recovered()
+        try:
+            document = self._state.document_for(run_id, worker_id, lease_id, document_id)
+            project_root, path = self._storage.resolved_path(document)
+        except (DocumentIoError, LeanPathError, DocumentStateError) as error:
+            raise DocumentBrokerError(str(error)) from None
+        return document, project_root, path
+
     async def _ensure_recovered(self) -> None:
         if self._recovered:
             return

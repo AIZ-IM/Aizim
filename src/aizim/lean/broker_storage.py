@@ -86,6 +86,14 @@ class DocumentStorage:
             finally:
                 os.close(descriptor)
 
+    def resolved_path(self, document: DocumentState) -> tuple[Path, Path]:
+        self._validate_document(document)
+        allowed = self._allowed.setdefault(document.run_id, set())
+        self._reject_collision(allowed, document.relative_path)
+        allowed.add(document.relative_path)
+        with self._policy(document.run_id, tuple(allowed)) as policy:
+            return policy.root, policy.resolve(document.relative_path)
+
     def replace(self, document: DocumentState, body: bytes) -> None:
         self._validate_document(document)
         allowed = self._allowed.setdefault(document.run_id, set())
