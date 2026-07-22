@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Final
 
@@ -13,6 +16,7 @@ from .document_io import (
     mode_relative,
     open_root,
     read_relative,
+    replace_relative,
 )
 
 _SMOKE_FILES: Final = (
@@ -21,12 +25,54 @@ _SMOKE_FILES: Final = (
     PurePosixPath("AizimSmoke.lean"),
     PurePosixPath("AizimSmoke/Base.lean"),
 )
+_MANIFEST: Final = PurePosixPath("AizimSmoke.lean")
+_RESEARCH_IMPORT: Final = re.compile(
+    rb"(?m)^import (AizimSmoke\.Research\.[A-Za-z_][A-Za-z0-9_]*)\n$"
+)
+_RUN_ID: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+_HASH: Final = re.compile(r"[0-9a-f]{64}")
+
+
+@dataclass(frozen=True, slots=True)
+class PublishedModule:
+    run_id: str
+    module: str
+    content_hash: str
+
+    def __post_init__(self) -> None:
+        if (
+            _RUN_ID.fullmatch(self.run_id) is None
+            or _RESEARCH_IMPORT.fullmatch(f"import {self.module}\n".encode()) is None
+            or _HASH.fullmatch(self.content_hash) is None
+        ):
+            raise DocumentIoError("INVALID_PUBLISHED_MODULE")
 
 
 def smoke_base_epoch(smoke_root: Path) -> str:
-    descriptor = open_root(smoke_root)
+    return project_base_epoch(smoke_root)
+
+
+def project_base_epoch(project_root: Path, extra_modules: Mapping[str, bytes] | None = None) -> str:
+    descriptor = open_root(project_root)
     try:
         bodies = {relative: read_relative(descriptor, relative) for relative in _SMOKE_FILES}
+        manifest = _base_manifest(bodies[_MANIFEST])
+        modules = {
+            "AizimSmoke": sha256_bytes(manifest),
+            "AizimSmoke.Base": sha256_bytes(bodies[PurePosixPath("AizimSmoke/Base.lean")]),
+        }
+        for name in _research_imports(bodies[_MANIFEST]):
+            modules[name] = sha256_bytes(read_relative(descriptor, _module_path(name)))
+        for name, source in ({} if extra_modules is None else extra_modules).items():
+            if (
+                _RESEARCH_IMPORT.fullmatch(f"import {name}\n".encode()) is None
+                or type(source) is not bytes
+            ):
+                raise DocumentIoError("INVALID_PUBLISHED_MODULE")
+            digest = sha256_bytes(source)
+            if name in modules and modules[name] != digest:
+                raise DocumentIoError("PROMOTION_MODULE_MISMATCH")
+            modules[name] = digest
     finally:
         os.close(descriptor)
     environment = sha256_json(
@@ -37,16 +83,6 @@ def smoke_base_epoch(smoke_root: Path) -> str:
             "imports": ("Std", "AizimSmoke"),
         }
     )
-    modules = {
-        "AizimSmoke": sha256_bytes(bodies[PurePosixPath("AizimSmoke.lean")]),
-        "AizimSmoke.Base": sha256_bytes(bodies[PurePosixPath("AizimSmoke/Base.lean")]),
-    }
-    descriptor = open_root(smoke_root)
-    try:
-        if any(read_relative(descriptor, path) != body for path, body in bodies.items()):
-            raise DocumentIoError("SMOKE_SOURCE_CHANGED")
-    finally:
-        os.close(descriptor)
     return compute_base_epoch(environment, modules)
 
 
@@ -64,7 +100,9 @@ def materialize_smoke_project(project_root: Path, run_id: str, smoke_root: Path)
                 except DocumentIoError:
                     create_relative(destination_fd, relative, body, mode=0o444)
                 else:
-                    if existing != body or mode_relative(destination_fd, relative) != 0o444:
+                    if not _matches_source(
+                        relative, body, existing, mode_relative(destination_fd, relative)
+                    ):
                         raise DocumentIoError("RUN_PROJECT_MISMATCH")
                 if read_relative(source_fd, relative) != body:
                     raise DocumentIoError("SMOKE_SOURCE_CHANGED")
@@ -74,3 +112,71 @@ def materialize_smoke_project(project_root: Path, run_id: str, smoke_root: Path)
         os.close(source_fd)
         os.close(project_fd)
     return run_project
+
+
+def sync_published_modules(
+    project_root: Path, run_project: Path, published: tuple[PublishedModule, ...]
+) -> str:
+    by_name = {item.module: item for item in published}
+    if len(by_name) != len(published):
+        raise DocumentIoError("PROMOTION_MODULE_MISMATCH")
+    destination, project = open_root(run_project), open_root(project_root)
+    try:
+        manifest = read_relative(destination, _MANIFEST)
+        imports: list[bytes] = []
+        for name, item in sorted(by_name.items()):
+            artifact = (
+                PurePosixPath(".aizim")
+                / "artifacts"
+                / item.run_id
+                / "promotions"
+                / item.content_hash
+            )
+            source = read_relative(project, artifact)
+            if (
+                mode_relative(project, artifact) != 0o600
+                or sha256_bytes(source) != item.content_hash
+            ):
+                raise DocumentIoError("PROMOTION_MODULE_MISMATCH")
+            target = _module_path(name)
+            try:
+                existing = read_relative(destination, target)
+            except DocumentIoError:
+                create_relative(destination, target, source, mode=0o444)
+            else:
+                if existing != source or mode_relative(destination, target) != 0o444:
+                    raise DocumentIoError("PROMOTION_MODULE_MISMATCH")
+            imports.append(f"import {name}\n".encode())
+        expected = _base_manifest(manifest) + b"".join(imports)
+        if manifest != expected:
+            replace_relative(destination, _MANIFEST, expected)
+    finally:
+        os.close(project)
+        os.close(destination)
+    return project_base_epoch(run_project)
+
+
+def _base_manifest(manifest: bytes) -> bytes:
+    return _RESEARCH_IMPORT.sub(b"", manifest)
+
+
+def _research_imports(manifest: bytes) -> tuple[str, ...]:
+    names = tuple(match.group(1).decode() for match in _RESEARCH_IMPORT.finditer(manifest))
+    if len(set(names)) != len(names):
+        raise DocumentIoError("PROMOTION_MODULE_MISMATCH")
+    return names
+
+
+def _module_path(name: str) -> PurePosixPath:
+    return PurePosixPath(*name.split(".")).with_suffix(".lean")
+
+
+def _matches_source(relative: PurePosixPath, source: bytes, existing: bytes, mode: int) -> bool:
+    if relative != _MANIFEST:
+        return existing == source and mode == 0o444
+    if not existing.startswith(source) or mode not in {0o444, 0o600}:
+        return False
+    additions = existing[len(source) :]
+    return not additions or all(
+        _RESEARCH_IMPORT.fullmatch(line + b"\n") is not None for line in additions.splitlines()
+    )

@@ -75,7 +75,11 @@ _HASH_CASES: Final = (
         {"delta_id": "d", "knowledge_epoch": 1},
     ),
     ("LeanRuntimeCrashed", "artifact_hash", {"runtime_id": "r", "reason_code": "failed"}),
-    ("EnvironmentTransitionProposed", "fingerprint", {"transition_id": "t"}),
+    (
+        "EnvironmentTransitionProposed",
+        "old_fingerprint",
+        {"transition_id": "t", "new_fingerprint": _HASH, "reason": "change"},
+    ),
 )
 _TIMESTAMP_CASES: Final = (
     ("RunCompleted", "ended_at", {}),

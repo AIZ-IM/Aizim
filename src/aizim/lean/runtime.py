@@ -23,6 +23,7 @@ from .models import (
     MultiAttemptResult,
     WorkerSession,
 )
+from .promotion_runtime import PromotionRuntimeMethods
 from .runtime_gateway import targets as gateway_targets
 from .verification import BuildResult, VerificationResult
 
@@ -30,7 +31,7 @@ type LeanResult = GoalResult | MultiAttemptResult | DiagnosticsResult
 type ResultCall[T: LeanResult] = Callable[[LeanMcpClient, Path], Awaitable[T]]
 
 
-class SharedLeanRuntime:
+class SharedLeanRuntime(PromotionRuntimeMethods):
     def __init__(self, state: StateService, broker: DocumentBroker, run_id: str) -> None:
         if type(run_id) is not str or not run_id:
             raise LeanRuntimeError("INVALID_RUNTIME_REQUEST")
@@ -102,7 +103,7 @@ class SharedLeanRuntime:
 
     async def _build(self) -> BuildResult:
         async with self._lifecycle_lock:
-            return await self._client_or_raise().build()
+            return await self._client_or_raise().build(clean=False, fetch_cache=False)
 
     async def _verify(self, document_id: str, theorem_name: str) -> VerificationResult:
         session = next((item for key, item in self._opened.items() if key[-1] == document_id), None)
@@ -110,7 +111,7 @@ class SharedLeanRuntime:
             raise LeanRuntimeError("DOCUMENT_NOT_OPEN")
         _, _, path = await self._resolve(session, document_id)
         async with self._lifecycle_lock:
-            return await self._client_or_raise().verify(path, theorem_name)
+            return await self._client_or_raise().verify(path, theorem_name, scan_source=True)
 
     async def _terminate_for_test(self) -> None:
         await self._client_or_raise()._terminate_for_test()

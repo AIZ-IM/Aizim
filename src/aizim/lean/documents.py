@@ -4,32 +4,31 @@ import asyncio
 from pathlib import Path, PurePosixPath
 
 from aizim.domain import EpochPair, FileLease, sha256_bytes
-from aizim.state.document_service import DocumentStateMethods
+from aizim.state import StateService
 from aizim.state.documents import (
     DocumentPreparation,
     DocumentState,
     DocumentStateError,
 )
 
+from .broker_knowledge import current_epoch, published_modules
 from .broker_storage import DocumentStorage
 from .document_io import DocumentIoError
 from .models import BrokerDependencies, DocumentBrokerError, DocumentSnapshot
 from .path_policy import LeanPathError
-from .project import smoke_base_epoch
 
 
 class DocumentBroker:
     def __init__(
         self,
         project_root: Path,
-        state: DocumentStateMethods,
+        state: StateService,
         *,
         smoke_root: Path,
         dependencies: BrokerDependencies | None = None,
     ) -> None:
         self._state = state
-        self._storage = DocumentStorage(project_root, smoke_root)
-        self._base_epoch = smoke_base_epoch(smoke_root)
+        self._storage = DocumentStorage(project_root, smoke_root, lambda: published_modules(state))
         self._dependencies = BrokerDependencies() if dependencies is None else dependencies
         self._locks: dict[str, asyncio.Lock] = {}
         self._recovery_lock = asyncio.Lock()
@@ -50,7 +49,9 @@ class DocumentBroker:
             raise DocumentBrokerError(str(error)) from None
         if type(initial_content) is not bytes or type(epoch_pair) is not EpochPair:
             raise DocumentBrokerError("INVALID_DOCUMENT_REQUEST")
-        if epoch_pair.base_epoch != self._base_epoch:
+        if epoch_pair != current_epoch(
+            self._state
+        ) or epoch_pair.base_epoch != self._storage.promotion_epoch(run_id):
             raise DocumentBrokerError("EPOCH_MISMATCH")
         created = False
         try:
@@ -154,6 +155,13 @@ class DocumentBroker:
         except (DocumentIoError, LeanPathError, DocumentStateError) as error:
             raise DocumentBrokerError(str(error)) from None
         return document, project_root, path
+
+    async def _trusted_promotion_project(self, run_id: str) -> Path:
+        await self._ensure_recovered()
+        try:
+            return self._storage.promotion_project(run_id)
+        except (DocumentIoError, LeanPathError) as error:
+            raise DocumentBrokerError(str(error)) from None
 
     async def _ensure_recovered(self) -> None:
         if self._recovered:

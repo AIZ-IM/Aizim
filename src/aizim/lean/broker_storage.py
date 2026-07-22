@@ -3,6 +3,7 @@ from __future__ import annotations
 import fcntl
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
 from aizim.domain import sha256_bytes
@@ -20,7 +21,12 @@ from .document_io import (
     unlink_relative,
 )
 from .path_policy import LeanPathError, LeanPathPolicy, validate_relative_path
-from .project import materialize_smoke_project
+from .project import (
+    PublishedModule,
+    materialize_smoke_project,
+    project_base_epoch,
+    sync_published_modules,
+)
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
@@ -32,9 +38,15 @@ def _identifier(value: str) -> str:
 
 
 class DocumentStorage:
-    def __init__(self, project_root: Path, smoke_root: Path) -> None:
+    def __init__(
+        self,
+        project_root: Path,
+        smoke_root: Path,
+        published_modules: Callable[[], tuple[PublishedModule, ...]] | None = None,
+    ) -> None:
         self._project_root = project_root.resolve(strict=True)
         self._smoke_root = smoke_root.resolve(strict=True)
+        self._published_modules = published_modules
         self._allowed: dict[str, set[PurePosixPath]] = {}
 
     def canonical_document(
@@ -164,7 +176,16 @@ class DocumentStorage:
 
     def _run_project(self, run_id: str) -> Path:
         _identifier(run_id)
-        return materialize_smoke_project(self._project_root, run_id, self._smoke_root)
+        root = materialize_smoke_project(self._project_root, run_id, self._smoke_root)
+        if self._published_modules is not None:
+            sync_published_modules(self._project_root, root, self._published_modules())
+        return root
+
+    def promotion_project(self, run_id: str) -> Path:
+        return self._run_project(run_id)
+
+    def promotion_epoch(self, run_id: str) -> str:
+        return project_base_epoch(self._run_project(run_id))
 
     def _policy(self, run_id: str, allowed: tuple[PurePosixPath, ...]) -> LeanPathPolicy:
         root = self._run_project(run_id)

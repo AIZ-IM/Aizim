@@ -7,6 +7,7 @@ from .events import (
     upcast,
 )
 from .projections import PROJECTION_NAMES, ProjectionRecord, apply_event
+from .publications import PublicationQueueEntry, PublicationQueueState
 from .service import (
     AppendEventCommand,
     StateDependencies,
@@ -26,6 +27,8 @@ __all__ = [
     "EventValidationError",
     "IncompatibleEventSchemaError",
     "ProjectionRecord",
+    "PublicationQueueEntry",
+    "PublicationQueueState",
     "StateDependencies",
     "StateService",
     "StateServiceConfig",

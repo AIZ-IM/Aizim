@@ -237,6 +237,7 @@ def test_projection_registry_is_fixed() -> None:
         "contributions",
         "verified_declarations",
         "knowledge_deltas",
+        "knowledge_acknowledgements",
         "denials",
         "resources",
         "alignment_reviews",

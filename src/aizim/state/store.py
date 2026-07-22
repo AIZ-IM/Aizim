@@ -36,6 +36,7 @@ from .store_mutations import (
     revoke_capability,
     revoke_lease_capabilities,
 )
+from .store_publication_methods import PublicationStoreMethods
 
 _SCHEMA_PATH: Final = Path(__file__).with_name("sql") / "001_foundation.sql"
 
@@ -175,7 +176,7 @@ def _append(
     return record
 
 
-class _EventStore:
+class _EventStore(PublicationStoreMethods):
     def __init__(
         self,
         database_path: Path,

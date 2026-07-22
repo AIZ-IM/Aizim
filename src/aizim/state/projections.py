@@ -17,6 +17,7 @@ PROJECTION_NAMES: Final = (
     "contributions",
     "verified_declarations",
     "knowledge_deltas",
+    "knowledge_acknowledgements",
     "denials",
     "resources",
     "alignment_reviews",

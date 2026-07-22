@@ -153,14 +153,26 @@ class LeanMcpClient:
         payload, response_hash = await self._call("lean_diagnostic_messages", arguments)
         return parse_diagnostics(payload, response_hash)
 
-    async def build(self) -> BuildResult:
-        payload, response_hash = await self._call("lean_build", {})
+    async def build(self, *, clean: bool, fetch_cache: bool) -> BuildResult:
+        if type(clean) is not bool or type(fetch_cache) is not bool:
+            raise LeanRuntimeError("INVALID_LEAN_REQUEST")
+        payload, response_hash = await self._call(
+            "lean_build", {"clean": clean, "fetch_cache": fetch_cache}
+        )
         return parse_build(payload, response_hash)
 
-    async def verify(self, path: Path, theorem_name: str) -> VerificationResult:
+    async def verify(
+        self, path: Path, theorem_name: str, *, scan_source: bool
+    ) -> VerificationResult:
+        if type(scan_source) is not bool:
+            raise LeanRuntimeError("INVALID_LEAN_REQUEST")
         payload, response_hash = await self._call(
             "lean_verify",
-            {"file_path": str(self._trusted_path(path)), "theorem_name": theorem_name},
+            {
+                "file_path": str(self._trusted_path(path)),
+                "theorem_name": theorem_name,
+                "scan_source": scan_source,
+            },
         )
         return parse_verification(payload, response_hash)
 

@@ -21,6 +21,7 @@ from .events import (
 )
 from .operations import AppendEventCommand, dispatch_operation
 from .projections import ProjectionRecord, ProjectionReducer, apply_event
+from .promotion_state import PromotionStateMethods, PromotionStore
 from .rpc import (
     Dispatch,
     RpcRequest,
@@ -41,6 +42,12 @@ from .store import (
 )
 from .store_contracts import InitializationCheckpoint, continue_initialization
 
+type HumanApproval = Callable[[str, str], bool]
+
+
+def _deny_human_approval(_run_id: str, _reviewer: str) -> bool:
+    return False
+
 
 @dataclass(frozen=True, slots=True)
 class StateServiceConfig:
@@ -60,6 +67,7 @@ class StateDependencies:
     event_ids: Callable[[], str] = field(default_factory=MonotoneUlidFactory)
     reducer: ProjectionReducer = apply_event
     before_initialization_commit: InitializationCheckpoint = continue_initialization
+    human_approval: HumanApproval = _deny_human_approval
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +78,7 @@ class StateServiceLifecycleError(RuntimeError):
         return self.reason
 
 
-class StateService(DocumentStateMethods):
+class StateService(DocumentStateMethods, PromotionStateMethods):
     def __init__(
         self, config: StateServiceConfig, dependencies: StateDependencies | None = None
     ) -> None:
@@ -164,7 +172,50 @@ class StateService(DocumentStateMethods):
             self.close()
 
     def append_event(self, command: AppendEventCommand) -> EventRecord:
+        if command.event_type == "EnvironmentTransitionApproved":
+            raise EventValidationError("event_type", "use approve_environment_transition")
         return self._store.append(self._event(command))
+
+    def approve_environment_transition(
+        self,
+        run_id: str,
+        reviewer: str,
+        proposal_event_id: str,
+        transition_id: str,
+        old_fingerprint: str,
+        new_fingerprint: str,
+        reason: str,
+    ) -> EventRecord:
+        fields = (
+            run_id,
+            reviewer,
+            proposal_event_id,
+            transition_id,
+            old_fingerprint,
+            new_fingerprint,
+            reason,
+        )
+        if any(type(value) is not str or not value for value in fields):
+            raise EventValidationError("environment_transition", "requires complete approval data")
+        if not self._dependencies.human_approval(run_id, reviewer):
+            raise EventValidationError("reviewer", "is not an authenticated human")
+        return self._store.append(
+            self._event(
+                AppendEventCommand(
+                    "EnvironmentTransitionApproved",
+                    reviewer,
+                    run_id,
+                    proposal_event_id,
+                    {
+                        "transition_id": transition_id,
+                        "old_fingerprint": old_fingerprint,
+                        "new_fingerprint": new_fingerprint,
+                        "reason": reason,
+                        "reviewer": reviewer,
+                    },
+                )
+            )
+        )
 
     def persist_capability(self, capability: CapabilityRecord) -> EventRecord:
         payload: dict[str, JsonValue] = {
@@ -206,6 +257,12 @@ class StateService(DocumentStateMethods):
 
     def _document_now(self) -> datetime:
         return self._dependencies.clock()
+
+    def _promotion_now(self) -> datetime:
+        return self._dependencies.clock()
+
+    def _promotion_store(self) -> PromotionStore:
+        return self._store
 
     def _execute_document[T](self, operation: DocumentOperation[T]) -> T:
         return self._store.document(operation)

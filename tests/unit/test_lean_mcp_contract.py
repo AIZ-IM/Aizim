@@ -40,6 +40,20 @@ class _Session:
         return self._result
 
 
+class _RecordingSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def call_tool(self, name: str, arguments: dict[str, object], **_kwargs: object) -> object:
+        self.calls.append((name, arguments))
+        payload = (
+            '{"success":true,"output":"","errors":[]}'
+            if name == "lean_build"
+            else '{"axioms":[],"warnings":[]}'
+        )
+        return SimpleNamespace(isError=False, content=[TextContent(type="text", text=payload)])
+
+
 @pytest.mark.asyncio
 async def test_client_rejects_non_text_oversized_and_unreviewed_goal_responses(
     tmp_path: Path,
@@ -71,6 +85,31 @@ async def test_client_rejects_non_text_oversized_and_unreviewed_goal_responses(
     )
     with pytest.raises(LeanRuntimeError, match="INVALID_LEAN_RESPONSE"):
         await client.goal(project / "AizimSmoke" / "Base.lean", 5, None)
+
+
+@pytest.mark.asyncio
+async def test_client_sends_explicit_clean_cache_and_source_scan_flags(tmp_path: Path) -> None:
+    project = materialize_smoke_project(tmp_path, "run-1", SMOKE_ROOT)
+    client = LeanMcpClient(project)
+    session = _RecordingSession()
+    object.__setattr__(client, "_session", session)
+
+    await client.build(clean=False, fetch_cache=False)
+    await client.verify(
+        project / "AizimSmoke" / "Base.lean", "AizimSmoke.base_add_zero", scan_source=True
+    )
+
+    assert session.calls == [
+        ("lean_build", {"clean": False, "fetch_cache": False}),
+        (
+            "lean_verify",
+            {
+                "file_path": str((project / "AizimSmoke" / "Base.lean").resolve()),
+                "theorem_name": "AizimSmoke.base_add_zero",
+                "scan_source": True,
+            },
+        ),
+    ]
 
 
 class _RecordingState:
