@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -25,6 +26,13 @@ FOUNDATION_SOURCES = (
 )
 FOUNDATION_RUNBOOK = REPOSITORY_ROOT / "docs" / "operations" / "foundation-runbook.md"
 RECOVERY_RUNBOOK = REPOSITORY_ROOT / "docs" / "operations" / "event-recovery.md"
+
+
+@dataclass(frozen=True, slots=True)
+class _GateFixture:
+    run_id: str
+    policy_hash: str
+    defect: str | None = None
 
 
 @pytest.fixture
@@ -246,8 +254,11 @@ def _append_run_evidence(state: StateService, run_id: str, defect: str | None = 
                     "final_message_hash": HASHES[3],
                     "policy_hash": (
                         HASHES[6]
-                        if defect == "mismatched-completion-policy"
-                        and worker_id == "alignment-auditor"
+                        if defect == "latest-valid-gate"
+                        or (
+                            defect == "mismatched-completion-policy"
+                            and worker_id == "alignment-auditor"
+                        )
                         else HASHES[7]
                     ),
                     "status": "submitted",
@@ -310,27 +321,31 @@ def _append_run_evidence(state: StateService, run_id: str, defect: str | None = 
     return manifest_body
 
 
-def _append_gate_terminal(state: StateService, defect: str | None) -> None:
+def _append_gate_terminal(state: StateService, fixture: _GateFixture) -> None:
     terminal_type = (
-        "SandboxProbeFailed" if defect == "failed-gate-after-attempts" else "SandboxProbePassed"
+        "SandboxProbeFailed"
+        if fixture.defect == "failed-gate-after-attempts"
+        else "SandboxProbePassed"
     )
     terminal_payload: dict[str, JsonValue] = {"probe_id": "authority-probe:gate_b_complete"}
     if terminal_type == "SandboxProbeFailed":
         terminal_payload["reason_code"] = "AGGREGATE_EVIDENCE_FAILED"
     else:
-        terminal_payload.update({"operation": "gate_b_complete", "policy_hash": HASHES[7]})
+        terminal_payload.update(
+            {"operation": "gate_b_complete", "policy_hash": fixture.policy_hash}
+        )
     state.append_event(
         AppendEventCommand(
             terminal_type,
             "security_gate",
-            "security-gate-positive",
+            fixture.run_id,
             None,
             terminal_payload,
         )
     )
 
 
-def _append_gate_b_evidence(state: StateService, defect: str | None = None) -> None:
+def _append_gate_b_evidence(state: StateService, fixture: _GateFixture) -> None:
     denied = (
         "read_state_database",
         "write_state_database",
@@ -342,25 +357,25 @@ def _append_gate_b_evidence(state: StateService, defect: str | None = None) -> N
         "connect_nonallowlisted_tcp",
         "read_secret_environment",
     )
-    if defect == "terminal-before-attempts":
-        _append_gate_terminal(state, defect)
+    if fixture.defect == "terminal-before-attempts":
+        _append_gate_terminal(state, fixture)
     for operation in denied:
         payload: dict[str, JsonValue] = {
             "operation": operation,
             "probe_id": f"authority-probe:{operation}",
             "reason_code": (
                 "WRONG_REASON"
-                if defect == "wrong-gate-reason" and operation == denied[0]
+                if fixture.defect == "wrong-gate-reason" and operation == denied[0]
                 else "SANDBOX_ENFORCED"
             ),
         }
-        if defect != "missing-gate-policy" or operation != denied[0]:
-            payload["policy_hash"] = HASHES[7]
+        if fixture.defect != "missing-gate-policy" or operation != denied[0]:
+            payload["policy_hash"] = fixture.policy_hash
         state.append_event(
             AppendEventCommand(
                 "SandboxProbeDenied",
                 "sandbox_adapter",
-                "security-gate-positive",
+                fixture.run_id,
                 None,
                 payload,
             )
@@ -370,17 +385,17 @@ def _append_gate_b_evidence(state: StateService, defect: str | None = None) -> N
             AppendEventCommand(
                 "SandboxProbePassed",
                 "sandbox_adapter",
-                "security-gate-positive",
+                fixture.run_id,
                 None,
                 {
                     "operation": operation,
-                    "policy_hash": HASHES[7],
+                    "policy_hash": fixture.policy_hash,
                     "probe_id": f"authority-probe:{operation}",
                 },
             )
         )
-    if defect != "terminal-before-attempts":
-        _append_gate_terminal(state, defect)
+    if fixture.defect not in {"missing-gate-terminal", "terminal-before-attempts"}:
+        _append_gate_terminal(state, fixture)
 
 
 def _register_artifacts(
@@ -476,7 +491,11 @@ def _register_artifacts(
         path.write_bytes(report_body + b"\n")
 
 
-def _build_fixture(project: Path, defect: str | None = None) -> None:
+def _build_fixture(
+    project: Path,
+    defect: str | None = None,
+    gates: tuple[_GateFixture, ...] | None = None,
+) -> None:
     with StateService(StateServiceConfig(project, "acceptance-fixture")) as state:
         state.append_event(
             AppendEventCommand(
@@ -487,7 +506,8 @@ def _build_fixture(project: Path, defect: str | None = None) -> None:
                 {"base_epoch": HASHES[1], "knowledge_epoch": 0, "project_id": "fixture"},
             )
         )
-        _append_gate_b_evidence(state, defect)
+        for gate in gates or (_GateFixture("security-gate-positive", HASHES[7], defect),):
+            _append_gate_b_evidence(state, gate)
         _register_artifacts(project, state, "real-run", defect)
         state.append_event(
             AppendEventCommand(
@@ -544,6 +564,62 @@ def test_complete_foundation_evidence_passes_for_latest_real_run(
 ) -> None:
     # Given
     _build_fixture(foundation_project)
+
+    # When
+    result = _run_checker(foundation_project)
+
+    # Then
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "FOUNDATION ACCEPTANCE PASS 16/16\n"
+
+
+def test_latest_failed_gate_group_does_not_fall_back_to_older_success(
+    foundation_project: Path,
+) -> None:
+    # Given
+    gates = (
+        _GateFixture("security-gate-a", HASHES[7]),
+        _GateFixture("security-gate-b", HASHES[6], "failed-gate-after-attempts"),
+    )
+    _build_fixture(foundation_project, gates=gates)
+
+    # When
+    result = _run_checker(foundation_project)
+
+    # Then
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "FOUNDATION ACCEPTANCE FAIL\n"
+
+
+def test_latest_incomplete_gate_group_does_not_fall_back_to_older_success(
+    foundation_project: Path,
+) -> None:
+    # Given
+    gates = (
+        _GateFixture("security-gate-a", HASHES[7]),
+        _GateFixture("security-gate-b", HASHES[6], "missing-gate-terminal"),
+    )
+    _build_fixture(foundation_project, gates=gates)
+
+    # When
+    result = _run_checker(foundation_project)
+
+    # Then
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "FOUNDATION ACCEPTANCE FAIL\n"
+
+
+def test_latest_valid_gate_group_supplies_real_completion_policy(
+    foundation_project: Path,
+) -> None:
+    # Given
+    gates = (
+        _GateFixture("security-gate-a", HASHES[7]),
+        _GateFixture("security-gate-b", HASHES[6]),
+    )
+    _build_fixture(foundation_project, "latest-valid-gate", gates)
 
     # When
     result = _run_checker(foundation_project)

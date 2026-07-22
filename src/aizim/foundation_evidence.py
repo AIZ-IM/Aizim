@@ -235,63 +235,60 @@ def json_artifact(evidence: FoundationEvidence, name: str) -> JsonObject:
 def gate_policy(events: tuple[EventEvidence, ...], before_sequence: int) -> str:
     groups: dict[str, list[EventEvidence]] = {}
     for event in events:
-        if event.run_id is not None and event.event_type in {
-            "SandboxProbeDenied",
-            "SandboxProbeFailed",
-            "SandboxProbePassed",
-        }:
-            groups.setdefault(event.run_id, []).append(event)
-    accepted: list[tuple[int, str]] = []
-    for records in groups.values():
-        if max(item.sequence for item in records) >= before_sequence:
-            continue
-        attempts = tuple(
-            item
-            for item in records
-            if item.payload.get("operation")
-            in contract.DENIED_OPERATIONS | contract.ALLOWED_OPERATIONS
-        )
-        terminals = tuple(
-            item
-            for item in records
-            if item.event_type == "SandboxProbePassed"
-            and item.payload.get("operation") == contract.GATE_COMPLETION_OPERATION
-        )
         if (
-            len(attempts) != 11
-            or len(terminals) != 1
-            or len(records) != 12
-            or terminals[0].sequence != max(item.sequence for item in records)
+            event.sequence < before_sequence
+            and event.run_id is not None
+            and event.event_type
+            in {"SandboxProbeDenied", "SandboxProbeFailed", "SandboxProbePassed"}
         ):
-            continue
-        denied = {
-            operation
-            for item in attempts
-            if item.event_type == "SandboxProbeDenied"
-            and type(operation := item.payload.get("operation")) is str
-        }
-        allowed = {
-            operation
-            for item in attempts
-            if item.event_type == "SandboxProbePassed"
-            and type(operation := item.payload.get("operation")) is str
-        }
-        hashes = {
-            value for item in records if type(value := item.payload.get("policy_hash")) is str
-        }
-        if denied != contract.DENIED_OPERATIONS or allowed != contract.ALLOWED_OPERATIONS:
-            continue
-        if len(hashes) != 1:
-            continue
-        policy_hash = next(iter(hashes))
-        complete_hashes = all(item.payload.get("policy_hash") == policy_hash for item in records)
-        enforced = all(
-            item.event_type != "SandboxProbeDenied"
-            or item.payload.get("reason_code") == "SANDBOX_ENFORCED"
-            for item in records
-        )
-        if is_hash(policy_hash) and complete_hashes and enforced:
-            accepted.append((terminals[0].sequence, policy_hash))
-    if not accepted:
+            groups.setdefault(event.run_id, []).append(event)
+    if not groups:
         fail("GATE_B_EVIDENCE_MISSING")
-    return max(accepted, key=lambda item: item[0])[1]
+    records = max(groups.values(), key=lambda group: max(item.sequence for item in group))
+    attempts = tuple(
+        item
+        for item in records
+        if item.payload.get("operation") in contract.DENIED_OPERATIONS | contract.ALLOWED_OPERATIONS
+    )
+    terminals = tuple(
+        item
+        for item in records
+        if item.event_type == "SandboxProbePassed"
+        and item.payload.get("operation") == contract.GATE_COMPLETION_OPERATION
+    )
+    if (
+        len(attempts) != 11
+        or len(terminals) != 1
+        or len(records) != 12
+        or terminals[0].sequence != max(item.sequence for item in records)
+    ):
+        fail("GATE_B_EVIDENCE_MISSING")
+    denied = {
+        operation
+        for item in attempts
+        if item.event_type == "SandboxProbeDenied"
+        and type(operation := item.payload.get("operation")) is str
+    }
+    allowed = {
+        operation
+        for item in attempts
+        if item.event_type == "SandboxProbePassed"
+        and type(operation := item.payload.get("operation")) is str
+    }
+    hashes = {value for item in records if type(value := item.payload.get("policy_hash")) is str}
+    if (
+        denied != contract.DENIED_OPERATIONS
+        or allowed != contract.ALLOWED_OPERATIONS
+        or len(hashes) != 1
+    ):
+        fail("GATE_B_EVIDENCE_MISSING")
+    policy_hash = next(iter(hashes))
+    complete_hashes = all(item.payload.get("policy_hash") == policy_hash for item in records)
+    enforced = all(
+        item.event_type != "SandboxProbeDenied"
+        or item.payload.get("reason_code") == "SANDBOX_ENFORCED"
+        for item in records
+    )
+    if not is_hash(policy_hash) or not complete_hashes or not enforced:
+        fail("GATE_B_EVIDENCE_MISSING")
+    return policy_hash
