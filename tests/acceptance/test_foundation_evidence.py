@@ -11,7 +11,7 @@ import pytest
 from aizim.domain import canonical_json, sha256_bytes, sha256_json
 from aizim.domain.serialization import JsonValue
 from aizim.modes.formal_trace import build_formal_trace, formal_trace_bytes
-from aizim.modes.manifest import NamedArtifact, register_artifact
+from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE, NamedArtifact, register_artifact
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
@@ -23,6 +23,8 @@ FOUNDATION_SOURCES = (
     REPOSITORY_ROOT / "src" / "aizim" / "foundation_contract.py",
     REPOSITORY_ROOT / "src" / "aizim" / "foundation_evidence.py",
 )
+FOUNDATION_RUNBOOK = REPOSITORY_ROOT / "docs" / "operations" / "foundation-runbook.md"
+RECOVERY_RUNBOOK = REPOSITORY_ROOT / "docs" / "operations" / "event-recovery.md"
 
 
 @pytest.fixture
@@ -308,6 +310,26 @@ def _append_run_evidence(state: StateService, run_id: str, defect: str | None = 
     return manifest_body
 
 
+def _append_gate_terminal(state: StateService, defect: str | None) -> None:
+    terminal_type = (
+        "SandboxProbeFailed" if defect == "failed-gate-after-attempts" else "SandboxProbePassed"
+    )
+    terminal_payload: dict[str, JsonValue] = {"probe_id": "authority-probe:gate_b_complete"}
+    if terminal_type == "SandboxProbeFailed":
+        terminal_payload["reason_code"] = "AGGREGATE_EVIDENCE_FAILED"
+    else:
+        terminal_payload.update({"operation": "gate_b_complete", "policy_hash": HASHES[7]})
+    state.append_event(
+        AppendEventCommand(
+            terminal_type,
+            "security_gate",
+            "security-gate-positive",
+            None,
+            terminal_payload,
+        )
+    )
+
+
 def _append_gate_b_evidence(state: StateService, defect: str | None = None) -> None:
     denied = (
         "read_state_database",
@@ -320,6 +342,8 @@ def _append_gate_b_evidence(state: StateService, defect: str | None = None) -> N
         "connect_nonallowlisted_tcp",
         "read_secret_environment",
     )
+    if defect == "terminal-before-attempts":
+        _append_gate_terminal(state, defect)
     for operation in denied:
         payload: dict[str, JsonValue] = {
             "operation": operation,
@@ -355,6 +379,8 @@ def _append_gate_b_evidence(state: StateService, defect: str | None = None) -> N
                 },
             )
         )
+    if defect != "terminal-before-attempts":
+        _append_gate_terminal(state, defect)
 
 
 def _register_artifacts(
@@ -369,7 +395,13 @@ def _register_artifacts(
         }
     )
     root = project / ".aizim" / "artifacts" / run_id
-    root.mkdir(parents=True)
+    if defect == "symlinked-artifact-root":
+        outside = project / "outside-artifacts"
+        outside.mkdir()
+        root.parent.mkdir(parents=True, exist_ok=True)
+        root.symlink_to(outside, target_is_directory=True)
+    else:
+        root.mkdir(parents=True)
     for name, body, media_type in (
         ("run-manifest.json", manifest_body, "application/json"),
         ("alignment-review.json", alignment_body, "application/json"),
@@ -416,11 +448,14 @@ def _register_artifacts(
         "kernel_verdict": "pass",
         "manifest_hash": sha256_bytes(manifest_body),
         "participation_label": "formal_unassisted",
+        "runtime_acceptance_scope": RUNTIME_ACCEPTANCE_SCOPE,
         "trace_hash": trace_hash,
     }
     if defect == "incomplete-report":
         del report["evaluation_verdict"]
         del report["participation_label"]
+    if defect == "missing-runtime-scope":
+        del report["runtime_acceptance_scope"]
     report_body = canonical_json(report)
     if defect == "missing-artifact":
         return
@@ -476,6 +511,34 @@ def _run_checker(project: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def test_checker_help_limits_16_of_16_to_replayable_runtime_evidence() -> None:
+    result = subprocess.run(
+        [sys.executable, str(CHECKER), "--help"],
+        cwd=REPOSITORY_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0
+    output = " ".join(result.stdout.split())
+    assert "replayable real-run predicates" in output
+    assert "does not independently prove CI-only or test-only rows" in output
+
+
+def test_operator_docs_preserve_runtime_and_overall_matrix_boundaries() -> None:
+    for source in (REPOSITORY_ROOT / "README.md", FOUNDATION_RUNBOOK):
+        body = " ".join(source.read_text().split())
+        assert "replayable real-run predicates" in body
+        assert "does not independently prove CI-only or test-only rows" in body
+        assert "overall handoff matrix" in body
+    recovery = RECOVERY_RUNBOOK.read_text()
+    assert "umask 077" in recovery
+    assert "${TMPDIR%/}/aizim-status." in recovery
+    assert "/tmp/aizim-status.json" not in recovery
+
+
 def test_complete_foundation_evidence_passes_for_latest_real_run(
     foundation_project: Path,
 ) -> None:
@@ -498,13 +561,17 @@ def test_complete_foundation_evidence_passes_for_latest_real_run(
         "wrong-gate-reason",
         "missing-local-loogle",
         "incomplete-report",
+        "missing-runtime-scope",
         "missing-shutdown",
         "failed-run-outcome",
+        "failed-gate-after-attempts",
+        "terminal-before-attempts",
         "mismatched-completion-policy",
         "missing-source-scan",
         "failed-source-scan",
         "missing-artifact",
         "corrupt-artifact",
+        "symlinked-artifact-root",
     ),
 )
 def test_incomplete_foundation_evidence_fails_closed(foundation_project: Path, defect: str) -> None:

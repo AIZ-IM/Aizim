@@ -136,6 +136,11 @@ uv run python scripts/check_foundation.py \
 The last command must print exactly `FOUNDATION ACCEPTANCE PASS 16/16`. Missing, skipped,
 inconclusive, mixed-policy, or post-publication evidence fails closed.
 
+That runtime `16/16` covers replayable real-run predicates only and does not independently prove
+CI-only or test-only rows of the overall handoff matrix. The full matrix remains binding and is
+evidenced separately by the clean automated suite, pinned CI workflows, credentialed manual gate,
+and final handoff report. The runtime artifacts never fabricate receipts for external tests.
+
 Run the credentialed pytest E2E separately:
 
 ```sh

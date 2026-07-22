@@ -18,7 +18,15 @@ artifacts; never manufacture a success event or edit a projection to make status
 2. Capture state through the supported interface:
 
    ```sh
-   uv run aizim status --project PROJECT --json > /tmp/aizim-status.json
+   : "${TMPDIR:?TMPDIR must be the private macOS per-user temporary directory}"
+   case "${TMPDIR%/}" in
+     /tmp|/tmp/*|/private/tmp|/private/tmp/*|/var/tmp|/var/tmp/*|/private/var/tmp|/private/var/tmp/*)
+       echo "unsafe TMPDIR" >&2; exit 1;;
+   esac
+   umask 077
+   AIZIM_STATUS_FILE="$(mktemp "${TMPDIR%/}/aizim-status.XXXXXX")"
+   uv run aizim status --project PROJECT --json > "$AIZIM_STATUS_FILE"
+   printf '%s\n' "$AIZIM_STATUS_FILE"
    ```
 
 3. Record the project commit, tool pins, run ID, knowledge epoch, worker states, lease states,

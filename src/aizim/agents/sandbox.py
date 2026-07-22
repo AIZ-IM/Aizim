@@ -12,6 +12,8 @@ from aizim.domain.serialization import JsonValue
 from aizim.state.operations import AppendEventCommand
 from aizim.state.store_contracts import EventRecord
 
+GATE_COMPLETION_OPERATION = "gate_b_complete"
+
 
 class ProbeOperation(StrEnum):
     READ_STATE_DATABASE = "read_state_database"
@@ -147,6 +149,22 @@ def append_probe_event(request: ProbeRequest, attempt: ProbeAttempt, policy_hash
             run_id=request.run_id,
             causation_id=None,
             payload=payload,
+        )
+    )
+
+
+def record_gate_completion(event_sink: ProbeEventSink, run_id: str, policy_hash: str) -> None:
+    event_sink.append_event(
+        AppendEventCommand(
+            event_type="SandboxProbePassed",
+            actor="security_gate",
+            run_id=run_id,
+            causation_id=None,
+            payload={
+                "probe_id": f"authority-probe:{GATE_COMPLETION_OPERATION}",
+                "operation": GATE_COMPLETION_OPERATION,
+                "policy_hash": policy_hash,
+            },
         )
     )
 

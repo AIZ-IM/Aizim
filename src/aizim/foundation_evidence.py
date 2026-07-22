@@ -5,12 +5,12 @@ import json
 import re
 import secrets
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Never, assert_never
 
 from aizim import foundation_contract as contract
-from aizim.domain import sha256_bytes
 from aizim.domain.serialization import JsonValue
+from aizim.foundation_artifacts import FoundationArtifactError, read_registered_artifact
 from aizim.runtime.state_process import validate_live_state_process
 from aizim.state import StateService, StateServiceConfig
 from aizim.state.operations import RpcFailure, RpcRequest, RpcResponse, RpcSuccess
@@ -184,7 +184,6 @@ def _select(events: tuple[EventEvidence, ...], requested: str) -> RunSelection:
 def _artifacts(
     project: Path, selection: RunSelection, projections: tuple[JsonObject, ...]
 ) -> tuple[ArtifactEvidence, ...]:
-    root = (project / ".aizim" / "artifacts" / selection.run_id).resolve(strict=True)
     found: list[ArtifactEvidence] = []
     for document in projections:
         state = _object(document.get("state"), "ARTIFACT_RESPONSE_INVALID")
@@ -197,16 +196,12 @@ def _artifacts(
         length = _integer(payload.get("byte_length"), "ARTIFACT_REGISTRATION_INVALID")
         if not is_hash(digest):
             fail("ARTIFACT_REGISTRATION_INVALID")
-        relative_path = PurePosixPath(relative)
-        if relative_path.parts != (".aizim", "artifacts", selection.run_id, name):
-            fail("ARTIFACT_PATH_INVALID")
-        physical = project.joinpath(*relative_path.parts)
-        resolved = physical.resolve(strict=True)
-        if physical.is_symlink() or resolved.parent != root or not resolved.is_file():
-            fail("ARTIFACT_PATH_INVALID")
-        body = resolved.read_bytes()
-        if len(body) != length or sha256_bytes(body) != digest:
-            fail("ARTIFACT_HASH_MISMATCH")
+        try:
+            body = read_registered_artifact(
+                project, selection.run_id, name, relative, length, digest
+            )
+        except FoundationArtifactError as error:
+            fail(str(error))
         found.append(ArtifactEvidence(name, digest, body))
     if len(found) != 5 or {artifact.name for artifact in found} != contract.ARTIFACT_NAMES:
         fail("ARTIFACT_SET_INCOMPLETE")
@@ -242,22 +237,42 @@ def gate_policy(events: tuple[EventEvidence, ...], before_sequence: int) -> str:
     for event in events:
         if event.run_id is not None and event.event_type in {
             "SandboxProbeDenied",
+            "SandboxProbeFailed",
             "SandboxProbePassed",
         }:
             groups.setdefault(event.run_id, []).append(event)
     accepted: list[tuple[int, str]] = []
     for records in groups.values():
-        if len(records) != 11 or max(item.sequence for item in records) >= before_sequence:
+        if max(item.sequence for item in records) >= before_sequence:
+            continue
+        attempts = tuple(
+            item
+            for item in records
+            if item.payload.get("operation")
+            in contract.DENIED_OPERATIONS | contract.ALLOWED_OPERATIONS
+        )
+        terminals = tuple(
+            item
+            for item in records
+            if item.event_type == "SandboxProbePassed"
+            and item.payload.get("operation") == contract.GATE_COMPLETION_OPERATION
+        )
+        if (
+            len(attempts) != 11
+            or len(terminals) != 1
+            or len(records) != 12
+            or terminals[0].sequence != max(item.sequence for item in records)
+        ):
             continue
         denied = {
             operation
-            for item in records
+            for item in attempts
             if item.event_type == "SandboxProbeDenied"
             and type(operation := item.payload.get("operation")) is str
         }
         allowed = {
             operation
-            for item in records
+            for item in attempts
             if item.event_type == "SandboxProbePassed"
             and type(operation := item.payload.get("operation")) is str
         }
@@ -276,7 +291,7 @@ def gate_policy(events: tuple[EventEvidence, ...], before_sequence: int) -> str:
             for item in records
         )
         if is_hash(policy_hash) and complete_hashes and enforced:
-            accepted.append((max(item.sequence for item in records), policy_hash))
+            accepted.append((terminals[0].sequence, policy_hash))
     if not accepted:
         fail("GATE_B_EVIDENCE_MISSING")
     return max(accepted, key=lambda item: item[0])[1]

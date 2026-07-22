@@ -75,6 +75,11 @@ uv run python scripts/check_foundation.py \
   --project "$AIZIM_REAL_ROOT" --run-id latest-real
 ```
 
+The runtime `16/16` covers replayable real-run predicates only and does not independently prove
+CI-only or test-only rows of the overall handoff matrix. The full matrix remains binding and is
+closed separately by the pinned workflows, automated suite, credentialed manual gate, and final
+handoff report.
+
 The credentialed pytest E2E is a separate manual gate. It creates and deletes its own temp copy, so
 its artifacts are intentionally not the checker target:
 

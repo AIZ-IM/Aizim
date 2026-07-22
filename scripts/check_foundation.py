@@ -8,12 +8,13 @@ from typing import Final
 
 from aizim.foundation_checks import evaluate
 from aizim.foundation_evidence import fail, load_evidence
+from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE
 
 _SUCCESS: Final = "FOUNDATION ACCEPTANCE PASS 16/16"
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=RUNTIME_ACCEPTANCE_SCOPE)
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     return parser

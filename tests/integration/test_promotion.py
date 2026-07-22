@@ -58,6 +58,20 @@ class _Verifier:
         return None
 
 
+class _WarningVerifier(_Verifier):
+    async def verify(self, source: bytes, theorem_name: str) -> PromotionEvidence:
+        evidence = await super().verify(source, theorem_name)
+        return PromotionEvidence(
+            evidence.diagnostics,
+            evidence.axioms,
+            evidence.complete_type,
+            evidence.dependencies,
+            evidence.assumptions,
+            axiom_response_hash=evidence.axiom_response_hash,
+            source_scan_warnings=("source scan did not close cleanly",),
+        )
+
+
 def _service(tmp_path: Path) -> StateService:
     service = StateService(
         StateServiceConfig(tmp_path, "promotion-test"), StateDependencies(clock=lambda: _NOW)
@@ -169,6 +183,84 @@ def test_missing_trusted_scan_response_is_recorded_as_failed(tmp_path: Path) -> 
 
         # Then
         assert payload["source_scan_verdict"] == "failed"
+    finally:
+        service.close()
+
+
+def test_source_scan_warnings_are_recorded_as_failed(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    evidence = PromotionEvidence(
+        (),
+        ("propext",),
+        "True",
+        ("Std",),
+        ("propext",),
+        axiom_response_hash="c" * 64,
+        source_scan_warnings=("source scan did not close cleanly",),
+    )
+    try:
+        record_verification(service, "run-1", "contribution-1", evidence)
+        payload = service.query_events("run-1")[-1].envelope.payload
+
+        assert payload["source_scan_verdict"] == "failed"
+    finally:
+        service.close()
+
+
+def test_source_scan_warnings_block_publication(tmp_path: Path) -> None:
+    source = b"import Std\ntheorem candidate : True := True.intro\n"
+    service = _service(tmp_path)
+    try:
+        lease = FileLease(
+            "lease-1",
+            "worker-1",
+            "run-1",
+            "document-1",
+            "AizimSmoke.Workers.W_worker",
+            EpochPair(_BASE, 0),
+            0,
+            sha256_bytes(source),
+            _NOW + timedelta(minutes=5),
+        )
+        service.grant_document_lease(lease, PurePosixPath("AizimSmoke/Workers/run-1/worker-1.lean"))
+        artifacts = ArtifactStore(tmp_path)
+        ContributionService(service, artifacts, _ENVIRONMENT, ("Std",)).submit(
+            ContributionDraft(
+                "contribution-1",
+                "worker-1",
+                "run-1",
+                lease.lease_id,
+                lease.document_id,
+                EpochPair(_BASE, 0),
+                _ENVIRONMENT,
+                SnapshotPayload(source, sha256_bytes(source)),
+                "candidate",
+                "True",
+                ("Std",),
+                (),
+                (),
+                (),
+            )
+        )
+
+        outcome = asyncio.run(
+            PromotionService(
+                service, artifacts, _WarningVerifier(), "warning-owner", _Verifier()
+            ).promote_next()
+        )
+        events = service.query_events("run-1")
+
+        assert outcome is not None and outcome.state is PublicationQueueState.QUARANTINED
+        assert not any(
+            event.envelope.event_type in {"DeclarationPublished", "KnowledgeDeltaPublished"}
+            for event in events
+        )
+        verification = next(
+            event.envelope.payload
+            for event in events
+            if event.envelope.event_type == "PromotionVerificationRecorded"
+        )
+        assert verification["source_scan_verdict"] == "failed"
     finally:
         service.close()
 

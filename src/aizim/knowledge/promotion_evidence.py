@@ -32,7 +32,9 @@ def record_verification(
                 "source_scan_hash": axiom_hash,
                 "source_scan_verdict": (
                     "pass"
-                    if trusted_source_scan and set(evidence.axioms) <= _ALLOWED_AXIOMS
+                    if trusted_source_scan
+                    and not evidence.source_scan_warnings
+                    and set(evidence.axioms) <= _ALLOWED_AXIOMS
                     else "failed"
                 ),
                 "axiom_verification_hash": axiom_hash,

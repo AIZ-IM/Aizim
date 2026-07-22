@@ -10,7 +10,7 @@ from aizim.config.model import (
     RunPolicy,
 )
 from aizim.modes.evaluation import EvaluationPolicy
-from aizim.modes.manifest import acceptance_report_bytes
+from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE, acceptance_report_bytes
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 
@@ -181,3 +181,5 @@ def test_alignment_abort_does_not_rewrite_kernel_verdict(tmp_path: Path) -> None
 
     assert report["kernel_verdict"] == "pass"
     assert report["evaluation_verdict"] == "aborted"
+    assert report["runtime_acceptance_scope"] == RUNTIME_ACCEPTANCE_SCOPE
+    assert "does not independently prove" in report["runtime_acceptance_scope"]

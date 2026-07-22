@@ -59,19 +59,7 @@ class RuntimePromotionVerifier:
                     unlink_relative(descriptor, path)
             finally:
                 os.close(descriptor)
-        errors = _errors(check)
-        return PromotionEvidence(
-            errors,
-            check.verification.axioms,
-            _complete_type(check.type_info, theorem_name, bool(errors)),
-            _imports(module_source),
-            check.verification.axioms,
-            module_source,
-            check.diagnostics.response_hash,
-            check.build.response_hash,
-            check.verification.response_hash,
-            check.build.success,
-        )
+        return _promotion_evidence(check, module_source, theorem_name)
 
     async def materialize(
         self, source: bytes, epoch_pair: EpochPair, publication_sequence: int
@@ -120,6 +108,25 @@ class RuntimePromotionVerifier:
             os.close(descriptor)
         if updated != original and not (await self._runtime._build()).success:
             raise PromotionError("ACTIVATION_BUILD_FAILED")
+
+
+def _promotion_evidence(
+    check: PromotionCheck, module_source: bytes, theorem_name: str
+) -> PromotionEvidence:
+    errors = _errors(check)
+    return PromotionEvidence(
+        errors,
+        check.verification.axioms,
+        _complete_type(check.type_info, theorem_name, bool(errors)),
+        _imports(module_source),
+        check.verification.axioms,
+        module_source,
+        check.diagnostics.response_hash,
+        check.build.response_hash,
+        check.verification.response_hash,
+        check.build.success,
+        check.verification.warnings,
+    )
 
 
 def _stage(

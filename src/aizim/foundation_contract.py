@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Final
 
+from aizim.agents.sandbox import GATE_COMPLETION_OPERATION as GATE_COMPLETION_OPERATION
+
 ARTIFACT_NAMES: Final = frozenset(
     {
         "acceptance-report.json",

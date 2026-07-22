@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from aizim.modes.formal_trace import read_formal_trace, replay_formal_trace
-from aizim.modes.manifest import SMOKE_TEST_LIMITATION
+from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE, SMOKE_TEST_LIMITATION
 from aizim.state import StateService, StateServiceConfig
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
@@ -37,7 +37,11 @@ def _cli(*arguments: str, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 def _copy_smoke(tmp_path: Path) -> Path:
     return Path(
-        shutil.copytree(SMOKE_ROOT, tmp_path / "smoke", ignore=shutil.ignore_patterns(".aizim"))
+        shutil.copytree(
+            SMOKE_ROOT,
+            tmp_path / "smoke",
+            ignore=shutil.ignore_patterns(".aizim", ".lake"),
+        )
     )
 
 
@@ -49,6 +53,16 @@ def test_real_codex_shared_smoke_is_kernel_verified_and_replayable(tmp_path: Pat
         pytest.skip("AIZIM_MODEL is required for the manual real-Codex gate")
     project = _copy_smoke(tmp_path)
 
+    initialized = _cli("init", str(project), cwd=project)
+    gate = _cli(
+        "security-probe",
+        "--project",
+        str(project),
+        "--backend",
+        "codex",
+        "--no-model",
+        cwd=project,
+    )
     run = _cli(
         "run",
         "--project",
@@ -61,6 +75,9 @@ def test_real_codex_shared_smoke_is_kernel_verified_and_replayable(tmp_path: Pat
     )
     status = _cli("status", "--project", str(project), "--json", cwd=project)
 
+    assert initialized.returncode == 0, initialized.stderr
+    assert gate.returncode == 0, gate.stderr
+    assert gate.stdout.startswith("SECURITY GATE PASS\n")
     assert run.returncode == 0, run.stderr
     assert "AIZIM RUN PASS" in run.stdout
     assert SMOKE_TEST_LIMITATION in run.stdout
@@ -69,13 +86,23 @@ def test_real_codex_shared_smoke_is_kernel_verified_and_replayable(tmp_path: Pat
     assert document["epochs"]["knowledge_epoch"] == 2
     assert len(document["verified_declarations"]) == 2
     with StateService(StateServiceConfig(project, "real-codex-read")) as state:
+        all_events = state.query_events()
         run_id = next(
             record.envelope.run_id
-            for record in state.query_events()
+            for record in all_events
             if record.envelope.event_type == "RunCreated"
         )
         assert run_id is not None
         events = state.query_events(run_id)
+    gate_terminals = [
+        record.envelope.payload
+        for record in all_events
+        if record.envelope.event_type == "SandboxProbePassed"
+        and record.envelope.payload.get("operation") == "gate_b_complete"
+    ]
+    assert len(gate_terminals) == 1
+    gate_policy_hash = gate_terminals[0]["policy_hash"]
+    assert type(gate_policy_hash) is str
 
     root = project / ".aizim" / "artifacts" / run_id
     manifest = json.loads((root / "run-manifest.json").read_text())
@@ -103,12 +130,19 @@ def test_real_codex_shared_smoke_is_kernel_verified_and_replayable(tmp_path: Pat
     assert alignment["verdict"] == "aligned"
     assert event_types.count("DeclarationPublished") == 2
     assert event_types.count("PromotionVerificationRecorded") == 2
-    completions = sorted(
-        worker_id
+    completion_payloads = [
+        record.envelope.payload
         for record in events
         if record.envelope.event_type == "AgentRunCompleted"
-        and type(worker_id := record.envelope.payload["worker_id"]) is str
-    )
+    ]
+    completion_workers: list[str] = []
+    completion_hashes: list[str] = []
+    for payload in completion_payloads:
+        worker_id, policy_hash = payload["worker_id"], payload["policy_hash"]
+        assert type(worker_id) is str and type(policy_hash) is str
+        completion_workers.append(worker_id)
+        completion_hashes.append(policy_hash)
+    completions = sorted(completion_workers)
     starts = sorted(
         worker_id
         for record in events
@@ -116,6 +150,7 @@ def test_real_codex_shared_smoke_is_kernel_verified_and_replayable(tmp_path: Pat
         and type(worker_id := record.envelope.payload["worker_id"]) is str
     )
     assert completions == ["alignment-auditor", "prover-a", "prover-b", "prover-b"]
+    assert set(completion_hashes) == {gate_policy_hash}
     assert starts == ["prover-a", "prover-b", "prover-b"]
     assert event_types.count("WorkerStopped") == 3
     assert event_types.count("LeaseReleased") == 3
@@ -140,8 +175,15 @@ def test_real_codex_shared_smoke_is_kernel_verified_and_replayable(tmp_path: Pat
         payload = record.envelope.payload
         assert payload["diagnostics_verdict"] == "pass"
         assert payload["build_verdict"] == "pass"
+        assert payload["source_scan_verdict"] == "pass"
         assert payload["axiom_verification_verdict"] == "pass"
-        for field in ("diagnostics_hash", "build_hash", "axiom_verification_hash"):
+        assert payload["source_scan_hash"] == payload["axiom_verification_hash"]
+        for field in (
+            "diagnostics_hash",
+            "build_hash",
+            "source_scan_hash",
+            "axiom_verification_hash",
+        ):
             value = payload[field]
             assert type(value) is str and len(value) == 64
     assert "InterventionRecorded" not in event_types
@@ -155,4 +197,5 @@ def test_real_codex_shared_smoke_is_kernel_verified_and_replayable(tmp_path: Pat
     assert report["kernel_verdict"] == "pass"
     assert report["alignment_verdict"] == "aligned"
     assert report["participation_label"] == "formal_unassisted"
+    assert report["runtime_acceptance_scope"] == RUNTIME_ACCEPTANCE_SCOPE
     assert "engineering smoke test" in report["engineering_smoke_statement"]

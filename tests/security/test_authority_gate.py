@@ -168,6 +168,18 @@ def test_composite_authority_gate_denies_attacks_and_replays(
     assert SECRET_SENTINEL not in rendered
     assert output.out == output.err == ""
     assert repeated.passed
+    with StateService(StateServiceConfig(root, "authority-terminal-check")) as state:
+        terminals = [
+            record.envelope.payload
+            for record in state.query_events()
+            if record.envelope.event_type == "SandboxProbePassed"
+            and record.envelope.payload.get("operation") == "gate_b_complete"
+        ]
+    assert len(terminals) == 2
+    assert {terminal["policy_hash"] for terminal in terminals} == {
+        report.policy_hash,
+        repeated.policy_hash,
+    }
 
 
 def test_security_probe_requires_the_fixed_credential_free_shape(tmp_path: Path) -> None:

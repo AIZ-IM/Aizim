@@ -12,7 +12,7 @@ from tempfile import NamedTemporaryFile, mkdtemp
 
 import aizim.gateway as gateway_api
 from aizim.agents.macos_sandbox import MacOSSandboxAdapter
-from aizim.agents.sandbox import ProbeAttempt, ProbeOperation, ProbeRequest
+from aizim.agents.sandbox import ProbeAttempt, ProbeOperation, ProbeRequest, record_gate_completion
 from aizim.agents.workspace_view import ViewSource, WorkspaceView, WorkspaceViewBuilder
 from aizim.cli.doctor_command import scrubbed_command_environment
 from aizim.domain import AgentRole, sha256_file
@@ -26,8 +26,7 @@ from aizim.runtime.layout import ProjectLayout
 from aizim.state import StateService, StateServiceConfig
 
 
-class SecurityGateError(RuntimeError):
-    pass
+class SecurityGateError(RuntimeError): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +86,7 @@ async def run_security_gate(project_root: Path) -> SecurityGateReport:
         resources = _GateResources(run_id, layout, view, unleased, shared, tcp, broker_socket)
         with StateService(StateServiceConfig(layout.root, "security-gate-live")) as state:
             live_report, protected_digest = await _run_live_gate(state, resources)
+    expected_sandbox = tuple(operation.value for operation in tuple(ProbeOperation)[:9])
     with StateService(StateServiceConfig(layout.root, "security-gate-replay")) as restarted:
         replay = restarted.replay_verify()
         replayed_gateway = authority_denial_reasons(restarted, run_id)
@@ -96,13 +96,13 @@ async def run_security_gate(project_root: Path) -> SecurityGateReport:
             and replay.logical_digest == protected_digest
             and restarted.logical_digest() == protected_digest
         )
-    expected_sandbox = tuple(operation.value for operation in tuple(ProbeOperation)[:9])
-    if (
-        not replay_verified
-        or replayed_gateway != AUTHORITY_DENIAL_REASONS
-        or replayed_sandbox != expected_sandbox
-    ):
-        raise SecurityGateError("security gate replay evidence did not close")
+        if (
+            not replay_verified
+            or replayed_gateway != AUTHORITY_DENIAL_REASONS
+            or replayed_sandbox != expected_sandbox
+        ):
+            raise SecurityGateError("security gate replay evidence did not close")
+        record_gate_completion(restarted, run_id, live_report.policy_hash)
     return replace(
         live_report,
         passed=True,

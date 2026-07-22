@@ -25,11 +25,18 @@ class PromotionEvidence:
     build_response_hash: str | None = None
     axiom_response_hash: str | None = None
     build_success: bool = True
+    source_scan_warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.complete_type) is not str or not self.complete_type:
             raise PromotionError("INVALID_PROMOTION_EVIDENCE")
-        for value in (self.diagnostics, self.axioms, self.dependencies, self.assumptions):
+        for value in (
+            self.diagnostics,
+            self.axioms,
+            self.dependencies,
+            self.assumptions,
+            self.source_scan_warnings,
+        ):
             if type(value) is not tuple or any(type(item) is not str or not item for item in value):
                 raise PromotionError("INVALID_PROMOTION_EVIDENCE")
         if self.module_source is not None and type(self.module_source) is not bytes:
@@ -85,6 +92,7 @@ def accepted(evidence: PromotionEvidence) -> bool:
     return (
         not evidence.diagnostics
         and evidence.build_success
+        and not evidence.source_scan_warnings
         and "sorryAx" not in evidence.axioms
         and set(evidence.axioms) <= allowed
     )

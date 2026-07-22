@@ -24,6 +24,10 @@ SMOKE_TEST_LIMITATION = (
     "This result is an engineering smoke test and is not evidence of open-problem, novelty, "
     "or general autonomous proving capability."
 )
+RUNTIME_ACCEPTANCE_SCOPE = (
+    "Runtime acceptance 16/16 covers replayable real-run predicates only and does not "
+    "independently prove CI-only or test-only rows of the overall handoff matrix."
+)
 _ARTIFACT_NAMES = frozenset(
     {
         "run-manifest.json",
@@ -139,6 +143,7 @@ def acceptance_report_bytes(
             "kernel_verdict": kernel_verdict,
             "manifest_hash": manifest_digest,
             "participation_label": labels.formal_label.value,
+            "runtime_acceptance_scope": RUNTIME_ACCEPTANCE_SCOPE,
             "trace_hash": trace_digest,
         }
     )

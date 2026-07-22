@@ -5,6 +5,7 @@ from aizim import foundation_evidence as fe
 from aizim.domain import sha256_bytes, sha256_json
 from aizim.domain.serialization import JsonValue
 from aizim.modes.formal_trace import read_formal_trace, replay_formal_trace
+from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE
 
 type Criterion = tuple[str, bool]
 
@@ -229,6 +230,7 @@ def _report(evidence: fe.FoundationEvidence, report: fe.JsonObject) -> bool:
         and report.get("alignment_verdict") == "aligned"
         and report.get("evaluation_verdict") == "pass"
         and report.get("participation_label") == "formal_unassisted"
+        and report.get("runtime_acceptance_scope") == RUNTIME_ACCEPTANCE_SCOPE
         and report.get("manifest_hash") == manifest.digest
         and report.get("trace_hash") == sha256_bytes(trace.body)
         and type(smoke) is str

@@ -12,6 +12,14 @@ from .sandbox import SandboxLaunchSpec, SandboxRequest
 
 _PROFILE_ID: Final = "aizim-worker"
 _BASE_PATH: Final = "/usr/bin:/bin:/usr/sbin:/sbin"
+_FIXED_LAUNCH_POLICY: Final = (
+    "sandbox",
+    "--permission-profile",
+    _PROFILE_ID,
+    "--sandbox-state-disable-network",
+    "--log-denials",
+    "-C",
+)
 
 
 def compile_macos_profile(
@@ -38,12 +46,7 @@ def compile_macos_profile(
     argv = (
         str(codex_executable),
         *(item for override in overrides for item in ("-c", override)),
-        "sandbox",
-        "--permission-profile",
-        _PROFILE_ID,
-        "--sandbox-state-disable-network",
-        "--log-denials",
-        "-C",
+        *_FIXED_LAUNCH_POLICY,
         str(request.view_root),
         *request.command,
     )
@@ -77,8 +80,11 @@ def validate_macos_profile(
         or not project_root.is_absolute()
         or not developer_root.is_absolute()
         or dict(spec.shell_env) != expected_environment
-        or len(argv) < 10
-        or argv[9] != "sandbox"
+        or len(argv) < 17
+        or not Path(argv[0]).is_absolute()
+        or argv[9:15] != _FIXED_LAUNCH_POLICY
+        or argv[15] != str(spec.view_root)
+        or not Path(argv[16]).is_absolute()
         or argv[1:9:2] != ("-c",) * 4
     ):
         raise ValueError("invalid macOS sandbox profile")
@@ -165,6 +171,7 @@ def _policy_contract_hash() -> str:
         'approval_policy="never"',
         _permission_override(request, Path("/__aizim_contract__/developer")),
         _environment_override(environment),
+        *_FIXED_LAUNCH_POLICY,
     )
     body = json.dumps(contract, ensure_ascii=False, separators=(",", ":")).encode()
     return hashlib.sha256(body).hexdigest()
