@@ -21,7 +21,7 @@ _text_payload = _validation.text_payload
 _timestamp_payload = _validation.timestamp_payload
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class EventValidationError(ValueError):
     location: str
     reason: str
@@ -154,6 +154,7 @@ _CODECS: Final = {
     "FormalActionRecorded": _codec(
         (
             "action_id",
+            "action_kind",
             "worker_id",
             "document_id",
             "input_hash",
@@ -166,6 +167,9 @@ _CODECS: Final = {
             "completed_at",
         ),
         validators={
+            "action_kind": lambda value: (
+                type(value) is str and value in {"diagnostics", "goal", "trial"}
+            ),
             "input_hash": _sha256_payload,
             "output_hash": _sha256_payload,
             "document_version": _integer_payload,

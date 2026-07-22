@@ -63,7 +63,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run = commands.add_parser("run")
     run.add_argument("--project", type=Path, required=True)
     run.add_argument("--profile", choices=("autonomous-shared",), required=True)
-    run.add_argument("--backend", choices=("fake",), required=True)
+    run.add_argument("--backend", choices=("fake", "codex"), required=True)
     security_probe = commands.add_parser("security-probe")
     security_probe.add_argument("--project", type=Path, required=True)
     security_probe.add_argument("--backend", choices=("codex",), required=True)

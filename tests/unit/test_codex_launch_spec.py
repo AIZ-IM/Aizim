@@ -108,6 +108,7 @@ def test_codex_launch_reuses_profile_and_adds_required_sidecar(tmp_path: Path) -
         "startup_timeout_sec": 10,
         "tool_timeout_sec": 60,
         "required": True,
+        "default_tools_approval_mode": "approve",
     }
 
 

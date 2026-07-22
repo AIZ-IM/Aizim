@@ -88,6 +88,15 @@ async def test_two_workers_share_one_runtime_and_gateway_hides_trusted_tools(
             first_goal.goals_before[0].target == second_goal.goals_before[0].target == "n + 0 = n"
         )
         assert first_goal.goals_before[0].hypotheses[0].name == "n"
+        diagnostics = await runtime.diagnostics(first_session, first.document_id)
+        attempts = await runtime.multi_attempt(
+            second_session,
+            second.document_id,
+            6,
+            ("exact Nat.add_zero n",),
+        )
+        assert diagnostics.success
+        assert attempts.items[0].diagnostics == ()
         processes = runtime.processes()
         mcp = [item for item in processes if "lean-lsp-mcp" in item.command]
         lake = [item for item in processes if "lake serve" in item.command]
@@ -132,15 +141,20 @@ async def test_two_workers_share_one_runtime_and_gateway_hides_trusted_tools(
             for record in state.query_events("run-1")
             if record.envelope.event_type == "FormalActionRecorded"
         ]
-        assert len(actions) == 3
+        assert len(actions) == 5
+        action_kinds: set[str] = set()
         for action in actions:
             payload = action["payload"]
+            action_kind = payload["action_kind"]
+            assert type(action_kind) is str
+            action_kinds.add(action_kind)
             assert payload["document_version"] == 0
             assert payload["base_epoch"] == epoch.base_epoch
             assert payload["knowledge_epoch"] == 0
             assert payload["verdict"] == "success"
             assert ".aizim" not in repr(payload)
             assert token not in repr(payload)
+        assert action_kinds == {"diagnostics", "goal", "trial"}
     finally:
         await runtime.aclose()
         state.close()

@@ -36,6 +36,45 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
                 },
             ),
             "WorkerTimedOut": codec(("worker_id", "execution_id"), ("reason_code",)),
+            "AgentRunCompleted": codec(
+                (
+                    "worker_id",
+                    "execution_id",
+                    "status",
+                    "transport_event_hash",
+                    "final_message_hash",
+                    "exit_code",
+                ),
+                validators={
+                    "transport_event_hash": sha256_payload,
+                    "final_message_hash": sha256_payload,
+                    "exit_code": integer_payload,
+                },
+            ),
+            "PromotionVerificationRecorded": codec(
+                (
+                    "contribution_id",
+                    "diagnostics_hash",
+                    "diagnostics_verdict",
+                    "build_hash",
+                    "build_verdict",
+                    "axiom_verification_hash",
+                    "axiom_verification_verdict",
+                ),
+                validators={
+                    "diagnostics_hash": sha256_payload,
+                    "build_hash": sha256_payload,
+                    "axiom_verification_hash": sha256_payload,
+                },
+            ),
             "LeanRuntimeStopped": codec(("runtime_id",)),
+            "ArtifactRegistered": codec(
+                ("artifact_name", "content_hash", "relative_path", "media_type", "byte_length"),
+                validators={"content_hash": sha256_payload, "byte_length": integer_payload},
+            ),
+            "EvaluationTransitionRejected": codec(
+                ("field", "requested_hash", "reason_code"),
+                validators={"requested_hash": sha256_payload},
+            ),
         }
     )

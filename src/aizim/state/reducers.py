@@ -14,12 +14,15 @@ _EVENT_PROJECTION: Final = {
     "RunCreated": "runs",
     "RunCompleted": "runs",
     "RunAborted": "runs",
+    "ArtifactRegistered": "artifacts",
+    "EvaluationTransitionRejected": "evaluations",
     "ScheduleProposed": "schedules",
     "WorkerRegistered": "workers",
     "WorkerStarted": "workers",
     "WorkerStopped": "workers",
     "WorkerCrashed": "workers",
     "WorkerTimedOut": "workers",
+    "AgentRunCompleted": "workers",
     "WorkerCursorSaved": "worker_cursors",
     "CapabilityMinted": "resources",
     "CapabilityDenied": "denials",
@@ -39,6 +42,7 @@ _EVENT_PROJECTION: Final = {
     "ContributionEnqueued": "contributions",
     "PromotionStateChanged": "contributions",
     "PromotionPrepared": "contributions",
+    "PromotionVerificationRecorded": "evaluations",
     "PromotionFailed": "contributions",
     "DeclarationPublished": "verified_declarations",
     "KnowledgeDeltaPublished": "knowledge_deltas",
@@ -56,11 +60,14 @@ _EVENT_PROJECTION: Final = {
 
 _ENTITY_FIELD: Final = {
     "ProjectInitialized": "project_id",
+    "ArtifactRegistered": "content_hash",
+    "EvaluationTransitionRejected": "requested_hash",
     "WorkerRegistered": "worker_id",
     "WorkerStarted": "worker_id",
     "WorkerStopped": "worker_id",
     "WorkerCrashed": "worker_id",
     "WorkerTimedOut": "worker_id",
+    "AgentRunCompleted": "worker_id",
     "WorkerCursorSaved": "worker_id",
     "ScheduleProposed": "directive_id",
     "CapabilityDenied": "request_id",
@@ -80,6 +87,7 @@ _ENTITY_FIELD: Final = {
     "ContributionEnqueued": "contribution_id",
     "PromotionStateChanged": "contribution_id",
     "PromotionPrepared": "contribution_id",
+    "PromotionVerificationRecorded": "contribution_id",
     "PromotionFailed": "contribution_id",
     "DeclarationPublished": "declaration_id",
     "KnowledgeDeltaPublished": "delta_id",
@@ -97,6 +105,10 @@ _ENTITY_FIELD: Final = {
 
 
 def _entity_id(event: EventEnvelope) -> str:
+    if event.event_type == "ArtifactRegistered":
+        relative = event.payload.get("relative_path")
+        if event.run_id is not None and type(relative) is str:
+            return f"{event.run_id}:{relative}"
     field = _ENTITY_FIELD.get(event.event_type)
     value = event.payload.get(field) if field is not None else event.run_id
     return value if type(value) is str and value else event.event_id

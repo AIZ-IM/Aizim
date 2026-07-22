@@ -11,7 +11,12 @@ from aizim.domain import AgentRole, EpochPair, FileLease
 from aizim.lean import DocumentBroker
 from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.resources import ResourceGovernor
-from aizim.orchestration.worker import GatewaySession, WorkerDirective, WorkerRunner
+from aizim.orchestration.worker import (
+    GatewaySession,
+    WorkerDirective,
+    WorkerExecutionError,
+    WorkerRunner,
+)
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
@@ -42,6 +47,11 @@ class WaitingBackend:
         del request
         await asyncio.Event().wait()
         raise AssertionError("unreachable")
+
+
+class FailedBackend:
+    async def run(self, request: AgentRequest) -> AgentResult:
+        return AgentResult(request.worker_id, "failed", "failed", "a" * 64, "b" * 64, 4)
 
 
 def _open(tmp_path: Path, session: str) -> tuple[StateService, DocumentBroker]:
@@ -82,7 +92,7 @@ def _runner(state: StateService, broker: DocumentBroker, root: Path) -> WorkerRu
 
 
 @pytest.mark.asyncio
-async def test_crashed_worker_resumes_with_new_execution_and_recovers_lease(tmp_path: Path) -> None:
+async def test_crashed_worker_releases_lease_before_a_new_execution(tmp_path: Path) -> None:
     state, broker = _open(tmp_path, "first")
     runner = _runner(state, broker, tmp_path)
     try:
@@ -92,9 +102,10 @@ async def test_crashed_worker_resumes_with_new_execution_and_recovers_lease(tmp_
         assert crashed is not None and crashed.terminal
         assert crashed.lease_id is not None
         assert not runner.heartbeat("worker-a")
-        assert "WorkerCrashed" in [
-            item.envelope.event_type for item in state.query_events("run-1")
-        ]
+        first_events = [item.envelope.event_type for item in state.query_events("run-1")]
+        assert "WorkerCrashed" in first_events
+        assert "LeaseReleased" in first_events
+        assert state.active_document_leases() == ()
     finally:
         state.close()
 
@@ -109,8 +120,8 @@ async def test_crashed_worker_resumes_with_new_execution_and_recovers_lease(tmp_
         assert result.execution_id != previous.execution_id
         assert result.terminal
         events = [item.envelope.event_type for item in restarted.query_events("run-1")]
-        assert "LeaseRecovered" in events
-        assert events[-1] == "WorkerCursorSaved"
+        assert "LeaseRecovered" not in events
+        assert events[-1] == "LeaseReleased"
     finally:
         restarted.close()
 
@@ -119,10 +130,27 @@ async def test_crashed_worker_resumes_with_new_execution_and_recovers_lease(tmp_
 async def test_worker_timeout_records_terminal_event(tmp_path: Path) -> None:
     state, broker = _open(tmp_path, "timeout")
     try:
-        result = await _runner(state, broker, tmp_path).run(_directive(0.01), WaitingBackend())
+        with pytest.raises(WorkerExecutionError, match="WORKER_TIMEOUT"):
+            await _runner(state, broker, tmp_path).run(_directive(0.01), WaitingBackend())
 
-        assert result.terminal
         event_types = [item.envelope.event_type for item in state.query_events("run-1")]
         assert "WorkerTimedOut" in event_types
+        assert "LeaseReleased" in event_types
+        assert state.active_document_leases() == ()
+    finally:
+        state.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_backend_is_propagated_after_lease_cleanup(tmp_path: Path) -> None:
+    state, broker = _open(tmp_path, "failed-result")
+    try:
+        with pytest.raises(WorkerExecutionError, match="BACKEND_FAILED"):
+            await _runner(state, broker, tmp_path).run(_directive(), FailedBackend())
+
+        assert state.active_document_leases() == ()
+        events = [item.envelope.event_type for item in state.query_events("run-1")]
+        assert events[-1] == "LeaseReleased"
+        assert "AgentRunCompleted" in events
     finally:
         state.close()

@@ -15,6 +15,8 @@ LEANCLIENT_VERSION: Final = "0.12.1"
 MCP_VERSION: Final = "1.28.1"
 CODEX_CLI_VERSION: Final = "0.144.6"
 MIN_FREE_DISK_BYTES: Final = 2_147_483_648
+PROOF_WORKER_TIMEOUT_SECONDS: Final = 60.0
+ALIGNMENT_AUDITOR_TIMEOUT_SECONDS: Final = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,9 +45,7 @@ def _strings(values: tuple[str, ...], location: str) -> None:
 
 def _pairs(values: tuple[tuple[str, str], ...], location: str) -> None:
     valid = type(values) is tuple and all(
-        type(pair) is tuple
-        and len(pair) == 2
-        and all(type(value) is str for value in pair)
+        type(pair) is tuple and len(pair) == 2 and all(type(value) is str for value in pair)
         for pair in values
     )
     if not valid:

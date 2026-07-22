@@ -52,7 +52,9 @@ class BrokerWorkerAuthority:
                 directive.worker_id,
                 directive.role,
                 lease.lease_id,
-                advertised_tools(directive.role),
+                advertised_tools(directive.role)
+                if directive.operations is None
+                else directive.operations,
                 lease.expires_at,
             )
         )
@@ -65,6 +67,7 @@ class BrokerWorkerAuthority:
                 lease.expires_at,
                 raw_token,
                 lease.lease_id,
+                directive.operations,
             )
         )
         return GatewaySession(self._sessions.socket_path, session_id)

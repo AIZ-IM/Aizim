@@ -16,7 +16,7 @@ def continue_initialization() -> None:
     return
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class DuplicateEventError(RuntimeError):
     event_id: str
 
@@ -24,7 +24,7 @@ class DuplicateEventError(RuntimeError):
         return f"duplicate event id: {self.event_id}"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ProjectionAuthorityError(RuntimeError):
     projection_name: str
     reason: str

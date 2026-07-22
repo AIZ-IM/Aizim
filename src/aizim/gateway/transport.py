@@ -13,6 +13,7 @@ from aizim.domain.serialization import JsonValue
 from .capabilities import (
     CapabilitySession,
     GatewayTool,
+    advertised_tools,
 )
 from .peer_identity import SessionDeniedError, write_frame
 from .transport_frames import (
@@ -103,6 +104,7 @@ class GatewayTransport:
         "_token",
         "_writer",
         "role",
+        "tools",
     )
 
     def __init__(
@@ -111,8 +113,10 @@ class GatewayTransport:
         writer: asyncio.StreamWriter,
         role: AgentRole,
         token: bytearray,
+        tools: tuple[GatewayTool, ...] | None = None,
     ) -> None:
         self.role = role
+        self.tools = advertised_tools(role) if tools is None else tools
         self._reader = reader
         self._writer = writer
         self._token = token
@@ -198,8 +202,8 @@ async def connect_gateway(socket_path: Path, session_id: str) -> GatewayTranspor
     try:
         await write_frame(writer, {"session_id": session_id, "channel": True})
         body = await read_frame(reader, clean_eof=False)
-        role, token = decode_redemption(body)
-        transport = GatewayTransport(reader, writer, role, token)
+        role, token, tools = decode_redemption(body)
+        transport = GatewayTransport(reader, writer, role, token, tools)
         connected = True
         return transport
     except (ConnectionError, GatewayTransportError, asyncio.IncompleteReadError) as error:

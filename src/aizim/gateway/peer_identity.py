@@ -20,6 +20,8 @@ from typing import Protocol
 from aizim.domain import AgentRole, canonical_json
 from aizim.domain.serialization import JsonValue
 
+from .capabilities import GatewayTool, advertised_tools
+
 MAX_FRAME_BYTES = 4096
 
 _SOL_LOCAL = 0
@@ -65,6 +67,7 @@ class BrokerRegistration:
     expires_at: datetime
     raw_token: str
     lease_id: str | None = None
+    operations: tuple[GatewayTool, ...] | None = None
 
     def __post_init__(self) -> None:
         for name, value in (("run_id", self.run_id), ("worker_id", self.worker_id)):
@@ -84,6 +87,17 @@ class BrokerRegistration:
             raise ValueError("raw_token must be a non-empty string")
         if self.lease_id is not None and (type(self.lease_id) is not str or not self.lease_id):
             raise ValueError("lease_id must be a non-empty string when present")
+        operations = self.granted_operations
+        if (
+            not operations
+            or len(operations) != len(set(operations))
+            or any(operation not in advertised_tools(self.role) for operation in operations)
+        ):
+            raise ValueError("operations must be unique role capabilities")
+
+    @property
+    def granted_operations(self) -> tuple[GatewayTool, ...]:
+        return advertised_tools(self.role) if self.operations is None else self.operations
 
     def __repr__(self) -> str:
         return "BrokerRegistration(raw_token=<redacted>, claims=<redacted>)"
@@ -95,6 +109,7 @@ class RedeemedSession:
     run_id: str
     worker_id: str
     role: AgentRole
+    operations: tuple[GatewayTool, ...]
 
     def __repr__(self) -> str:
         return "RedeemedSession(raw_token=<redacted>, claims=<redacted>)"
@@ -138,13 +153,16 @@ async def redeem_session(socket_path: Path, session_id: str) -> RedeemedSession:
             "run_id",
             "worker_id",
             "role",
+            "operations",
         }:
             raise SessionDeniedError
+        role = AgentRole(_text_field(session, "role"))
         return RedeemedSession(
             _text_field(session, "raw_token"),
             _text_field(session, "run_id"),
             _text_field(session, "worker_id"),
-            AgentRole(_text_field(session, "role")),
+            role,
+            _operations_field(session, role),
         )
     except (asyncio.IncompleteReadError, UnicodeError, json.JSONDecodeError, ValueError) as error:
         raise SessionDeniedError from error
@@ -152,6 +170,21 @@ async def redeem_session(socket_path: Path, session_id: str) -> RedeemedSession:
         writer.close()
         with suppress(ConnectionError):
             await writer.wait_closed()
+
+
+def _operations_field(session: dict[str, JsonValue], role: AgentRole) -> tuple[GatewayTool, ...]:
+    value = session.get("operations")
+    if type(value) is not list:
+        raise SessionDeniedError
+    try:
+        operations = tuple(GatewayTool(item) for item in value if type(item) is str)
+    except ValueError as error:
+        raise SessionDeniedError from error
+    if len(operations) != len(value) or not operations or len(operations) != len(set(operations)):
+        raise SessionDeniedError
+    if any(operation not in advertised_tools(role) for operation in operations):
+        raise SessionDeniedError
+    return operations
 
 
 class PeerSocket(Protocol):

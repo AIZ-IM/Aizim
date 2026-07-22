@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -8,16 +9,21 @@ from pathlib import Path
 
 import pytest
 
+from aizim.modes.manifest import SMOKE_TEST_LIMITATION
+
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
 
 
-def _cli(*arguments: str) -> subprocess.CompletedProcess[str]:
+def _cli(
+    *arguments: str, environment: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "aizim", *arguments],
         check=False,
         capture_output=True,
         text=True,
         timeout=90,
+        env=environment,
     )
 
 
@@ -56,6 +62,7 @@ def test_fake_shared_run_prints_summary_and_persists_terminal_status(tmp_path: P
         "start_knowledge_epoch=0",
         "end_knowledge_epoch=2",
         "verified_declarations=2",
+        SMOKE_TEST_LIMITATION,
     ]
     assert status.returncode == 0
     document = json.loads(status.stdout)
@@ -69,9 +76,27 @@ def test_fake_shared_run_prints_summary_and_persists_terminal_status(tmp_path: P
 def test_run_rejects_the_isolated_profile_before_creating_state(tmp_path: Path) -> None:
     project = _copy_smoke(tmp_path)
 
-    result = _cli(
-        "run", "--project", str(project), "--profile", "isolated", "--backend", "fake"
-    )
+    result = _cli("run", "--project", str(project), "--profile", "isolated", "--backend", "fake")
 
     assert result.returncode == 2
     assert not (project / ".aizim").exists()
+
+
+def test_codex_run_requires_an_explicit_model_selection(tmp_path: Path) -> None:
+    project = _copy_smoke(tmp_path)
+    environment = dict(os.environ)
+    environment.pop("AIZIM_MODEL", None)
+
+    result = _cli(
+        "run",
+        "--project",
+        str(project),
+        "--profile",
+        "autonomous-shared",
+        "--backend",
+        "codex",
+        environment=environment,
+    )
+
+    assert result.returncode == 2
+    assert result.stderr == "aizim run: autonomous-shared run failed\n"

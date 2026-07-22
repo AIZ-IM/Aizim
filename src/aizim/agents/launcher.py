@@ -27,7 +27,7 @@ _HOST_OUTPUT_LIMIT: Final = 64 * 1024
 _TERMINATE_GRACE_SECONDS = 5.0
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class AgentLaunchError(RuntimeError):
     reason: str
 

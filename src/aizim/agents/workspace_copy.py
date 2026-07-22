@@ -12,7 +12,7 @@ from typing import Final
 _OPEN_DIRECTORY: Final = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ViewBuildError(RuntimeError):
     reason: str
 

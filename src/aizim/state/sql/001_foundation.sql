@@ -51,5 +51,17 @@ CREATE TABLE artifacts (
     byte_length INTEGER NOT NULL CHECK (byte_length >= 0)
 );
 
+CREATE TABLE artifact_associations (
+    run_id TEXT NOT NULL,
+    artifact_name TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    byte_length INTEGER NOT NULL CHECK (byte_length >= 0),
+    PRIMARY KEY (run_id, relative_path),
+    UNIQUE (run_id, artifact_name),
+    FOREIGN KEY (content_hash) REFERENCES artifacts(content_hash)
+);
+
 CREATE INDEX events_run_sequence ON events(run_id, sequence);
 CREATE INDEX projections_name ON projections(projection_name);

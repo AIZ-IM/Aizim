@@ -67,6 +67,10 @@ class RuntimePromotionVerifier:
             _imports(module_source),
             check.verification.axioms,
             module_source,
+            check.diagnostics.response_hash,
+            check.build.response_hash,
+            check.verification.response_hash,
+            check.build.success,
         )
 
     async def materialize(

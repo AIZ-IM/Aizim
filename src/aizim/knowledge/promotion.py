@@ -29,6 +29,7 @@ from .promotion_context import (
     strings_field,
     text_field,
 )
+from .promotion_evidence import record_verification
 from .promotion_materialization import materialize
 from .promotion_types import (
     PromotionEvidence,
@@ -98,6 +99,7 @@ class PromotionService:
                 text_field(payload, "candidate_name"), text_field(payload, "payload_hash")
             )
             evidence = await self._active(entry, self._verifier.verify(source, name))
+            record_verification(self._state, run_id, entry.contribution_id, evidence)
             if not accepted(evidence):
                 return self._fail(entry, run_id, "LEAN_VERIFICATION_FAILED", evidence)
             verified = entry

@@ -184,6 +184,13 @@ def _command_output(argv: tuple[str, ...]) -> str:
     return result.stdout.strip()
 
 
+def host_command_output(argv: tuple[str, ...]) -> str:
+    try:
+        return _command_output(argv)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise SandboxHostError("sandbox host command failed") from error
+
+
 def _sandbox_is_apple() -> bool:
     if not _SANDBOX_EXECUTABLE.is_file():
         return False

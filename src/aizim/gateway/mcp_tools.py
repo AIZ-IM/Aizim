@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from jsonschema import ValidationError, validate
 from mcp import types
 from mcp.server.lowlevel import Server
 
@@ -15,14 +16,8 @@ from .capabilities import (
     GatewayTool,
     advertised_tools,
 )
+from .mcp_schemas import input_schema
 from .transport_frames import GatewayResult, result_document
-
-_INPUT_SCHEMA = {
-    "type": "object",
-    "properties": {"payload": {"type": "object"}},
-    "required": ["payload"],
-    "additionalProperties": False,
-}
 
 
 class GatewayMcpChannel(Protocol):
@@ -44,13 +39,14 @@ def create_gateway_server(channel: GatewayMcpChannel) -> Server:
 
     @server.list_tools()
     async def list_tools() -> list[types.Tool]:
+        tools = getattr(channel, "tools", advertised_tools(channel.role))
         return [
             types.Tool(
                 name=tool.value,
                 description="Aizim role-gated gateway operation",
-                inputSchema=_INPUT_SCHEMA,
+                inputSchema=input_schema(tool),
             )
-            for tool in advertised_tools(channel.role)
+            for tool in tools
         ]
 
     @server.call_tool(validate_input=False)
@@ -60,6 +56,15 @@ def create_gateway_server(channel: GatewayMcpChannel) -> Server:
         payload = arguments["payload"]
         if type(payload) is not dict:
             return _mcp_result(_invalid_request())
+        try:
+            tool = GatewayTool(name)
+        except ValueError:
+            tool = None
+        if tool is not None:
+            try:
+                validate(arguments, input_schema(tool))
+            except ValidationError:
+                return _mcp_result(_invalid_request())
         try:
             result = await channel.call(name, payload)
         except Exception:

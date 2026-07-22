@@ -4,13 +4,10 @@ import asyncio
 import os
 import socket
 from contextlib import suppress
-from dataclasses import dataclass
-from datetime import datetime
 from hmac import compare_digest
 from pathlib import Path
 from typing import Final, cast
 
-from aizim.domain import AgentRole
 from aizim.state.service_ownership import (
     SocketIdentity,
     SocketOwnershipError,
@@ -27,10 +24,9 @@ from .peer_identity import (
     PeerSocket,
     write_frame,
 )
+from .session_pending import PendingSession
 from .transport import (
     GatewayCaller,
-    GatewayChannelClaims,
-    GatewayChannelContext,
     serve_gateway_channel,
 )
 from .transport_frames import decode_session_request
@@ -39,24 +35,6 @@ _DENIAL: Final = {
     "ok": False,
     "error": {"code": "SESSION_DENIED", "message": "session is not available"},
 }
-
-
-@dataclass(slots=True)
-class _PendingSession:
-    run_id: str
-    worker_id: str
-    role: AgentRole
-    image_hash: str
-    expires_at: datetime
-    lease_id: str | None
-    secret: bytearray
-
-    def channel(self, gateway: GatewayCaller) -> GatewayChannelContext:
-        claims = GatewayChannelClaims(self.run_id, self.worker_id, self.role, self.lease_id)
-        return GatewayChannelContext(gateway, claims, self.secret)
-
-    def clear(self) -> None:
-        self.secret[:] = b"\0" * len(self.secret)
 
 
 class GatewaySessionBroker:
@@ -70,7 +48,7 @@ class GatewaySessionBroker:
         self._dependencies = BrokerDependencies() if dependencies is None else dependencies
         self._gateway = gateway
         self._owner_euid = os.geteuid()
-        self._registrations: dict[str, _PendingSession] = {}
+        self._registrations: dict[str, PendingSession] = {}
         self._server: asyncio.AbstractServer | None = None
         self._owned_socket: SocketIdentity | None = None
         self._writers: set[asyncio.StreamWriter] = set()
@@ -88,13 +66,14 @@ class GatewaySessionBroker:
         session_id = self._dependencies.session_ids()
         if type(session_id) is not str or not session_id or session_id in self._registrations:
             raise BrokerLifecycleError("session id is unavailable")
-        self._registrations[session_id] = _PendingSession(
+        self._registrations[session_id] = PendingSession(
             registration.run_id,
             registration.worker_id,
             registration.role,
             registration.sidecar_executable_sha256,
             registration.expires_at,
             registration.lease_id,
+            registration.granted_operations,
             bytearray(registration.raw_token.encode()),
         )
         return session_id
@@ -189,6 +168,7 @@ class GatewaySessionBroker:
                                 "run_id": pending.run_id,
                                 "worker_id": pending.worker_id,
                                 "role": pending.role.value,
+                                "operations": [item.value for item in pending.operations],
                             },
                         }
                         channel = request[1]

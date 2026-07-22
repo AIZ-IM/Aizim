@@ -9,7 +9,13 @@ from typing import Final
 from aizim.domain import AgentRole, canonical_json
 from aizim.domain.serialization import JsonValue
 
-from .capabilities import GatewayError, GatewayFailure, GatewaySuccess, GatewayTool
+from .capabilities import (
+    GatewayError,
+    GatewayFailure,
+    GatewaySuccess,
+    GatewayTool,
+    advertised_tools,
+)
 from .peer_identity import SessionDeniedError
 
 RPC_FRAME_LIMIT: Final = 1024 * 1024
@@ -55,7 +61,7 @@ async def read_frame(reader: asyncio.StreamReader, *, clean_eof: bool) -> bytes 
     return await reader.readexactly(size)
 
 
-def decode_redemption(body: bytes | None) -> tuple[AgentRole, bytearray]:
+def decode_redemption(body: bytes | None) -> tuple[AgentRole, bytearray, tuple[GatewayTool, ...]]:
     try:
         if body is None:
             raise SessionDeniedError
@@ -68,15 +74,32 @@ def decode_redemption(body: bytes | None) -> tuple[AgentRole, bytearray]:
             "run_id",
             "worker_id",
             "role",
+            "operations",
         }:
             raise SessionDeniedError
         raw_token = session.get("raw_token")
         role = session.get("role")
         if type(raw_token) is not str or not raw_token or type(role) is not str:
             raise SessionDeniedError
-        return AgentRole(role), bytearray(raw_token.encode())
+        parsed_role = AgentRole(role)
+        return parsed_role, bytearray(raw_token.encode()), _operations(session, parsed_role)
     except (TypeError, ValueError, RecursionError) as error:
         raise SessionDeniedError from error
+
+
+def _operations(session: dict[str, JsonValue], role: AgentRole) -> tuple[GatewayTool, ...]:
+    value = session.get("operations")
+    if type(value) is not list:
+        raise SessionDeniedError
+    operations = tuple(GatewayTool(item) for item in value if type(item) is str)
+    if (
+        len(operations) != len(value)
+        or not operations
+        or len(operations) != len(set(operations))
+        or any(operation not in advertised_tools(role) for operation in operations)
+    ):
+        raise SessionDeniedError
+    return operations
 
 
 def encode_call(

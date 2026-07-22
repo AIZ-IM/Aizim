@@ -21,6 +21,10 @@ class PromotionEvidence:
     dependencies: tuple[str, ...]
     assumptions: tuple[str, ...]
     module_source: bytes | None = None
+    diagnostics_response_hash: str | None = None
+    build_response_hash: str | None = None
+    axiom_response_hash: str | None = None
+    build_success: bool = True
 
     def __post_init__(self) -> None:
         if type(self.complete_type) is not str or not self.complete_type:
@@ -29,6 +33,15 @@ class PromotionEvidence:
             if type(value) is not tuple or any(type(item) is not str or not item for item in value):
                 raise PromotionError("INVALID_PROMOTION_EVIDENCE")
         if self.module_source is not None and type(self.module_source) is not bytes:
+            raise PromotionError("INVALID_PROMOTION_EVIDENCE")
+        hashes = (
+            self.diagnostics_response_hash,
+            self.build_response_hash,
+            self.axiom_response_hash,
+        )
+        if any(value is not None and _HASH.fullmatch(value) is None for value in hashes):
+            raise PromotionError("INVALID_PROMOTION_EVIDENCE")
+        if type(self.build_success) is not bool:
             raise PromotionError("INVALID_PROMOTION_EVIDENCE")
 
 
@@ -71,6 +84,7 @@ def accepted(evidence: PromotionEvidence) -> bool:
     allowed = {"propext", "Classical.choice", "Quot.sound"}
     return (
         not evidence.diagnostics
+        and evidence.build_success
         and "sorryAx" not in evidence.axioms
         and set(evidence.axioms) <= allowed
     )

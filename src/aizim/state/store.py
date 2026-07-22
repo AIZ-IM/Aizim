@@ -33,10 +33,12 @@ from .store_mutations import (
     EventMutation,
     apply_event_mutation,
     insert_capability,
+    register_artifact,
     revoke_capability,
     revoke_lease_capabilities,
 )
 from .store_publication_methods import PublicationStoreMethods
+from .store_schema import ensure_artifact_associations, future_schema
 
 _SCHEMA_PATH: Final = Path(__file__).with_name("sql") / "001_foundation.sql"
 
@@ -129,12 +131,10 @@ def _initialize(
     ).fetchone()
     if metadata is None or metadata[0] != str(EVENT_SCHEMA_VERSION):
         raise IncompatibleEventSchemaError(-1 if metadata is None else int(metadata[0]))
-    future = connection.execute(
-        "SELECT MAX(schema_version) FROM events WHERE schema_version > ?",
-        (EVENT_SCHEMA_VERSION,),
-    ).fetchone()[0]
+    future = future_schema(connection, EVENT_SCHEMA_VERSION)
     if future is not None:
         raise IncompatibleEventSchemaError(future)
+    ensure_artifact_associations(connection)
     _query_events(connection)
 
 
@@ -168,6 +168,7 @@ def _append(
         with connection:
             snapshots = _query_projections(connection)
             record = apply_event_mutation(connection, EventMutation(reducer, event, snapshots))
+            register_artifact(connection, event)
             revoke_lease_capabilities(connection, event)
     except sqlite3.IntegrityError as error:
         if "events.event_id" in str(error):

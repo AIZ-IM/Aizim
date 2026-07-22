@@ -13,6 +13,7 @@ name = "aizim"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "jsonschema" },
     { name = "lean-lsp-mcp" },
     { name = "leanclient" },
     { name = "mcp", extra = ["cli"] },
@@ -30,6 +31,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jsonschema", specifier = "==4.26.0" },
     { name = "lean-lsp-mcp", specifier = "==0.28.1" },
     { name = "leanclient", specifier = "==0.12.1" },
     { name = "mcp", extras = ["cli"], specifier = "==1.28.1" },

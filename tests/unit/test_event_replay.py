@@ -229,6 +229,8 @@ def test_projection_registry_is_fixed() -> None:
     assert PROJECTION_NAMES == (
         "project",
         "runs",
+        "artifacts",
+        "evaluations",
         "schedules",
         "workers",
         "worker_cursors",
@@ -245,6 +247,29 @@ def test_projection_registry_is_fixed() -> None:
         "alignment_reviews",
         "interventions",
     )
+
+
+def test_identical_artifact_content_can_be_registered_by_distinct_runs(tmp_path: Path) -> None:
+    with _service(tmp_path) as service:
+        for run_id in ("run-1", "run-2"):
+            service.append_event(
+                AppendEventCommand(
+                    "ArtifactRegistered",
+                    "evaluation_artifacts",
+                    run_id,
+                    None,
+                    {
+                        "artifact_name": "alignment-review.json",
+                        "content_hash": "d" * 64,
+                        "relative_path": f".aizim/artifacts/{run_id}/alignment-review.json",
+                        "media_type": "application/json",
+                        "byte_length": 20,
+                    },
+                )
+            )
+
+        assert len(service.projections("artifacts")) == 2
+        assert service.replay_verify().matched
 
 
 def test_active_document_leases_ignore_minimal_terminal_lease_projection(tmp_path: Path) -> None:

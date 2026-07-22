@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from aizim.agents import ViewBuildError
+from aizim.agents.codex_backend import CodexBackendError
+from aizim.agents.launcher import AgentLaunchError
 from aizim.config.model import LeanRuntimeMode, ResourcePolicy
 from aizim.orchestration.resources import ResourceGovernor, ResourcePolicyError
 
@@ -68,3 +71,19 @@ async def test_proof_slots_bound_concurrent_workers() -> None:
     assert peak == 2
     release.set()
     await asyncio.gather(first, second, third)
+
+
+@pytest.mark.parametrize(
+    "error",
+    (
+        AgentLaunchError("CODEX_PROCESS_FAILED"),
+        CodexBackendError("CODEX_IMAGE_CHANGED"),
+        ViewBuildError("workspace view construction failed"),
+    ),
+)
+async def test_proof_slot_preserves_backend_error(error: RuntimeError) -> None:
+    governor = ResourceGovernor(ResourcePolicy(), disk_free=lambda _path: 3_000_000_000)
+
+    with pytest.raises(type(error), match=str(error)):
+        async with governor.proof_slot():
+            raise error

@@ -13,6 +13,7 @@ from aizim.state import AppendEventCommand, StateService
 from aizim.state.documents import DocumentState
 from aizim.state.events import utc_now
 
+from .action_events import record_formal_action
 from .documents import DocumentBroker
 from .mcp_client import LeanMcpClient
 from .models import (
@@ -156,12 +157,24 @@ class SharedLeanRuntime(PromotionRuntimeMethods):
                     raise
                 result = await call(await self._restart(client, project_root), path)
         except LeanRuntimeError as error:
-            self._record_action(
-                document, session, input_payload, _failure_hash(error), "failure", started_at
+            record_formal_action(
+                self._state,
+                document,
+                session,
+                input_payload,
+                _failure_hash(error),
+                "failure",
+                started_at,
             )
             raise
-        self._record_action(
-            document, session, input_payload, result.response_hash, "success", started_at
+        record_formal_action(
+            self._state,
+            document,
+            session,
+            input_payload,
+            result.response_hash,
+            "success",
+            started_at,
         )
         return result
 
@@ -232,37 +245,6 @@ class SharedLeanRuntime(PromotionRuntimeMethods):
         for (*_, document_id), session in tuple(self._opened.items()):
             _, _, path = await self._resolve(session, document_id)
             _ = await client.diagnostics(path, None, None)
-
-    def _record_action(
-        self,
-        document: DocumentState,
-        session: WorkerSession,
-        input_payload: dict[str, JsonValue],
-        output_hash: str,
-        verdict: str,
-        started_at: datetime,
-    ) -> None:
-        _ = self._state.append_event(
-            AppendEventCommand(
-                "FormalActionRecorded",
-                "lean_runtime",
-                session.run_id,
-                None,
-                {
-                    "action_id": _opaque_id(),
-                    "worker_id": session.worker_id,
-                    "document_id": document.document_id,
-                    "input_hash": sha256_json(input_payload),
-                    "output_hash": output_hash,
-                    "verdict": verdict,
-                    "document_version": document.file_version,
-                    "base_epoch": document.epoch_pair.base_epoch,
-                    "knowledge_epoch": document.epoch_pair.knowledge_epoch,
-                    "started_at": _timestamp(started_at),
-                    "completed_at": _timestamp(),
-                },
-            )
-        )
 
     def _client_or_raise(self) -> LeanMcpClient:
         if self._client is None:

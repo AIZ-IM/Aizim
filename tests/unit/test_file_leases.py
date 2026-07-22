@@ -182,6 +182,7 @@ def test_state_document_transactions_reject_atomically_and_replay(tmp_path: Path
                 None,
                 {
                     "action_id": "action-1",
+                    "action_kind": "goal",
                     "worker_id": lease.worker_id,
                     "document_id": lease.document_id,
                     "input_hash": "a" * 64,

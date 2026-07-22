@@ -12,6 +12,7 @@ _HASH: Final = "a" * 64
 _TIMESTAMP: Final = "2026-07-21T10:00:00Z"
 _FORMAL_ACTION: Final[dict[str, JsonValue]] = {
     "action_id": "a",
+    "action_kind": "goal",
     "worker_id": "w",
     "document_id": "d",
     "input_hash": _HASH,
@@ -56,3 +57,9 @@ def test_formal_action_requires_complete_audit_metadata() -> None:
 def test_formal_action_rejects_invalid_audit_metadata(field: str, value: JsonValue) -> None:
     with pytest.raises(EventValidationError):
         validate_payload("FormalActionRecorded", _with(field, value))
+
+
+@pytest.mark.parametrize("action_kind", ["formal_action", "build", ""])
+def test_formal_action_rejects_unknown_action_kind(action_kind: str) -> None:
+    with pytest.raises(EventValidationError):
+        validate_payload("FormalActionRecorded", _with("action_kind", action_kind))

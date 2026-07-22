@@ -21,7 +21,7 @@ type CodexLauncher = Callable[[CodexLaunchSpec], Awaitable[CodexLaunchOutcome]]
 type AgentFinalizer = Callable[[AgentRequest], Awaitable[None]]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class CodexBackendError(RuntimeError):
     reason: str
 
@@ -189,11 +189,7 @@ def _project_root(request: AgentRequest) -> Path:
         or socket_path.parent.parent.name != ".aizim"
     ):
         raise ValueError("gateway socket does not identify the canonical project")
-    project_root = socket_path.parents[2]
-    resolved = project_root.resolve(strict=True)
-    if resolved != project_root:
-        raise ValueError("canonical project root is not resolved")
-    return resolved
+    return socket_path.parents[2].resolve(strict=True)
 
 
 def _mcp_override(request: AgentRequest, sidecar_executable: Path) -> str:
@@ -213,5 +209,6 @@ def _mcp_override(request: AgentRequest, sidecar_executable: Path) -> str:
         "startup_timeout_sec=10",
         "tool_timeout_sec=60",
         "required=true",
+        'default_tools_approval_mode="approve"',
     )
     return "mcp_servers.aizim={" + ",".join(values) + "}"

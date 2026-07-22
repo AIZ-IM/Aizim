@@ -25,7 +25,6 @@ from aizim.gateway import (
     GatewaySessionBroker,
     GatewayTool,
     PeerIdentity,
-    advertised_tools,
 )
 from aizim.gateway.mcp_tools import create_gateway_server
 from aizim.gateway.peer_identity import write_frame
@@ -64,7 +63,11 @@ def broker_dependencies() -> BrokerDependencies:
     )
 
 
-def registration(role: AgentRole, raw_token: str) -> BrokerRegistration:
+def registration(
+    role: AgentRole,
+    raw_token: str,
+    operations: tuple[GatewayTool, ...] | None = None,
+) -> BrokerRegistration:
     return BrokerRegistration(
         run_id="run-7",
         worker_id="worker-7",
@@ -72,6 +75,7 @@ def registration(role: AgentRole, raw_token: str) -> BrokerRegistration:
         sidecar_executable_sha256=IMAGE_HASH,
         expires_at=NOW + timedelta(minutes=5),
         raw_token=raw_token,
+        operations=operations,
     )
 
 
@@ -115,7 +119,7 @@ async def test_sidecar_lists_role_tools_and_forwards_public_results(tmp_path: Pa
         broker = GatewaySessionBroker(
             socket_path, broker_dependencies(), gateway=gateway(state, calls)
         )
-        session_id = broker.register(registration(role, raw_token))
+        session_id = broker.register(registration(role, raw_token, (GatewayTool.STATE_QUERY,)))
         await broker.start()
         try:
             transport = await connect_gateway(socket_path, session_id)
@@ -130,19 +134,13 @@ async def test_sidecar_lists_role_tools_and_forwards_public_results(tmp_path: Pa
             await transport.aclose()
             await broker.aclose()
 
-    assert tuple(tool.name for tool in listed.tools) == tuple(
-        tool.value for tool in advertised_tools(role)
-    )
-    assert all(
-        tool.inputSchema
-        == {
-            "type": "object",
-            "properties": {"payload": {"type": "object"}},
-            "required": ["payload"],
-            "additionalProperties": False,
-        }
-        for tool in listed.tools
-    )
+    assert tuple(tool.name for tool in listed.tools) == (GatewayTool.STATE_QUERY.value,)
+    assert listed.tools[0].inputSchema["properties"]["payload"] == {
+        "type": "object",
+        "properties": {"query": {"type": "string", "minLength": 1}},
+        "required": ["query"],
+        "additionalProperties": False,
+    }
     assert result.isError is False
     assert result.structuredContent == {
         "ok": True,
@@ -177,7 +175,10 @@ async def test_forged_undiscovered_tool_reaches_call_time_denial(tmp_path: Path)
             async with create_connected_server_and_client_session(
                 create_gateway_server(transport)
             ) as client:
-                result = await client.call_tool(GatewayTool.LEAN_BUILD.value, {"payload": {}})
+                result = await client.call_tool(
+                    GatewayTool.LEAN_BUILD.value,
+                    {"payload": {"clean": False, "fetch_cache": False}},
+                )
         finally:
             await transport.aclose()
             await broker.aclose()
