@@ -13,6 +13,7 @@ PROJECTION_NAMES: Final = (
     "epochs",
     "leases",
     "documents",
+    "formal_actions",
     "contributions",
     "verified_declarations",
     "knowledge_deltas",
@@ -35,6 +36,7 @@ class ProjectionRecord:
 type ProjectionReducer = Callable[
     [tuple[ProjectionRecord, ...], EventEnvelope], tuple[ProjectionRecord, ...]
 ]
+
 
 def apply_event(
     snapshots: tuple[ProjectionRecord, ...], event: EventEnvelope

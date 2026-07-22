@@ -20,6 +20,23 @@ from aizim.state.store_contracts import ProjectionAuthorityError
 
 _HASH: Final = "a" * 64
 _TIMESTAMP: Final = "2026-07-21T10:00:00Z"
+_DOCUMENT_STATE: Final[dict[str, JsonValue]] = {
+    "document_id": "d",
+    "lease_id": "l",
+    "worker_id": "w",
+    "relative_path": "AizimSmoke/Workers/r/w.lean",
+    "virtual_document_namespace": "AizimSmoke.Workers.W_fixture",
+    "base_epoch": _HASH,
+    "knowledge_epoch": 0,
+    "version": 0,
+    "content_hash": _HASH,
+    "expires_at": _TIMESTAMP,
+}
+_PREPARED_STATE: Final = {
+    **_DOCUMENT_STATE,
+    "expected_version": 0,
+    "expected_hash": _HASH,
+}
 _HASH_CASES: Final = (
     ("ProjectInitialized", "base_epoch", {"project_id": "p", "knowledge_epoch": 0}),
     (
@@ -29,8 +46,26 @@ _HASH_CASES: Final = (
     ),
     ("WorkerCrashed", "artifact_hash", {"worker_id": "w"}),
     ("SandboxProbeFailed", "artifact_hash", {"probe_id": "p", "reason_code": "failed"}),
-    ("DocumentEdited", "content_hash", {"document_id": "d"}),
-    ("DocumentEditRecovered", "content_hash", {"document_id": "d"}),
+    (
+        "DocumentEdited",
+        "content_hash",
+        {key: value for key, value in _DOCUMENT_STATE.items() if key != "content_hash"},
+    ),
+    (
+        "DocumentEdited",
+        "base_epoch",
+        {key: value for key, value in _DOCUMENT_STATE.items() if key != "base_epoch"},
+    ),
+    (
+        "DocumentEditPrepared",
+        "expected_hash",
+        {key: value for key, value in _PREPARED_STATE.items() if key != "expected_hash"},
+    ),
+    (
+        "DocumentEditRecovered",
+        "content_hash",
+        {key: value for key, value in _DOCUMENT_STATE.items() if key != "content_hash"},
+    ),
     ("FormalActionRecorded", "input_hash", {"action_id": "a"}),
     ("FormalActionRecorded", "output_hash", {"action_id": "a"}),
     ("ContributionRebased", "base_epoch", {"contribution_id": "c", "source_contribution_id": "s"}),
@@ -54,7 +89,21 @@ _TIMESTAMP_CASES: Final = (
         "expires_at",
         {"worker_id": "w", "role": "formalizer", "operations": ["project.read"]},
     ),
-    ("LeaseGranted", "expires_at", {"lease_id": "l", "worker_id": "w", "document_id": "d"}),
+    (
+        "LeaseGranted",
+        "expires_at",
+        {key: value for key, value in _DOCUMENT_STATE.items() if key != "expires_at"},
+    ),
+    (
+        "DocumentEditPrepared",
+        "expires_at",
+        {key: value for key, value in _PREPARED_STATE.items() if key != "expires_at"},
+    ),
+    (
+        "DocumentEdited",
+        "expires_at",
+        {key: value for key, value in _DOCUMENT_STATE.items() if key != "expires_at"},
+    ),
     ("LeanRuntimeStarted", "started_at", {"runtime_id": "r"}),
 )
 
@@ -78,6 +127,22 @@ def _with_field(
     changed = dict(payload)
     changed[field] = value
     return changed
+
+
+@pytest.mark.parametrize(
+    ("event_type", "payload"),
+    [
+        ("LeaseGranted", {"lease_id": "l", "worker_id": "w", "document_id": "d"}),
+        ("DocumentEditPrepared", {"document_id": "d"}),
+        ("DocumentEdited", {"document_id": "d"}),
+        ("DocumentEditRecovered", {"document_id": "d"}),
+    ],
+)
+def test_document_events_require_complete_replay_state(
+    event_type: str, payload: dict[str, JsonValue]
+) -> None:
+    with pytest.raises(EventValidationError):
+        _event(event_type, payload)
 
 
 @pytest.mark.parametrize(("event_type", "field", "payload"), _HASH_CASES)
@@ -230,6 +295,4 @@ def test_append_command_detaches_payload_before_later_service_use(tmp_path: Path
         record = service.append_event(command)
 
     # Then
-    assert event_as_dict(record.envelope)["payload"] == {
-        "manifest": {"labels": ["original"]}
-    }
+    assert event_as_dict(record.envelope)["payload"] == {"manifest": {"labels": ["original"]}}

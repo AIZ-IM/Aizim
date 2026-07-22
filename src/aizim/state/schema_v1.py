@@ -43,6 +43,9 @@ def _timestamp_payload(value: JsonValue) -> bool:
 
 type PayloadValidator = Callable[[JsonValue], bool]
 _FIELD_VALIDATORS: Final[dict[str, Callable[[JsonValue], bool]]] = {
+    "base_epoch": _sha256_payload,
+    "content_hash": _sha256_payload,
+    "expected_hash": _sha256_payload,
     "expected_version": _integer_payload,
     "knowledge_epoch": _integer_payload,
     "manifest": lambda value: type(value) is dict,
@@ -112,9 +115,7 @@ _CODECS: Final = {
         ("token_hash", "lease_id", "operations", "expires_at"),
         {"token_hash": _sha256_payload, "expires_at": _timestamp_payload},
     ),
-    "CapabilityDenied": _codec(
-        ("reason_code", "role", "worker_id", "operation", "request_id")
-    ),
+    "CapabilityDenied": _codec(("reason_code", "role", "worker_id", "operation", "request_id")),
     "SandboxProbeStarted": _codec(("probe_id",), ("profile",)),
     "SandboxProbeDenied": _codec(("probe_id", "reason_code"), ("operation",)),
     "SandboxProbePassed": _codec(("probe_id",), ("operation",)),
@@ -122,20 +123,85 @@ _CODECS: Final = {
         ("probe_id", "reason_code"), ("artifact_hash",), {"artifact_hash": _sha256_payload}
     ),
     "LeaseGranted": _codec(
-        ("lease_id", "worker_id", "document_id"),
-        ("expires_at",),
-        {"expires_at": _timestamp_payload},
+        (
+            "lease_id",
+            "worker_id",
+            "document_id",
+            "relative_path",
+            "virtual_document_namespace",
+            "base_epoch",
+            "knowledge_epoch",
+            "version",
+            "content_hash",
+            "expires_at",
+        ),
+        validators={
+            "base_epoch": _sha256_payload,
+            "content_hash": _sha256_payload,
+            "expires_at": _timestamp_payload,
+        },
     ),
     "LeaseReleased": _codec(("lease_id",), ("reason_code",)),
     "LeaseRecovered": _codec(("lease_id",), ("reason_code",)),
-    "DocumentEditPrepared": _codec(("document_id",), ("lease_id", "expected_version")),
+    "DocumentEditPrepared": _codec(
+        (
+            "document_id",
+            "lease_id",
+            "worker_id",
+            "relative_path",
+            "virtual_document_namespace",
+            "base_epoch",
+            "knowledge_epoch",
+            "version",
+            "content_hash",
+            "expires_at",
+            "expected_version",
+            "expected_hash",
+        ),
+        validators={
+            "base_epoch": _sha256_payload,
+            "content_hash": _sha256_payload,
+            "expected_hash": _sha256_payload,
+            "expires_at": _timestamp_payload,
+        },
+    ),
     "DocumentEdited": _codec(
-        ("document_id",),
-        ("version", "content_hash", "lease_id"),
-        {"content_hash": _sha256_payload},
+        (
+            "document_id",
+            "lease_id",
+            "worker_id",
+            "relative_path",
+            "virtual_document_namespace",
+            "base_epoch",
+            "knowledge_epoch",
+            "version",
+            "content_hash",
+            "expires_at",
+        ),
+        validators={
+            "base_epoch": _sha256_payload,
+            "content_hash": _sha256_payload,
+            "expires_at": _timestamp_payload,
+        },
     ),
     "DocumentEditRecovered": _codec(
-        ("document_id",), ("version", "content_hash"), {"content_hash": _sha256_payload}
+        (
+            "document_id",
+            "lease_id",
+            "worker_id",
+            "relative_path",
+            "virtual_document_namespace",
+            "base_epoch",
+            "knowledge_epoch",
+            "version",
+            "content_hash",
+            "expires_at",
+        ),
+        validators={
+            "base_epoch": _sha256_payload,
+            "content_hash": _sha256_payload,
+            "expires_at": _timestamp_payload,
+        },
     ),
     "FormalActionRecorded": _codec(
         ("action_id",),

@@ -50,7 +50,18 @@ def append_status_fixtures(root: Path) -> None:
         (
             "LeaseGranted",
             "run-1",
-            {"lease_id": "lease-1", "worker_id": "worker-1", "document_id": "doc-1"},
+            {
+                "lease_id": "lease-1",
+                "worker_id": "worker-1",
+                "document_id": "doc-1",
+                "relative_path": "AizimSmoke/Workers/run-1/worker-1.lean",
+                "virtual_document_namespace": "AizimSmoke.Workers.W_fixture",
+                "base_epoch": "a" * 64,
+                "knowledge_epoch": 0,
+                "version": 0,
+                "content_hash": "b" * 64,
+                "expires_at": "2026-07-22T00:00:00Z",
+            },
         ),
         ("ContributionSubmitted", "run-1", {"contribution_id": "candidate-1"}),
         ("DeclarationPublished", "run-1", {"declaration_id": "declaration-1"}),
@@ -162,17 +173,13 @@ def test_state_serve_refuses_second_owner_serves_status_and_cleans_on_sigterm() 
     with TemporaryDirectory(prefix="aizim-cli-", dir="/tmp") as directory:
         root = initialized_project(Path(directory))
         command = [sys.executable, "-m", "aizim", "state", "serve", "--project", str(root)]
-        first = subprocess.Popen(
-            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
+        first = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         socket_path = root / ".aizim" / "run" / "state.sock"
         pid_path = root / ".aizim" / "run" / "state.pid"
         try:
             wait_for(socket_path, first)
             assert pid_path.read_text().strip() == str(first.pid)
-            second = subprocess.run(
-                command, check=False, capture_output=True, text=True, timeout=5
-            )
+            second = subprocess.run(command, check=False, capture_output=True, text=True, timeout=5)
             assert second.returncode == 3
             status = run_cli("status", "--project", str(root), "--json")
             assert status.returncode == 0
@@ -218,9 +225,7 @@ def test_status_reports_corrupt_state_as_runtime_failure(tmp_path: Path) -> None
 
 
 @pytest.mark.parametrize(("has_pid", "schema_version"), [(False, 1), (True, 2)])
-def test_live_health_requires_owned_pid_and_schema_one(
-    has_pid: bool, schema_version: int
-) -> None:
+def test_live_health_requires_owned_pid_and_schema_one(has_pid: bool, schema_version: int) -> None:
     with TemporaryDirectory(prefix="aizim-health-", dir="/tmp") as directory:
         root = initialized_project(Path(directory))
         layout = ProjectLayout.from_lean_project(root)

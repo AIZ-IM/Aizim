@@ -22,6 +22,10 @@ class MutationCursor(Protocol):
     @property
     def rowcount(self) -> int: ...
 
+    def fetchall(self) -> list[tuple[object, ...]]: ...
+
+    def fetchone(self) -> tuple[object, ...] | None: ...
+
 
 class MutationConnection(Protocol):
     def execute(self, sql: str, parameters: SqlParameters = (), /) -> MutationCursor: ...
@@ -34,9 +38,7 @@ class EventMutation:
     snapshots: tuple[ProjectionRecord, ...]
 
 
-def apply_event_mutation(
-    connection: MutationConnection, mutation: EventMutation
-) -> EventRecord:
+def apply_event_mutation(connection: MutationConnection, mutation: EventMutation) -> EventRecord:
     document = event_as_dict(mutation.event)
     cursor = connection.execute(
         "INSERT INTO events(event_id,schema_version,event_type,occurred_at,actor,"
@@ -90,9 +92,7 @@ def revoke_capability(
     return cursor.rowcount > 0
 
 
-def revoke_lease_capabilities(
-    connection: MutationConnection, event: EventEnvelope
-) -> None:
+def revoke_lease_capabilities(connection: MutationConnection, event: EventEnvelope) -> None:
     if event.event_type not in {"LeaseReleased", "LeaseRecovered"}:
         return
     if event.run_id is None:

@@ -233,6 +233,7 @@ def test_projection_registry_is_fixed() -> None:
         "epochs",
         "leases",
         "documents",
+        "formal_actions",
         "contributions",
         "verified_declarations",
         "knowledge_deltas",
@@ -241,3 +242,18 @@ def test_projection_registry_is_fixed() -> None:
         "alignment_reviews",
         "interventions",
     )
+
+
+def test_active_document_leases_ignore_minimal_terminal_lease_projection(tmp_path: Path) -> None:
+    with _service(tmp_path) as service:
+        service.append_event(
+            AppendEventCommand(
+                event_type="LeaseReleased",
+                actor="capability-service",
+                run_id="run-1",
+                causation_id=None,
+                payload={"lease_id": "non-document-lease", "reason_code": "RELEASED"},
+            )
+        )
+
+        assert service.active_document_leases() == ()

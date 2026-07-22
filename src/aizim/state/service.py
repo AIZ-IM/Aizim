@@ -9,6 +9,8 @@ from types import TracebackType
 from aizim.domain.serialization import JsonValue
 
 from .capabilities import CapabilityRecord, canonical_timestamp
+from .document_operations import DocumentOperation
+from .document_service import DocumentStateMethods
 from .event_payload import thaw_payload
 from .events import (
     EVENT_SCHEMA_VERSION,
@@ -68,7 +70,7 @@ class StateServiceLifecycleError(RuntimeError):
         return self.reason
 
 
-class StateService:
+class StateService(DocumentStateMethods):
     def __init__(
         self, config: StateServiceConfig, dependencies: StateDependencies | None = None
     ) -> None:
@@ -201,6 +203,12 @@ class StateService:
             causation_id=command.causation_id,
             payload=thaw_payload(command.payload),
         )
+
+    def _document_now(self) -> datetime:
+        return self._dependencies.clock()
+
+    def _execute_document[T](self, operation: DocumentOperation[T]) -> T:
+        return self._store.document(operation)
 
     def health(self) -> StoreHealth:
         return self._store.health()

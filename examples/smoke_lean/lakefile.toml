@@ -1,0 +1,6 @@
+name = "aizimSmoke"
+version = "0.1.0"
+defaultTargets = ["AizimSmoke"]
+
+[[lean_lib]]
+name = "AizimSmoke"

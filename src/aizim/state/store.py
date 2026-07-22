@@ -12,6 +12,7 @@ from typing import Final
 from aizim.domain.serialization import canonical_json
 
 from .capabilities import CapabilityRecord, CapabilityRow, capability_from_row
+from .document_operations import DocumentOperation
 from .events import EVENT_SCHEMA_VERSION, EventEnvelope, IncompatibleEventSchemaError
 from .projections import PROJECTION_NAMES, ProjectionRecord, ProjectionReducer
 from .store_contracts import (
@@ -27,6 +28,7 @@ from .store_contracts import (
     _projection_records,
     continue_initialization,
 )
+from .store_documents import execute_document_operation
 from .store_mutations import (
     EventMutation,
     apply_event_mutation,
@@ -138,10 +140,8 @@ def _initialize(
 def _query_events(
     connection: sqlite3.Connection, run_id: str | None = None
 ) -> tuple[EventRecord, ...]:
-    columns = (
-        "sequence,event_id,schema_version,event_type,occurred_at,actor,"
-        "run_id,causation_id,payload_json"
-    )
+    columns = "sequence,event_id,schema_version,event_type,occurred_at,actor,"
+    columns += "run_id,causation_id,payload_json"
     if run_id is None:
         rows = connection.execute(f"SELECT {columns} FROM events ORDER BY sequence").fetchall()
     else:
@@ -166,9 +166,7 @@ def _append(
         connection.execute("BEGIN IMMEDIATE")
         with connection:
             snapshots = _query_projections(connection)
-            record = apply_event_mutation(
-                connection, EventMutation(reducer, event, snapshots)
-            )
+            record = apply_event_mutation(connection, EventMutation(reducer, event, snapshots))
             revoke_lease_capabilities(connection, event)
     except sqlite3.IntegrityError as error:
         if "events.event_id" in str(error):
@@ -197,9 +195,10 @@ class _EventStore:
     def append(self, event: EventEnvelope) -> EventRecord:
         return _append(self._connection, self._reducer, event)
 
-    def persist_capability(
-        self, capability: CapabilityRecord, event: EventEnvelope
-    ) -> EventRecord:
+    def document[T](self, operation: DocumentOperation[T]) -> T:
+        return execute_document_operation(self._connection, self._reducer, operation)
+
+    def persist_capability(self, capability: CapabilityRecord, event: EventEnvelope) -> EventRecord:
         try:
             self._connection.execute("BEGIN IMMEDIATE")
             with self._connection:
@@ -216,11 +215,9 @@ class _EventStore:
             ) from None
 
     def capability_record(self, token_hash: str) -> CapabilityRecord | None:
-        row: CapabilityRow | None = self._connection.execute(
-            "SELECT token_hash,run_id,worker_id,role,lease_id,operations_json,"
-            "expires_at,revoked_at FROM capability_tokens WHERE token_hash=?",
-            (token_hash,),
-        ).fetchone()
+        statement = "SELECT token_hash,run_id,worker_id,role,lease_id,operations_json,"
+        statement += "expires_at,revoked_at FROM capability_tokens WHERE token_hash=?"
+        row: CapabilityRow | None = self._connection.execute(statement, (token_hash,)).fetchone()
         return None if row is None else capability_from_row(row)
 
     def revoke_capability(self, token_hash: str, revoked_at: datetime) -> bool:
@@ -235,8 +232,7 @@ class _EventStore:
         if name not in PROJECTION_NAMES:
             raise ProjectionAuthorityError(name, "name is not registered")
         row = self._connection.execute(
-            "SELECT version,state_json FROM projections "
-            "WHERE projection_name=? AND entity_id=?",
+            "SELECT version,state_json FROM projections WHERE projection_name=? AND entity_id=?",
             (name, entity_id),
         ).fetchone()
         return None if row is None else ProjectionRecord(name, entity_id, row[0], row[1].encode())
@@ -245,8 +241,10 @@ class _EventStore:
         if name is not None and name not in PROJECTION_NAMES:
             raise ProjectionAuthorityError(name, "name is not registered")
         records = _query_projections(self._connection)
-        return records if name is None else tuple(
-            record for record in records if record.projection_name == name
+        return (
+            records
+            if name is None
+            else tuple(record for record in records if record.projection_name == name)
         )
 
     def canonical_projection_json(self) -> bytes:
