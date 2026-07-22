@@ -117,9 +117,18 @@ class SharedLeanRuntime(PromotionRuntimeMethods):
         await self._client_or_raise()._terminate_for_test()
 
     async def aclose(self) -> None:
-        client, self._client = self._client, None
-        self._project_root = None
-        self._runtime_id = None
+        client, runtime_id = self._client, self._runtime_id
+        self._client, self._project_root, self._runtime_id = None, None, None
+        if runtime_id is not None:
+            _ = self._state.append_event(
+                AppendEventCommand(
+                    "LeanRuntimeStopped",
+                    "lean_runtime",
+                    self._run_id,
+                    None,
+                    {"runtime_id": runtime_id},
+                )
+            )
         if client is not None:
             await client.aclose()
 

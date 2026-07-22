@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
 from aizim.domain import AgentRole
+from aizim.domain.serialization import JsonValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,7 @@ class AgentRequest:
     gateway_session_id: str
     gateway_broker_socket: Path
     timeout_seconds: float
+    context: dict[str, JsonValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

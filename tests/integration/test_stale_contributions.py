@@ -251,5 +251,8 @@ def test_stale_patch_is_rebased_against_the_current_document_version(tmp_path: P
         )
         assert artifacts.load("run-1", "contributions", sha256_bytes(expected)) == expected
         assert contribution.contribution_id != stale.rebased_contribution_id
+        assert "ContributionRebased" in [
+            record.envelope.event_type for record in service.query_events("run-1")
+        ]
     finally:
         service.close()

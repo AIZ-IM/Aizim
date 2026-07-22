@@ -28,6 +28,10 @@ async def test_pinned_mcp_server_exposes_only_the_reviewed_tool_surface(tmp_path
         assert "--repl" not in client.arguments
         assert "--loogle-local" not in client.arguments
         assert client.project_root == project.resolve()
+        assert (
+            await client.hover(project / "AizimSmoke" / "Base.lean", 5, 9)
+            == "AizimSmoke.base_add_zero (n : Nat) : n + 0 = n"
+        )
     finally:
         await client.aclose()
 
@@ -49,6 +53,12 @@ class _RecordingSession:
         payload = (
             '{"success":true,"output":"","errors":[]}'
             if name == "lean_build"
+            else (
+                '{"symbol":"AizimSmoke.base_add_zero",'
+                '"info":"AizimSmoke.base_add_zero : (n : Nat) → n + 0 = n",'
+                '"diagnostics":[]}'
+            )
+            if name == "lean_hover_info"
             else '{"axioms":[],"warnings":[]}'
         )
         return SimpleNamespace(isError=False, content=[TextContent(type="text", text=payload)])
@@ -109,6 +119,28 @@ async def test_client_sends_explicit_clean_cache_and_source_scan_flags(tmp_path:
                 "scan_source": True,
             },
         ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_client_uses_reviewed_hover_for_trusted_type_lookup(tmp_path: Path) -> None:
+    project = materialize_smoke_project(tmp_path, "run-1", SMOKE_ROOT)
+    client = LeanMcpClient(project)
+    session = _RecordingSession()
+    object.__setattr__(client, "_session", session)
+
+    info = await client.hover(project / "AizimSmoke" / "Base.lean", 5, 9)
+
+    assert info == "AizimSmoke.base_add_zero : (n : Nat) → n + 0 = n"
+    assert session.calls == [
+        (
+            "lean_hover_info",
+            {
+                "file_path": str((project / "AizimSmoke" / "Base.lean").resolve()),
+                "line": 5,
+                "column": 9,
+            },
+        )
     ]
 
 

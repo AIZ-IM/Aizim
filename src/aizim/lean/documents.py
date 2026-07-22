@@ -53,6 +53,11 @@ class DocumentBroker:
             self._state
         ) or epoch_pair.base_epoch != self._storage.promotion_epoch(run_id):
             raise DocumentBrokerError("EPOCH_MISMATCH")
+        if not any(
+            lease.run_id == run_id and lease.relative_path == canonical
+            for lease in self._state.active_document_leases()
+        ):
+            self._storage.discard(run_id, canonical)
         created = False
         try:
             body_hash = self._storage.create(run_id, canonical, initial_content)

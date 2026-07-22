@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .. import __version__
 from ..gateway.sidecar import run_gateway_sidecar, scrub_session_arguments
+from ..orchestration.runner import run_autonomous_shared
 from .doctor_command import run_doctor
 from .init_command import run_init
 from .security_probe_command import run_security_probe
@@ -59,6 +60,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     status = commands.add_parser("status")
     status.add_argument("--project", type=Path, default=Path.cwd())
     status.add_argument("--json", action="store_true", dest="as_json")
+    run = commands.add_parser("run")
+    run.add_argument("--project", type=Path, required=True)
+    run.add_argument("--profile", choices=("autonomous-shared",), required=True)
+    run.add_argument("--backend", choices=("fake",), required=True)
     security_probe = commands.add_parser("security-probe")
     security_probe.add_argument("--project", type=Path, required=True)
     security_probe.add_argument("--backend", choices=("codex",), required=True)
@@ -70,6 +75,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_doctor(arguments.project, arguments.as_json)
     if arguments.command == "status":
         return run_status(arguments.project, arguments.as_json)
+    if arguments.command == "run":
+        return run_autonomous_shared(arguments.project, arguments.backend)
     if arguments.command == "security-probe":
         return run_security_probe(arguments.project)
     return 0

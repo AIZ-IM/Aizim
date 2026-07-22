@@ -9,7 +9,9 @@ from .events import EventEnvelope
 PROJECTION_NAMES: Final = (
     "project",
     "runs",
+    "schedules",
     "workers",
+    "worker_cursors",
     "epochs",
     "leases",
     "documents",

@@ -229,7 +229,9 @@ def test_projection_registry_is_fixed() -> None:
     assert PROJECTION_NAMES == (
         "project",
         "runs",
+        "schedules",
         "workers",
+        "worker_cursors",
         "epochs",
         "leases",
         "documents",

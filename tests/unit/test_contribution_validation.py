@@ -88,6 +88,12 @@ def test_candidate_source_ignores_comments_and_strings_when_scanning_tokens() ->
     validate_candidate_source(source, "candidate", "True", ("Std",))
 
 
+def test_candidate_source_accepts_a_parameterized_theorem_signature() -> None:
+    source = b"import Std\ntheorem add_zero (n : Nat) : n + 0 = n := by exact Nat.add_zero n\n"
+
+    validate_candidate_source(source, "add_zero", "(n : Nat) : n + 0 = n", ("Std",))
+
+
 @pytest.mark.parametrize("command", ("#eval", "#check", "set_option", "attribute", "example"))
 def test_candidate_source_rejects_extra_lean_commands(command: str) -> None:
     source = f"import Std\n{command} True\ntheorem candidate : True := True.intro\n".encode()

@@ -18,7 +18,7 @@ class PromotionCheck:
     diagnostics: DiagnosticsResult
     build: BuildResult
     verification: VerificationResult
-    type_diagnostics: DiagnosticsResult
+    type_info: str
 
 
 class PromotionRuntimeMethods:
@@ -30,8 +30,8 @@ class PromotionRuntimeMethods:
             diagnostics = await client.diagnostics(module_path, None, None)
             build = await client.build(clean=False, fetch_cache=False)
             verification = await client.verify(module_path, theorem_name, scan_source=True)
-            type_diagnostics = await client.diagnostics(probe_path, None, None)
-        return PromotionCheck(diagnostics, build, verification, type_diagnostics)
+            type_info = await client.hover(probe_path, 2, 8)
+        return PromotionCheck(diagnostics, build, verification, type_info)
 
     def _promotion_lock(self) -> asyncio.Lock:
         return cast(asyncio.Lock, object.__getattribute__(self, "_lifecycle_lock"))

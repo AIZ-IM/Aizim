@@ -150,7 +150,8 @@ def validate_candidate_source(
     if any(item not in allowed_imports for item in imports):
         raise ContributionValidationError("IMPORT_NOT_ALLOWED")
     normalized = re.sub(r"\s+", " ", code)
-    declaration = re.escape(f"theorem {name} : {candidate_type}")
+    separator = "" if candidate_type.startswith(("(", "{", "[")) else ": "
+    declaration = re.escape(f"theorem {name} {separator}{candidate_type}")
     if re.search(rf"\b{declaration}(?=\s*:=)", normalized) is None:
         raise ContributionValidationError("CANDIDATE_NOT_IN_SOURCE")
 

@@ -120,6 +120,15 @@ def parse_attempts(value: object, response_hash: str) -> MultiAttemptResult:
     return MultiAttemptResult(tuple(items), response_hash)
 
 
+def parse_hover_info(value: object) -> str:
+    payload = _record(value, frozenset({"symbol", "info", "diagnostics"}))
+    diagnostics = payload["diagnostics"]
+    if type(diagnostics) is not list:
+        raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+    _ = _string(payload["symbol"]), tuple(_diagnostic(item) for item in diagnostics)
+    return _string(payload["info"])
+
+
 def parse_diagnostics(value: object, response_hash: str) -> DiagnosticsResult:
     fields = {
         "partial",

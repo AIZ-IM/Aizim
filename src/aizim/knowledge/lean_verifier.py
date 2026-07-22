@@ -15,7 +15,6 @@ from aizim.lean.document_io import (
     replace_relative,
     unlink_relative,
 )
-from aizim.lean.models import DiagnosticsResult
 from aizim.lean.project import project_base_epoch
 from aizim.lean.promotion_runtime import PromotionCheck
 
@@ -64,7 +63,7 @@ class RuntimePromotionVerifier:
         return PromotionEvidence(
             errors,
             check.verification.axioms,
-            _complete_type(check.type_diagnostics, theorem_name, bool(errors)),
+            _complete_type(check.type_info, theorem_name, bool(errors)),
             _imports(module_source),
             check.verification.axioms,
             module_source,
@@ -115,6 +114,8 @@ class RuntimePromotionVerifier:
                 replace_relative(descriptor, manifest, updated)
         finally:
             os.close(descriptor)
+        if updated != original and not (await self._runtime._build()).success:
+            raise PromotionError("ACTIVATION_BUILD_FAILED")
 
 
 def _stage(
@@ -161,18 +162,18 @@ def _errors(check: PromotionCheck) -> tuple[str, ...]:
         errors += ("INCOMPLETE_DIAGNOSTICS",)
     if not check.build.success:
         errors += check.build.errors or ("LEAN_BUILD_FAILED",)
-    type_diagnostics = check.type_diagnostics
-    errors += tuple(item.message for item in type_diagnostics.items if item.severity == "error")
-    if type_diagnostics.timed_out or type_diagnostics.partial or not type_diagnostics.success:
-        errors += ("INCOMPLETE_TYPE_DIAGNOSTICS",)
     return errors
 
 
-def _complete_type(diagnostics: DiagnosticsResult, theorem_name: str, failed: bool) -> str:
-    prefix = f"{theorem_name} : "
-    for item in diagnostics.items:
-        if item.severity == "info" and item.message.startswith(prefix):
-            return item.message.removeprefix(prefix)
+def _complete_type(info: str, theorem_name: str, failed: bool) -> str:
+    prefix = f"{theorem_name} "
+    for line in info.splitlines():
+        if line.startswith(prefix):
+            suffix = line.removeprefix(prefix)
+            if suffix.startswith(": "):
+                return suffix.removeprefix(": ")
+            if suffix.startswith(("(", "{", "[")):
+                return suffix
     if failed:
         return "Lean.Error"
     raise PromotionError("TRUSTED_TYPE_UNAVAILABLE")

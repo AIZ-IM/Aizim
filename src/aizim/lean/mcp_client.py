@@ -16,7 +16,7 @@ from mcp.types import TextContent
 
 from aizim.domain import sha256_json
 
-from .mcp_parsing import parse_attempts, parse_diagnostics, parse_goal
+from .mcp_parsing import parse_attempts, parse_diagnostics, parse_goal, parse_hover_info
 from .models import (
     DiagnosticsResult,
     GoalResult,
@@ -30,12 +30,13 @@ EXPECTED_TOOL_NAMES: Final = (
     "lean_build",
     "lean_diagnostic_messages",
     "lean_goal",
+    "lean_hover_info",
     "lean_multi_attempt",
     "lean_verify",
 )
 _DISABLED_TOOLS: Final = (
     "lean_code_actions,lean_completions,lean_declaration_file,lean_file_outline,"
-    "lean_get_widget_source,lean_get_widgets,lean_hammer_premise,lean_hover_info,"
+    "lean_get_widget_source,lean_get_widgets,lean_hammer_premise,"
     "lean_leanfinder,lean_leansearch,lean_local_search,lean_loogle,"
     "lean_minimal_hypotheses,lean_profile_proof,lean_references,lean_run_code,"
     "lean_state_search,lean_term_goal"
@@ -152,6 +153,11 @@ class LeanMcpClient:
             arguments["end_line"] = end_line
         payload, response_hash = await self._call("lean_diagnostic_messages", arguments)
         return parse_diagnostics(payload, response_hash)
+
+    async def hover(self, path: Path, line: int, column: int) -> str:
+        arguments = self._file_arguments(path, line, column, {})
+        payload, _ = await self._call("lean_hover_info", arguments)
+        return parse_hover_info(payload)
 
     async def build(self, *, clean: bool, fetch_cache: bool) -> BuildResult:
         if type(clean) is not bool or type(fetch_cache) is not bool:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -108,3 +109,46 @@ async def test_fake_backend_fails_closed_on_gateway_denial(tmp_path: Path) -> No
     assert result.status == "failed"
     assert "event-7" not in result.summary
     assert factory.connections[0][2].closed
+
+
+async def test_fake_fixture_resolves_typed_delta_reference(tmp_path: Path) -> None:
+    fixture = tmp_path / "worker.json"
+    fixture.write_text(
+        json.dumps(
+            {
+                "actions": [
+                    {"operation": "knowledge.read", "payload": {"after_knowledge_epoch": 0}},
+                    {
+                        "operation": "document.apply",
+                        "payload": {
+                            "document_id": {"$cursor": "document_id"},
+                            "delta_reference": {"template": "exact {fully_qualified_name} n"},
+                        },
+                    },
+                ]
+            }
+        )
+    )
+    delta: dict[str, JsonValue] = {
+        "fully_qualified_name": "AizimSmoke.Research.example",
+        "module": "AizimSmoke.Research.K00000001_S00000001_example",
+    }
+    factory = TransportFactory(
+        lambda: MemoryTransport((GatewaySuccess({"deltas": [delta]}), GatewaySuccess({})))
+    )
+    backend = FakeAgentBackend.from_fixture(
+        fixture, connect=factory, cursor={"document_id": "document-7"}
+    )
+
+    result = await backend.run(request(tmp_path))
+
+    assert result.status == "submitted"
+    calls = factory.connections[0][2].calls
+    operation, payload = calls[1]
+    assert operation is GatewayTool.DOCUMENT_APPLY
+    assert payload == {
+        "document_id": "document-7",
+        "accepted": "exact AizimSmoke.Research.example n",
+        "import_module": delta["module"],
+    }
+    assert backend.resolved_actions[-1] == FakeToolAction(GatewayTool.DOCUMENT_APPLY, payload)

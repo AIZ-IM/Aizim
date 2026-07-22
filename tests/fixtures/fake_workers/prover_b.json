@@ -1,0 +1,36 @@
+{
+  "rounds": [
+    [
+      {
+        "operation": "lean.goal",
+        "payload": {"document_id": {"$cursor": "document_id"}, "line": 4}
+      },
+      {
+        "operation": "knowledge.read",
+        "payload": {"after_knowledge_epoch": 0, "wait": true}
+      }
+    ],
+    [
+      {
+        "operation": "document.apply",
+        "payload": {
+          "document_id": {"$cursor": "document_id"},
+          "delta_reference": {"template": "exact {fully_qualified_name} n"}
+        }
+      },
+      {
+        "operation": "contribution.submit",
+        "payload": {
+          "document_id": {"$cursor": "document_id"},
+          "contribution_id": "contribution-b",
+          "candidate_name": "b_use_a",
+          "complete_type": "(n : Nat) : n + 0 = n",
+          "imports": ["Std"],
+          "dependencies": [],
+          "assumptions": [],
+          "evidence_links": []
+        }
+      }
+    ]
+  ]
+}

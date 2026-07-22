@@ -193,11 +193,15 @@ async def test_discovery_does_not_replace_call_time_authorization(tmp_path: Path
         assert gate.discover(session(expiring_token))
         clock.wall = NOW + timedelta(hours=1)
         expired = await gate.call(session(expiring_token), GatewayTool.STATE_QUERY, {})
+        denial_events = [
+            record.envelope.event_type for record in state.query_events("run-1")
+        ]
 
     assert isinstance(denied, GatewayFailure)
     assert isinstance(expired, GatewayFailure)
     assert denied.exit_code == 4
     assert len(calls) == 1
+    assert "CapabilityDenied" in denial_events
 
 
 @pytest.mark.asyncio

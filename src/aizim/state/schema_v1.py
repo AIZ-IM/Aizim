@@ -7,6 +7,7 @@ from typing import Final
 
 from aizim.domain.serialization import JsonValue, canonical_json
 
+from . import schema_v1_orchestration as _orchestration
 from . import schema_v1_validation as _validation
 from .payload_validation import patch_edits_payload
 
@@ -250,6 +251,8 @@ _CODECS: Final = {
     "AlignmentReviewed": _codec(("review_id",), ("verdict", "reviewer", "kind")),
     "InterventionRecorded": _codec(("intervention_id",), ("kind", "actor", "reason")),
 }
+
+_orchestration.extend(_CODECS, _codec)
 
 
 def validate_payload(event_type: str, payload: Mapping[str, JsonValue]) -> None:
