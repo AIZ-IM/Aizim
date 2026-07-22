@@ -15,6 +15,7 @@ _EVENT_PROJECTION: Final = {
     "RunCompleted": "runs",
     "RunAborted": "runs",
     "ArtifactRegistered": "artifacts",
+    "FormalTraceSealed": "evaluations",
     "EvaluationTransitionRejected": "evaluations",
     "ScheduleProposed": "schedules",
     "WorkerRegistered": "workers",

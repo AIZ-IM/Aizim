@@ -16,6 +16,7 @@ from aizim.knowledge import (
     ArtifactStore,
     ContributionDraft,
     ContributionService,
+    PromotionError,
     PromotionEvidence,
     PromotionMaterialization,
     PromotionService,
@@ -24,8 +25,9 @@ from aizim.knowledge import (
 )
 from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.knowledge_stream import KnowledgeStream
-from aizim.orchestration.promotion_consumer import PromotionConsumer
+from aizim.orchestration.promotion_consumer import PromotionConsumer, PromotionConsumerError
 from aizim.orchestration.resources import ResourceGovernor
+from aizim.orchestration.runner import RunFailureCategory, _run_exit_code
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 _BASE = "a" * 64
@@ -46,6 +48,24 @@ class RejectingVerifier:
 
     async def activate(self, materialization: PromotionMaterialization) -> None:
         del materialization
+
+
+class EpochFailingVerifier(RejectingVerifier):
+    async def verify(self, source: bytes, theorem_name: str) -> PromotionEvidence:
+        del source, theorem_name
+        return PromotionEvidence((), (), "True", ("Std",), ())
+
+    async def materialize(
+        self, source: bytes, epoch_pair: EpochPair, publication_sequence: int
+    ) -> PromotionMaterialization:
+        del source, epoch_pair, publication_sequence
+        raise PromotionError("EPOCH_PROJECT_MISMATCH")
+
+
+class RuntimeFailingVerifier(RejectingVerifier):
+    async def verify(self, source: bytes, theorem_name: str) -> PromotionEvidence:
+        del source, theorem_name
+        raise OSError("runtime failure")
 
 
 class FailingConsumer:
@@ -81,8 +101,28 @@ def _state(tmp_path: Path) -> StateService:
 
 @pytest.mark.asyncio
 @pytest.mark.lean_integration
+@pytest.mark.parametrize(
+    ("verifier", "reason_code", "category"),
+    (
+        (
+            RejectingVerifier(),
+            "LEAN_VERIFICATION_FAILED",
+            RunFailureCategory.LEAN_VERIFICATION,
+        ),
+        (
+            EpochFailingVerifier(),
+            "EPOCH_PROJECT_MISMATCH",
+            RunFailureCategory.AUTHORIZATION,
+        ),
+        (RuntimeFailingVerifier(), "PROMOTION_FAILED", RunFailureCategory.RUNTIME),
+    ),
+)
 async def test_failed_promotion_wakes_the_terminal_epoch_waiter(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    verifier: RejectingVerifier,
+    reason_code: str,
+    category: RunFailureCategory,
 ) -> None:
     state = _state(tmp_path)
     source = b"import Std\ntheorem candidate : True := True.intro\n"
@@ -120,7 +160,6 @@ async def test_failed_promotion_wakes_the_terminal_epoch_waiter(
         )
     )
     stop = asyncio.Event()
-    verifier = RejectingVerifier()
     service = PromotionService(state, artifacts, verifier, "failure-consumer", verifier)
     consumer = PromotionConsumer(
         state,
@@ -135,8 +174,10 @@ async def test_failed_promotion_wakes_the_terminal_epoch_waiter(
         await asyncio.sleep(0)
         consumer.notify_submission()
 
-        with pytest.raises(RuntimeError, match="PROMOTION_FAILED"):
+        with pytest.raises(PromotionConsumerError) as raised:
             await asyncio.wait_for(waiter, timeout=0.5)
+        assert raised.value.reason_code == reason_code
+        assert _run_exit_code(raised.value) == category
         assert "PromotionFailed" in [
             record.envelope.event_type for record in state.query_events("run-1")
         ]

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Mapping
-from contextlib import suppress
 from datetime import timedelta
 
 from aizim.domain import EpochPair, sha256_json
@@ -175,17 +174,19 @@ class PromotionService:
     async def _active[T](self, entry: PublicationQueueEntry, operation: Awaitable[T]) -> T:
         task = asyncio.ensure_future(operation)
         heartbeat = asyncio.create_task(self._heartbeats(entry.contribution_id))
-        done, _pending = await asyncio.wait((task, heartbeat), return_when=asyncio.FIRST_COMPLETED)
-        if task in done:
-            heartbeat.cancel()
-            with suppress(asyncio.CancelledError):
-                await heartbeat
-            return task.result()
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-        heartbeat.result()
-        raise PromotionError("PROMOTION_CLAIM_DENIED")
+        try:
+            done, _pending = await asyncio.wait(
+                (task, heartbeat), return_when=asyncio.FIRST_COMPLETED
+            )
+            if task in done:
+                return task.result()
+            heartbeat.result()
+            raise PromotionError("PROMOTION_CLAIM_DENIED")
+        finally:
+            for child in (task, heartbeat):
+                if not child.done():
+                    child.cancel()
+            await asyncio.gather(task, heartbeat, return_exceptions=True)
 
     async def _heartbeats(self, contribution_id: str) -> None:
         while True:

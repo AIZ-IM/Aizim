@@ -145,7 +145,12 @@ def build_codex_launch_spec(
     except (OSError, ValueError) as error:
         raise CodexBackendError("SANDBOX_SPEC_INVALID") from error
     sandbox_command = 9
-    schema_path = Path(__file__).with_name("codex_result.schema.json").resolve()
+    schema_name = (
+        "codex_alignment_result.schema.json"
+        if request.result_schema == "alignment"
+        else "codex_result.schema.json"
+    )
+    schema_path = Path(__file__).with_name(schema_name).resolve()
     final_path = request.view_root / ".aizim-codex-last-message.json"
     mcp_override = _mcp_override(request, sidecar_executable)
     model = () if request.model is None else ("--model", request.model)

@@ -3,6 +3,8 @@ from __future__ import annotations
 from aizim.knowledge import KnowledgeReader, PublishedKnowledgeDelta
 from aizim.state import StateService
 
+from .run_identity import contribution_id
+
 
 class SharedRunInvariantError(RuntimeError):
     pass
@@ -16,11 +18,12 @@ def first_published_delta(
         for delta in KnowledgeReader(state).read(start_epoch)
         if delta.new_epoch.knowledge_epoch == start_epoch + 1
     )
-    if len(candidates) != 1 or candidates[0].contribution_id != "contribution-a":
+    expected = contribution_id(run_id, "prover-a")
+    if len(candidates) != 1 or candidates[0].contribution_id != expected:
         raise SharedRunInvariantError("FIRST_DELTA_NOT_PROVER_A")
     submitted_by_a = any(
         record.envelope.event_type == "ContributionSubmitted"
-        and record.envelope.payload.get("contribution_id") == "contribution-a"
+        and record.envelope.payload.get("contribution_id") == expected
         and record.envelope.payload.get("worker_id") == "prover-a"
         for record in state.query_events(run_id)
     )
@@ -49,11 +52,15 @@ def validate_shared_completion(
         and record.envelope.payload.get("delta_id") == first_delta.delta_id
         for record in events
     )
+    expected = (
+        contribution_id(run_id, "prover-a"),
+        contribution_id(run_id, "prover-b"),
+    )
     valid = (
         end_epoch == start_epoch + 2
-        and declarations == ("contribution-a", "contribution-b")
+        and declarations == expected
         and len(deltas) == 2
-        and deltas[1].contribution_id == "contribution-b"
+        and deltas[1].contribution_id == expected[1]
         and acknowledged
     )
     if not valid:

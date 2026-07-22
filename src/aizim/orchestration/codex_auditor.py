@@ -89,6 +89,7 @@ async def audit_alignment(
             session_id,
             alias.socket_path,
             ALIGNMENT_AUDITOR_TIMEOUT_SECONDS,
+            result_schema="alignment",
         )
         await sessions.start()
         result = await CodexWorkspaceBackend(backend, project_root, model, "No gateway calls.").run(

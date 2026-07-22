@@ -120,6 +120,7 @@ async def test_codex_alignment_auditor_records_a_machine_verdict(
         assert completion["policy_hash"] == "d" * 64
         assert backend.request is not None
         assert backend.request.role is AgentRole.FORMALIZER
+        assert backend.request.result_schema == "alignment"
         assert backend.request.timeout_seconds == 60.0
         assert '"name":"AizimSmoke.Research.a_add_zero"' in backend.request.prompt
         assert '"name":"AizimSmoke.Research.b_use_a"' in backend.request.prompt

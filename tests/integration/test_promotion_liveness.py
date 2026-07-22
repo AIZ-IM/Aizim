@@ -59,6 +59,46 @@ class _InterruptedVerifier(_Verifier):
         raise asyncio.CancelledError
 
 
+class _CancellationVerifier(_Verifier):
+    def __init__(self) -> None:
+        self.started, self.cancelled = asyncio.Event(), asyncio.Event()
+        self.task: asyncio.Task[PromotionEvidence] | None = None
+
+    async def verify(self, source: bytes, theorem_name: str) -> PromotionEvidence:
+        del source, theorem_name
+        self.task = asyncio.current_task()
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+        raise AssertionError("unreachable")
+
+
+class _CancellationService(PromotionService):
+    def __init__(
+        self,
+        state: StateService,
+        artifacts: ArtifactStore,
+        verifier: _CancellationVerifier,
+        owner_id: str,
+        materializer: _CancellationVerifier,
+    ) -> None:
+        super().__init__(state, artifacts, verifier, owner_id, materializer)
+        self.heartbeat_cancelled = asyncio.Event()
+        self.heartbeat_task: asyncio.Task[None] | None = None
+
+    async def _heartbeats(self, contribution_id: str) -> None:
+        del contribution_id
+        self.heartbeat_task = asyncio.current_task()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.heartbeat_cancelled.set()
+            raise
+
+
 def _service(tmp_path: Path, clock: Callable[[], datetime]) -> StateService:
     state = StateService(
         StateServiceConfig(tmp_path, "promotion-liveness"), StateDependencies(clock=clock)
@@ -166,4 +206,40 @@ async def test_interrupted_activation_recovers_from_a_durable_preparation(tmp_pa
             "PromotionPrepared"
         ) == 1
     finally:
+        state.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelling_promotion_joins_operation_and_heartbeat(tmp_path: Path) -> None:
+    now = datetime.now(UTC)
+    state, artifacts = _service(tmp_path, lambda: now), ArtifactStore(tmp_path)
+    blocker = _CancellationVerifier()
+    service = _CancellationService(state, artifacts, blocker, "owner-a", blocker)
+    task: asyncio.Task[object] | None = None
+    try:
+        _submit(state, artifacts, now)
+        task = asyncio.create_task(service.promote_next())
+        await blocker.started.wait()
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert blocker.cancelled.is_set()
+        assert service.heartbeat_cancelled.is_set()
+        assert blocker.task is not None and blocker.task.done()
+        assert service.heartbeat_task is not None and service.heartbeat_task.done()
+    finally:
+        children = tuple(
+            child
+            for child in (blocker.task, service.heartbeat_task)
+            if child is not None and not child.done()
+        )
+        for child in children:
+            child.cancel()
+        for child in children:
+            await asyncio.gather(child, return_exceptions=True)
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         state.close()

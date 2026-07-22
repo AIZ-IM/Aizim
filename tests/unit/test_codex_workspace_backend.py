@@ -118,6 +118,8 @@ def test_second_round_instruction_binds_only_verified_delta() -> None:
         1,
         "document-test",
         {"fully_qualified_name": "AizimSmoke.Research.a_add_zero", "module": "Generated"},
+        "shared-test",
+        0,
     )
 
     assert "AizimSmoke.Research.a_add_zero" in instruction

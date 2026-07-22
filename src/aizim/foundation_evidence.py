@@ -11,6 +11,7 @@ from typing import Never, assert_never
 from aizim import foundation_contract as contract
 from aizim.domain.serialization import JsonValue
 from aizim.foundation_artifacts import FoundationArtifactError, read_registered_artifact
+from aizim.gateway.socket_alias import ProjectSocketAlias
 from aizim.runtime.state_process import validate_live_state_process
 from aizim.state import StateService, StateServiceConfig
 from aizim.state.operations import RpcFailure, RpcRequest, RpcResponse, RpcSuccess
@@ -157,8 +158,13 @@ async def _snapshot(project: Path) -> _Snapshot:
     if socket_path.exists():
         validate_live_state_process(project / ".aizim" / "run" / "state.pid", socket_path)
         return await _read_socket(socket_path)
-    async with StateService(StateServiceConfig(project, secrets.token_urlsafe(32))) as state:
-        return await _read_socket(state.socket_path)
+    alias = ProjectSocketAlias(project)
+    try:
+        config = StateServiceConfig(alias.project_root, secrets.token_urlsafe(32))
+        async with StateService(config) as state:
+            return await _read_socket(state.socket_path)
+    finally:
+        alias.close()
 
 
 def _select(events: tuple[EventEvidence, ...], requested: str) -> RunSelection:
@@ -209,8 +215,7 @@ def _artifacts(
 
 
 async def load_evidence(project: Path, requested: str) -> FoundationEvidence:
-    canonical_project = project.resolve(strict=True)
-    snapshot = await _snapshot(canonical_project)
+    snapshot = await _snapshot(canonical_project := project.resolve(strict=True))
     selection = _select(snapshot.events, requested)
     return FoundationEvidence(
         snapshot.events,

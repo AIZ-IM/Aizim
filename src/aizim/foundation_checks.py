@@ -4,7 +4,8 @@ from aizim import foundation_contract as contract
 from aizim import foundation_evidence as fe
 from aizim.domain import sha256_bytes, sha256_json
 from aizim.domain.serialization import JsonValue
-from aizim.modes.formal_trace import read_formal_trace, replay_formal_trace
+from aizim.foundation_epoch import durable_start
+from aizim.foundation_trace import trace_complete
 from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE
 
 type Criterion = tuple[str, bool]
@@ -69,54 +70,51 @@ def _publications(events: tuple[fe.EventEvidence, ...]) -> bool:
 def _epochs(events: tuple[fe.EventEvidence, ...], manifest: fe.JsonObject) -> bool:
     pair = _object(manifest.get("epoch_pair"))
     deltas = _typed(events, "KnowledgeDeltaPublished")
-    if pair is None or len(deltas) != 2:
+    publications = _typed(events, "DeclarationPublished")
+    if pair is None or len(deltas) != 2 or len(publications) != 2:
         return False
     base, knowledge = pair.get("base_epoch"), pair.get("knowledge_epoch")
-    if not fe.is_hash(base) or knowledge != 0:
+    if not fe.is_hash(base) or type(knowledge) is not int or knowledge < 0:
         return False
-    for expected, delta in enumerate(deltas, 1):
+    start_knowledge = knowledge
+    for publication, delta in zip(publications, deltas, strict=True):
         payload = delta.payload
         next_base = payload.get("base_epoch")
         if (
-            payload.get("previous_base_epoch") != base
+            publication.sequence >= delta.sequence
+            or publication.payload.get("contribution_id")
+            != payload.get("contribution_id")
+            or publication.payload.get("publication_sequence")
+            != payload.get("publication_sequence")
+            or payload.get("previous_base_epoch") != base
             or payload.get("previous_knowledge_epoch") != knowledge
-            or payload.get("knowledge_epoch") != expected
-            or payload.get("publication_sequence") != expected
+            or payload.get("knowledge_epoch") != knowledge + 1
             or not fe.is_hash(next_base)
         ):
             return False
-        base, knowledge = next_base, expected
-    return knowledge == 2
+        base, knowledge = next_base, knowledge + 1
+    return knowledge == start_knowledge + 2
 
 
-def _trace(events: tuple[fe.EventEvidence, ...], evidence: fe.FoundationEvidence) -> bool:
-    try:
-        body = fe.artifact(evidence, "formal-trace.jsonl").body
-        expected = fe.artifact(evidence, "formal-trace.sha256").body.decode().strip()
-        trace = read_formal_trace(body)
-    except (UnicodeDecodeError, ValueError):
+def _publication_order(events: tuple[fe.EventEvidence, ...]) -> bool:
+    sequence = [
+        item.payload.get("publication_sequence")
+        for item in _typed(events, "DeclarationPublished")
+    ]
+    if len(sequence) != 2:
         return False
-    by_id = {event.event_id: event for event in events}
-    return (
-        replay_formal_trace(trace, expected)
-        and sum(item.kind == "source_scan" for item in trace) == 2
-        and all(
-            (source := by_id.get(item.source_event_id)) is not None
-            and source.sequence == item.sequence
-            and source.event_type == item.source_event_type
-            and sha256_json(source.payload) == item.payload_hash
-            for item in trace
-        )
-    )
+    first, second = sequence
+    return type(first) is int and type(second) is int and first > 0 and second == first + 1
 
 
 def _completion_policy(events: tuple[fe.EventEvidence, ...], gate_hash: str) -> bool:
     completions = _typed(events, "AgentRunCompleted")
     workers = [item.payload.get("worker_id") for item in completions]
+    parsed_workers = tuple(worker for worker in workers if type(worker) is str)
     return (
         len(completions) == 4
-        and all(type(worker) is str for worker in workers)
-        and tuple(sorted(workers)) == contract.REAL_COMPLETIONS
+        and len(parsed_workers) == len(workers)
+        and tuple(sorted(parsed_workers)) == contract.REAL_COMPLETIONS
         and all(item.payload.get("policy_hash") == gate_hash for item in completions)
         and all(
             item.payload.get("status") == "submitted" and item.payload.get("exit_code") == 0
@@ -128,13 +126,14 @@ def _completion_policy(events: tuple[fe.EventEvidence, ...], gate_hash: str) -> 
 def _workers(events: tuple[fe.EventEvidence, ...], manifest: fe.JsonObject) -> bool:
     resources = _object(manifest.get("resources"))
     starts = [item.payload.get("worker_id") for item in _typed(events, "WorkerStarted")]
+    parsed_starts = tuple(worker for worker in starts if type(worker) is str)
     return (
         resources is not None
         and resources.get("lsp_instances") == 1
         and resources.get("max_proof_workers") == 2
         and len(_typed(events, "LeanRuntimeStarted")) == 1
-        and all(type(worker) is str for worker in starts)
-        and tuple(sorted(starts)) == contract.PROOF_EXECUTIONS
+        and len(parsed_starts) == len(starts)
+        and tuple(sorted(parsed_starts)) == contract.PROOF_EXECUTIONS
     )
 
 
@@ -156,22 +155,15 @@ def _pins(manifest: fe.JsonObject) -> bool:
 
 
 def _acknowledgement(events: tuple[fe.EventEvidence, ...]) -> bool:
-    first = [
-        item
-        for item in _typed(events, "KnowledgeDeltaPublished")
-        if item.payload.get("publication_sequence") == 1
-    ]
-    second = [
-        item
-        for item in _typed(events, "DeclarationPublished")
-        if item.payload.get("publication_sequence") == 2
-    ]
-    if len(first) != 1 or len(second) != 1:
+    deltas = _typed(events, "KnowledgeDeltaPublished")
+    publications = _typed(events, "DeclarationPublished")
+    if len(deltas) != 2 or len(publications) != 2:
         return False
+    first, second = deltas[0], publications[1]
     return any(
-        first[0].sequence < item.sequence < second[0].sequence
+        first.sequence < item.sequence < second.sequence
         and item.payload.get("worker_id") == "prover-b"
-        and item.payload.get("delta_id") == first[0].payload.get("delta_id")
+        and item.payload.get("delta_id") == first.payload.get("delta_id")
         for item in _typed(events, "KnowledgeDeltaAcknowledged")
     )
 
@@ -213,9 +205,10 @@ def _codex(manifest: fe.JsonObject) -> bool:
 
 def _shutdown(events: tuple[fe.EventEvidence, ...]) -> bool:
     stopped = [item.payload.get("worker_id") for item in _typed(events, "WorkerStopped")]
+    parsed_stopped = tuple(worker for worker in stopped if type(worker) is str)
     return (
-        all(type(worker) is str for worker in stopped)
-        and tuple(sorted(stopped)) == contract.PROOF_EXECUTIONS
+        len(parsed_stopped) == len(stopped)
+        and tuple(sorted(parsed_stopped)) == contract.PROOF_EXECUTIONS
         and len(_typed(events, "LeaseReleased")) == 3
         and len(_typed(events, "LeanRuntimeStopped")) == 1
     )
@@ -260,12 +253,13 @@ def evaluate(evidence: fe.FoundationEvidence) -> tuple[Criterion, ...]:
         ("06-one-lsp-two-proof-workers", _workers(events, manifest)),
         ("07-pinned-lean-and-dependencies", _pins(manifest)),
         ("08-publication-verification-before-write", _publications(events)),
-        ("09-total-epoch-delta-sequence", _epochs(events, manifest)),
-        ("10-replayable-formal-trace", _trace(events, evidence)),
         (
-            "11-deterministic-publication-order",
-            [item.payload.get("publication_sequence") for item in publications] == [1, 2],
+            "09-total-epoch-delta-sequence",
+            durable_start(evidence.events, manifest, selection.created_sequence)
+            and _epochs(events, manifest),
         ),
+        ("10-replayable-formal-trace", trace_complete(events, evidence)),
+        ("11-deterministic-publication-order", _publication_order(events)),
         ("12-worker-b-delta-consumption", _acknowledgement(events)),
         (
             "13-failure-free-terminal-run",

@@ -26,6 +26,8 @@ from aizim.agents.macos_sandbox import (
 from aizim.agents.sandbox import SandboxRequest
 from aizim.domain import sha256_file
 
+from .run_identity import candidate_name, contribution_id
+
 
 class CodexWorkerError(RuntimeError):
     pass
@@ -137,13 +139,15 @@ def proof_instruction(
     round_index: int,
     document_id: str,
     known_delta: Mapping[str, str] | None,
+    run_id: str,
+    knowledge_epoch: int,
 ) -> str:
     if worker_id == "prover-a" and round_index == 0:
-        return _first_worker_instruction(document_id)
+        return _first_worker_instruction(document_id, run_id, knowledge_epoch)
     if worker_id == "prover-b" and round_index == 0:
-        return _waiting_worker_instruction(document_id)
+        return _waiting_worker_instruction(document_id, knowledge_epoch)
     if worker_id == "prover-b" and round_index == 1 and known_delta is not None:
-        return _second_worker_instruction(document_id, known_delta)
+        return _second_worker_instruction(document_id, known_delta, run_id)
     raise CodexWorkerError("UNSUPPORTED_CODEX_WORKER_ROUND")
 
 
@@ -151,44 +155,65 @@ def codex_worker_factory(backend: AgentBackend, project_root: Path, model: str):
     def factory(worker_id: str, round_index: int, delta: dict[str, str] | None):
         def instruction(request: AgentRequest) -> str:
             document_id = request.context.get("document_id")
-            if type(document_id) is not str or not document_id:
+            knowledge_epoch = request.context.get("knowledge_epoch")
+            if (
+                type(document_id) is not str
+                or not document_id
+                or type(knowledge_epoch) is not int
+                or knowledge_epoch < 0
+            ):
                 raise CodexWorkerError("DOCUMENT_CONTEXT_UNAVAILABLE")
-            return proof_instruction(worker_id, round_index, document_id, delta)
+            return proof_instruction(
+                worker_id,
+                round_index,
+                document_id,
+                delta,
+                request.run_id,
+                knowledge_epoch,
+            )
 
         return CodexWorkspaceBackend(backend, project_root, model, instruction)
 
     return factory
 
 
-def _first_worker_instruction(document_id: str) -> str:
+def _first_worker_instruction(document_id: str, run_id: str, knowledge_epoch: int) -> str:
+    contribution = contribution_id(run_id, "prover-a")
+    candidate = candidate_name(run_id, "prover-a")
     return (
         "Use only the gateway calls below, each with one payload object. The document is "
         f"{document_id}. First call lean.goal at line 4. Then call lean.multi_attempt at line 4 "
         'with snippets ["rfl", "exact Nat.add_zero n"]. Only if its diagnostics are empty, call '
         "document.apply with accepted=exact Nat.add_zero n. Then call contribution.submit with "
-        "contribution_id=contribution-a, candidate_name=a_add_zero, "
+        f"contribution_id={contribution}, candidate_name={candidate}, "
         "complete_type=(n : Nat) : n + 0 = n, imports=[Std], and empty dependencies, "
-        "assumptions, and evidence_links. Finally call knowledge.read after_knowledge_epoch=0 "
+        "assumptions, and evidence_links. Finally call knowledge.read "
+        f"after_knowledge_epoch={knowledge_epoch} "
         "with wait=true. Do not write files or use unlisted tools."
     )
 
 
-def _waiting_worker_instruction(document_id: str) -> str:
+def _waiting_worker_instruction(document_id: str, knowledge_epoch: int) -> str:
     return (
         "Use only the gateway calls below, each with one payload object. The document is "
         f"{document_id}. Call lean.goal at line 4, then call knowledge.read with "
-        "after_knowledge_epoch=0 and wait=true. This round must not edit or submit a document; "
+        f"after_knowledge_epoch={knowledge_epoch} and wait=true. This round must not edit or "
+        "submit a document; "
         "the next round receives the verified delta. Do not write files or use unlisted tools."
     )
 
 
-def _second_worker_instruction(document_id: str, delta: Mapping[str, str]) -> str:
+def _second_worker_instruction(
+    document_id: str, delta: Mapping[str, str], run_id: str
+) -> str:
     name, module = _delta_text(delta, "fully_qualified_name"), _delta_text(delta, "module")
+    contribution = contribution_id(run_id, "prover-b")
+    candidate = candidate_name(run_id, "prover-b")
     return (
         "Use only the gateway calls below, each with one payload object. The verified declaration "
         f"is {name} in module {module}. The document is {document_id}. Call document.apply with "
         f"accepted=exact {name} n and import_module={module}. Then call contribution.submit with "
-        "contribution_id=contribution-b, candidate_name=b_use_a, "
+        f"contribution_id={contribution}, candidate_name={candidate}, "
         "complete_type=(n : Nat) : n + 0 = n, imports=[Std], and empty dependencies, "
         "assumptions, and evidence_links. Do not write files or use unlisted tools."
     )

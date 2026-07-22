@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {
+      "enum": ["submitted", "abstained", "failed"]
+    },
+    "summary": {
+      "enum": ["aligned", "misaligned"]
+    }
+  },
+  "required": ["status", "summary"],
+  "additionalProperties": false
+}

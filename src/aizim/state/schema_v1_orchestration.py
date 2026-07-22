@@ -76,6 +76,7 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
                 ("artifact_name", "content_hash", "relative_path", "media_type", "byte_length"),
                 validators={"content_hash": sha256_payload, "byte_length": integer_payload},
             ),
+            "FormalTraceSealed": codec(("cutoff_kind",)),
             "EvaluationTransitionRejected": codec(
                 ("field", "requested_hash", "reason_code"),
                 validators={"requested_hash": sha256_payload},

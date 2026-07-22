@@ -1,22 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-import math
 import secrets
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from aizim.agents import AgentRequest
 from aizim.domain import AgentRole, FileLease
 from aizim.domain.serialization import JsonValue
-from aizim.gateway import GatewayTool, advertised_tools
 from aizim.lean import DocumentBroker
 from aizim.lean.broker_knowledge import current_epoch
 from aizim.state import AppendEventCommand, StateService
 from aizim.state.event_payload import thaw_payload
 
 from .resources import ResourceGovernor
-from .worker_authority import GatewaySession, WorkerAuthority, WorkerBackend
+from .run_identity import candidate_name, contribution_id
+from .worker_authority import GatewaySession, WorkerAuthority, WorkerBackend, WorkerDirective
 from .worker_cursor import WorkerCursor, cursor_from_payload, last_ack
 from .worker_events import record_crashed, record_schedule, record_started, record_stopped
 from .worker_lifecycle import record_agent_result, release_worker_lease
@@ -26,37 +24,6 @@ _PROOF_WORKER_PROMPT = Path(__file__).parent.parent / "agents/prompts/proof_work
 
 class WorkerExecutionError(RuntimeError):
     pass
-
-
-@dataclass(frozen=True, slots=True)
-class WorkerDirective:
-    directive_id: str
-    worker_id: str
-    role: AgentRole
-    initial_source: bytes
-    budget: int
-    timeout_seconds: float
-    operations: tuple[GatewayTool, ...] | None = None
-
-    def __post_init__(self) -> None:
-        if (
-            not all(type(value) is str and value for value in (self.directive_id, self.worker_id))
-            or type(self.role) is not AgentRole
-            or type(self.initial_source) is not bytes
-            or not self.initial_source
-            or type(self.budget) is not int
-            or self.budget < 1
-            or not math.isfinite(self.timeout_seconds)
-            or self.timeout_seconds <= 0
-        ):
-            raise ValueError("INVALID_WORKER_DIRECTIVE")
-        operations = advertised_tools(self.role) if self.operations is None else self.operations
-        if (
-            not operations
-            or len(operations) != len(set(operations))
-            or any(operation not in advertised_tools(self.role) for operation in operations)
-        ):
-            raise ValueError("INVALID_WORKER_DIRECTIVE")
 
 
 class WorkerRunner:
@@ -196,6 +163,8 @@ class WorkerRunner:
                 "document_version": lease.file_version,
                 "base_epoch": lease.epoch_pair.base_epoch,
                 "knowledge_epoch": lease.epoch_pair.knowledge_epoch,
+                "contribution_id": contribution_id(self._run_id, directive.worker_id),
+                "candidate_name": candidate_name(self._run_id, directive.worker_id),
             },
         )
 

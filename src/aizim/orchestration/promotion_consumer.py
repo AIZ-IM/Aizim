@@ -14,6 +14,12 @@ from aizim.state import PublicationQueueState, StateService
 from .knowledge_stream import KnowledgeStream
 
 
+class PromotionConsumerError(RuntimeError):
+    def __init__(self, reason_code: str) -> None:
+        self.reason_code = reason_code
+        super().__init__(reason_code)
+
+
 class PromotionConsumer:
     def __init__(
         self,
@@ -54,12 +60,29 @@ class PromotionConsumer:
         while KnowledgeReader(self._state).read(epoch - 1) == ():
             self._published.clear()
             if self.failure is not None:
-                raise RuntimeError("PROMOTION_FAILED")
+                raise self._failure_error()
             await self._published.wait()
 
     async def wait_for_failure(self) -> None:
         await self._failed.wait()
-        raise RuntimeError("PROMOTION_FAILED")
+        raise self._failure_error()
+
+    def _failure_error(self) -> PromotionConsumerError:
+        outcome = self.failure
+        if outcome is None:
+            return PromotionConsumerError("PROMOTION_FAILED")
+        if outcome.rebased_contribution_id is not None:
+            return PromotionConsumerError("EPOCH_MISMATCH")
+        reason = next(
+            (
+                record.envelope.payload.get("reason_code")
+                for record in reversed(self._state.query_events())
+                if record.envelope.event_type == "PromotionFailed"
+                and record.envelope.payload.get("contribution_id") == outcome.contribution_id
+            ),
+            None,
+        )
+        return PromotionConsumerError(reason if type(reason) is str else "PROMOTION_FAILED")
 
     def _service(self) -> PromotionService:
         imports = ("Std", *(item.module for item in KnowledgeReader(self._state).read(0)))

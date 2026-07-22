@@ -73,6 +73,33 @@ def test_fake_shared_run_prints_summary_and_persists_terminal_status(tmp_path: P
     assert any(row["state"]["event_type"] == "LeanRuntimeStopped" for row in document["resources"])
 
 
+@pytest.mark.lean_integration
+def test_fake_shared_run_can_publish_twice_across_state_service_restarts(
+    tmp_path: Path,
+) -> None:
+    project = _copy_smoke(tmp_path)
+    command = (
+        "run",
+        "--project",
+        str(project),
+        "--profile",
+        "autonomous-shared",
+        "--backend",
+        "fake",
+    )
+
+    first = _cli(*command)
+    second = _cli(*command)
+    status = _cli("status", "--project", str(project), "--json")
+
+    assert first.returncode == second.returncode == status.returncode == 0
+    assert "start_knowledge_epoch=0\nend_knowledge_epoch=2" in first.stdout
+    assert "start_knowledge_epoch=2\nend_knowledge_epoch=4" in second.stdout
+    document = json.loads(status.stdout)
+    assert document["epochs"]["knowledge_epoch"] == 4
+    assert len(document["verified_declarations"]) == 4
+
+
 def test_run_rejects_the_isolated_profile_before_creating_state(tmp_path: Path) -> None:
     project = _copy_smoke(tmp_path)
 

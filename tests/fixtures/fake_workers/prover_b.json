@@ -7,7 +7,7 @@
       },
       {
         "operation": "knowledge.read",
-        "payload": {"after_knowledge_epoch": 0, "wait": true}
+        "payload": {"after_knowledge_epoch": {"$cursor": "knowledge_epoch"}, "wait": true}
       }
     ],
     [
@@ -22,8 +22,8 @@
         "operation": "contribution.submit",
         "payload": {
           "document_id": {"$cursor": "document_id"},
-          "contribution_id": "contribution-b",
-          "candidate_name": "b_use_a",
+          "contribution_id": {"$cursor": "contribution_id"},
+          "candidate_name": {"$cursor": "candidate_name"},
           "complete_type": "(n : Nat) : n + 0 = n",
           "imports": ["Std"],
           "dependencies": [],

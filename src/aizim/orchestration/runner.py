@@ -9,7 +9,7 @@ from pathlib import Path
 from aizim.agents import BackendIdentity, CodexBackend
 from aizim.config import AizimConfig, load_config
 from aizim.config.model import LeanRuntimeMode
-from aizim.domain import sha256_bytes
+from aizim.domain import EpochPair, sha256_bytes
 from aizim.lean.broker_knowledge import current_epoch
 from aizim.lean.project import smoke_base_epoch
 from aizim.modes.evaluation import EvaluationPolicy, ManifestInput
@@ -37,19 +37,17 @@ from .evaluation_contract import (
     environment_fingerprint,
 )
 from .resources import ResourceGovernor
+from .run_failures import RunError, RunFailureCategory
+from .run_failures import run_exit_code as _run_exit_code
 from .run_reporting import print_run_summary, record_completion
-
-
-class RunError(RuntimeError):
-    pass
 
 
 def run_autonomous_shared(project: Path, backend: str) -> int:
     try:
         config, result = asyncio.run(_run(project, backend))
-    except Exception:
+    except (Exception, asyncio.CancelledError, KeyboardInterrupt) as error:
         print("aizim run: autonomous-shared run failed", file=sys.stderr)
-        return 2
+        return int(_run_exit_code(error))
     print_run_summary(config, result, backend)
     return 0
 
@@ -86,9 +84,10 @@ async def _run(project: Path, backend: str) -> tuple[AizimConfig, SharedRunResul
             isolation_profile = "macos-sandbox-aizim-worker"
         policy = EvaluationPolicy(config.run)
         run_id = f"shared-{secrets.token_hex(8)}"
+        start_epoch = current_epoch(state)
         manifest_input = _manifest_input(
             config,
-            state,
+            start_epoch,
             layout.root,
             run_id,
             backend_identity,
@@ -113,6 +112,7 @@ async def _run(project: Path, backend: str) -> tuple[AizimConfig, SharedRunResul
                 fixtures / "prover_b.json",
                 run_id,
                 record_completion=False,
+                start_epoch=start_epoch,
             )
             record_machine_alignment(state, run_id, "deterministic-auditor", "aligned")
             record_completion(state, run_id)
@@ -122,6 +122,7 @@ async def _run(project: Path, backend: str) -> tuple[AizimConfig, SharedRunResul
                 codex_worker_factory(codex_backend, layout.root, config.model),
                 run_id,
                 record_completion=False,
+                start_epoch=start_epoch,
             )
             try:
                 verdict = await audit_alignment(
@@ -134,7 +135,9 @@ async def _run(project: Path, backend: str) -> tuple[AizimConfig, SharedRunResul
             if verdict != "aligned":
                 abort_for_alignment(state, run_id)
                 _record_evaluation_artifacts(state, layout.root, policy, result, manifest_input)
-                raise RunError("ALIGNMENT_AUDIT_FAILED")
+                raise RunError(
+                    "ALIGNMENT_AUDIT_FAILED", RunFailureCategory.LEAN_VERIFICATION
+                )
             record_completion(state, run_id)
         _record_evaluation_artifacts(state, layout.root, policy, result, manifest_input)
     finally:
@@ -166,7 +169,7 @@ def _fixture_root() -> Path:
 
 def _manifest_input(
     config: AizimConfig,
-    state: StateService,
+    start_epoch: EpochPair,
     project_root: Path,
     run_id: str,
     backend: BackendIdentity,
@@ -180,7 +183,7 @@ def _manifest_input(
     )
     return ManifestInput(
         run_id=run_id,
-        epoch_pair=current_epoch(state),
+        epoch_pair=start_epoch,
         environment_fingerprint=environment_fingerprint(project_root),
         started_at=utc_now(),
         config=config,
@@ -221,6 +224,15 @@ def _record_evaluation_artifacts(
         "application/json",
     )
     register_artifact(state, result.run_id, alignment)
+    state.append_event(
+        AppendEventCommand(
+            "FormalTraceSealed",
+            "evaluation_artifacts",
+            result.run_id,
+            None,
+            {"cutoff_kind": "evaluation_artifacts"},
+        )
+    )
     trace = build_formal_trace(state.query_events(result.run_id))
     trace_body = formal_trace_bytes(trace)
     trace_digest = sha256_bytes(trace_body)

@@ -4,14 +4,14 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
 import pytest
 
 from aizim.domain import canonical_json, sha256_bytes, sha256_json
 from aizim.domain.serialization import JsonValue
-from aizim.modes.formal_trace import build_formal_trace, formal_trace_bytes
+from aizim.modes.formal_trace import FormalTraceRecord, build_formal_trace, formal_trace_bytes
 from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE, NamedArtifact, register_artifact
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
@@ -22,7 +22,9 @@ FOUNDATION_SOURCES = (
     CHECKER,
     REPOSITORY_ROOT / "src" / "aizim" / "foundation_checks.py",
     REPOSITORY_ROOT / "src" / "aizim" / "foundation_contract.py",
+    REPOSITORY_ROOT / "src" / "aizim" / "foundation_epoch.py",
     REPOSITORY_ROOT / "src" / "aizim" / "foundation_evidence.py",
+    REPOSITORY_ROOT / "src" / "aizim" / "foundation_trace.py",
 )
 FOUNDATION_RUNBOOK = REPOSITORY_ROOT / "docs" / "operations" / "foundation-runbook.md"
 RECOVERY_RUNBOOK = REPOSITORY_ROOT / "docs" / "operations" / "event-recovery.md"
@@ -51,7 +53,12 @@ def test_foundation_production_sources_stay_within_pure_loc_limit(source: Path) 
     assert pure_lines <= 250
 
 
-def _append_run_evidence(state: StateService, run_id: str, defect: str | None = None) -> bytes:
+def _append_run_evidence(
+    state: StateService,
+    run_id: str,
+    defect: str | None = None,
+    start_epoch: int = 0,
+) -> bytes:
     start_manifest: dict[str, JsonValue] = {
         "agent_harness_binary_hash": HASHES[0],
         "agent_harness_name": "codex",
@@ -72,7 +79,7 @@ def _append_run_evidence(state: StateService, run_id: str, defect: str | None = 
         ],
         "environment_fingerprint": HASHES[8],
         "environment_transition_policy": "reject",
-        "epoch_pair": {"base_epoch": HASHES[1], "knowledge_epoch": 0},
+        "epoch_pair": {"base_epoch": HASHES[1], "knowledge_epoch": start_epoch},
         "event_schema_version": 1,
         "lean_lsp_mcp_version": "0.28.1",
         "lean_version": "4.32.0",
@@ -121,7 +128,21 @@ def _append_run_evidence(state: StateService, run_id: str, defect: str | None = 
             "LeanRuntimeStarted", "lean_runtime", run_id, None, {"runtime_id": "lsp-1"}
         )
     )
-    for worker_id in ("prover-a", "prover-b"):
+    for execution, worker_id in enumerate(("prover-a", "prover-b"), start=1):
+        state.append_event(
+            AppendEventCommand(
+                "ScheduleProposed",
+                "research_conductor",
+                run_id,
+                None,
+                {
+                    "directive_id": f"directive-{execution}",
+                    "execution_id": f"execution-{execution}",
+                    "role": "proof_explorer",
+                    "worker_id": worker_id,
+                },
+            )
+        )
         state.append_event(
             AppendEventCommand(
                 "WorkerStarted",
@@ -139,6 +160,49 @@ def _append_run_evidence(state: StateService, run_id: str, defect: str | None = 
         ),
         start=1,
     ):
+        for action_kind in (("goal", "trial") if index == 1 else ("goal",)):
+            state.append_event(
+                AppendEventCommand(
+                    "FormalActionRecorded",
+                    worker_id,
+                    run_id,
+                    None,
+                    {
+                        "action_id": f"action-{index}-{action_kind}",
+                        "action_kind": action_kind,
+                        "base_epoch": previous_base,
+                        "completed_at": "2026-07-22T00:00:01Z",
+                        "document_id": f"document-{index}",
+                        "document_version": 0,
+                        "input_hash": HASHES[2],
+                        "knowledge_epoch": start_epoch + index - 1,
+                        "output_hash": HASHES[3],
+                        "started_at": "2026-07-22T00:00:00Z",
+                        "verdict": "success",
+                        "worker_id": worker_id,
+                    },
+                )
+            )
+        state.append_event(
+            AppendEventCommand(
+                "DocumentEdited",
+                worker_id,
+                run_id,
+                None,
+                {
+                    "base_epoch": previous_base,
+                    "content_hash": HASHES[4],
+                    "document_id": f"document-{index}",
+                    "expires_at": "2026-07-22T00:05:00Z",
+                    "knowledge_epoch": start_epoch + index - 1,
+                    "lease_id": f"lease-{index}",
+                    "relative_path": f"AizimSmoke/Workers/{run_id}/{worker_id}.lean",
+                    "version": 1,
+                    "virtual_document_namespace": f"AizimSmoke.Workers.W_{index}",
+                    "worker_id": worker_id,
+                },
+            )
+        )
         state.append_event(
             AppendEventCommand(
                 "ContributionSubmitted",
@@ -192,7 +256,7 @@ def _append_run_evidence(state: StateService, run_id: str, defect: str | None = 
                 {
                     "contribution_id": contribution_id,
                     "declaration_id": declaration_id,
-                    "publication_sequence": index,
+                    "publication_sequence": start_epoch + index,
                 },
             )
         )
@@ -208,15 +272,29 @@ def _append_run_evidence(state: StateService, run_id: str, defect: str | None = 
                     "contribution_id": contribution_id,
                     "declaration_id": declaration_id,
                     "delta_id": delta_id,
-                    "knowledge_epoch": index,
+                    "knowledge_epoch": start_epoch + index,
                     "previous_base_epoch": previous_base,
-                    "previous_knowledge_epoch": index - 1,
-                    "publication_sequence": index,
+                    "previous_knowledge_epoch": start_epoch + index - 1,
+                    "publication_sequence": start_epoch + index,
                 },
             )
         )
         previous_base = next_base
         if index == 1:
+            state.append_event(
+                AppendEventCommand(
+                    "ScheduleProposed",
+                    "research_conductor",
+                    run_id,
+                    None,
+                    {
+                        "directive_id": "directive-3",
+                        "execution_id": "execution-3",
+                        "role": "proof_explorer",
+                        "worker_id": "prover-b",
+                    },
+                )
+            )
             state.append_event(
                 AppendEventCommand(
                     "KnowledgeDeltaAcknowledged",
@@ -398,10 +476,52 @@ def _append_gate_b_evidence(state: StateService, fixture: _GateFixture) -> None:
         _append_gate_terminal(state, fixture)
 
 
+def _append_epoch_history(state: StateService, start_epoch: int) -> str:
+    initial_base = HASHES[1] if start_epoch == 0 else HASHES[5]
+    state.append_event(
+        AppendEventCommand(
+            "ProjectInitialized",
+            "supervisor",
+            None,
+            None,
+            {"base_epoch": initial_base, "knowledge_epoch": 0, "project_id": "fixture"},
+        )
+    )
+    previous_base = initial_base
+    for knowledge_epoch in range(1, start_epoch + 1):
+        next_base = (
+            HASHES[1]
+            if knowledge_epoch == start_epoch
+            else sha256_json({"prior_epoch": knowledge_epoch})
+        )
+        state.append_event(
+            AppendEventCommand(
+                "KnowledgeDeltaPublished",
+                "promotion_service",
+                f"prior-run-{knowledge_epoch}",
+                None,
+                {
+                    "base_epoch": next_base,
+                    "delta_id": f"prior-delta-{knowledge_epoch}",
+                    "knowledge_epoch": knowledge_epoch,
+                    "previous_base_epoch": previous_base,
+                    "previous_knowledge_epoch": knowledge_epoch - 1,
+                    "publication_sequence": knowledge_epoch,
+                },
+            )
+        )
+        previous_base = next_base
+    return previous_base
+
+
 def _register_artifacts(
-    project: Path, state: StateService, run_id: str, defect: str | None = None
+    project: Path,
+    state: StateService,
+    run_id: str,
+    defect: str | None = None,
+    start_epoch: int = 0,
 ) -> None:
-    manifest_body = _append_run_evidence(state, run_id, defect)
+    manifest_body = _append_run_evidence(state, run_id, defect, start_epoch)
     alignment_body = canonical_json(
         {
             "review_kind": "machine",
@@ -434,7 +554,34 @@ def _register_artifacts(
                 len(body),
             ),
         )
-    trace_body = formal_trace_bytes(build_formal_trace(state.query_events(run_id)))
+    state.append_event(
+        AppendEventCommand(
+            "FormalTraceSealed",
+            "evaluation_artifacts",
+            run_id,
+            None,
+            {"cutoff_kind": "evaluation_artifacts"},
+        )
+    )
+    trace = build_formal_trace(state.query_events(run_id))
+    if defect == "post-seal-event":
+        state.append_event(
+            AppendEventCommand(
+                "ScheduleProposed",
+                "research_conductor",
+                run_id,
+                None,
+                {
+                    "directive_id": "post-seal-directive",
+                    "execution_id": "post-seal-execution",
+                    "role": "proof_explorer",
+                    "worker_id": "prover-a",
+                },
+            )
+        )
+    if defect in {"trace-deleted", "trace-reordered", "trace-duplicated", "trace-relabeled"}:
+        trace = _tampered_trace(trace, defect)
+    trace_body = formal_trace_bytes(trace)
     trace_hash = sha256_bytes(trace_body)
     for name, body, media_type in (
         ("formal-trace.jsonl", trace_body, "application/x-ndjson"),
@@ -491,24 +638,55 @@ def _register_artifacts(
         path.write_bytes(report_body + b"\n")
 
 
+def _tampered_trace(
+    trace: tuple[FormalTraceRecord, ...], defect: str
+) -> tuple[FormalTraceRecord, ...]:
+    changed = list(trace)
+    index = next(index for index, record in enumerate(changed) if record.kind == "worker")
+    if defect == "trace-deleted":
+        changed.pop(index)
+    elif defect == "trace-reordered":
+        changed[index], changed[index + 1] = changed[index + 1], changed[index]
+    elif defect == "trace-duplicated":
+        changed.insert(index, changed[index])
+    else:
+        changed[index] = replace(changed[index], kind="directive")
+    previous = "0" * 64
+    result: list[FormalTraceRecord] = []
+    for ordinal, record in enumerate(changed):
+        unsigned: dict[str, JsonValue] = {
+            "ordinal": ordinal,
+            "sequence": record.sequence,
+            "kind": record.kind,
+            "source_event_id": record.source_event_id,
+            "source_event_type": record.source_event_type,
+            "payload_hash": record.payload_hash,
+            "content_hashes": list(record.content_hashes),
+            "previous_hash": previous,
+        }
+        updated = replace(
+            record,
+            ordinal=ordinal,
+            previous_hash=previous,
+            record_hash=sha256_json(unsigned),
+        )
+        result.append(updated)
+        previous = updated.record_hash
+    return tuple(result)
+
+
 def _build_fixture(
     project: Path,
     defect: str | None = None,
     gates: tuple[_GateFixture, ...] | None = None,
+    start_epoch: int = 0,
 ) -> None:
     with StateService(StateServiceConfig(project, "acceptance-fixture")) as state:
-        state.append_event(
-            AppendEventCommand(
-                "ProjectInitialized",
-                "supervisor",
-                None,
-                None,
-                {"base_epoch": HASHES[1], "knowledge_epoch": 0, "project_id": "fixture"},
-            )
-        )
+        assert _append_epoch_history(state, start_epoch) == HASHES[1]
         for gate in gates or (_GateFixture("security-gate-positive", HASHES[7], defect),):
             _append_gate_b_evidence(state, gate)
-        _register_artifacts(project, state, "real-run", defect)
+        run_start = start_epoch - 1 if defect == "stale-start-epoch" else start_epoch
+        _register_artifacts(project, state, "real-run", defect, run_start)
         state.append_event(
             AppendEventCommand(
                 "RunCreated",
@@ -571,6 +749,51 @@ def test_complete_foundation_evidence_passes_for_latest_real_run(
     # Then
     assert result.returncode == 0, result.stderr
     assert result.stdout == "FOUNDATION ACCEPTANCE PASS 16/16\n"
+
+
+def test_complete_foundation_evidence_passes_from_nonzero_epoch(
+    foundation_project: Path,
+) -> None:
+    # Given
+    _build_fixture(foundation_project, start_epoch=4)
+
+    # When
+    result = _run_checker(foundation_project)
+
+    # Then
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "FOUNDATION ACCEPTANCE PASS 16/16\n"
+
+
+def test_complete_foundation_evidence_passes_from_a_long_project_path(
+    foundation_project: Path,
+) -> None:
+    # Given
+    project = foundation_project / ("nested-" + "x" * 80)
+    project.mkdir()
+    _build_fixture(project)
+
+    # When
+    result = _run_checker(project)
+
+    # Then
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "FOUNDATION ACCEPTANCE PASS 16/16\n"
+
+
+def test_foundation_evidence_rejects_a_stale_manifest_start_epoch(
+    foundation_project: Path,
+) -> None:
+    # Given
+    _build_fixture(foundation_project, "stale-start-epoch", start_epoch=4)
+
+    # When
+    result = _run_checker(foundation_project)
+
+    # Then
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "FOUNDATION ACCEPTANCE FAIL\n"
 
 
 def test_latest_failed_gate_group_does_not_fall_back_to_older_success(
@@ -648,6 +871,11 @@ def test_latest_valid_gate_group_supplies_real_completion_policy(
         "missing-artifact",
         "corrupt-artifact",
         "symlinked-artifact-root",
+        "trace-deleted",
+        "trace-reordered",
+        "trace-duplicated",
+        "trace-relabeled",
+        "post-seal-event",
     ),
 )
 def test_incomplete_foundation_evidence_fails_closed(foundation_project: Path, defect: str) -> None:

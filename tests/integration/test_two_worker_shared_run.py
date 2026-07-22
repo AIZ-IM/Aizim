@@ -13,6 +13,7 @@ from aizim.knowledge import KnowledgeReader
 from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.conductor import ResearchConductor
 from aizim.orchestration.resources import ResourceGovernor
+from aizim.orchestration.run_validation import SharedRunInvariantError
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
@@ -39,6 +40,44 @@ class SocketCapturingBackend:
         self._canonical_roots.append(canonical.parents[2])
         self._canonical_bound.append(canonical.is_socket())
         return await self._backend.run(request)
+
+
+@pytest.mark.asyncio
+async def test_conductor_rejects_a_start_snapshot_that_is_not_current(tmp_path: Path) -> None:
+    epoch = EpochPair(smoke_base_epoch(SMOKE_ROOT), 0)
+    state = StateService(StateServiceConfig(tmp_path, "selected-snapshot"))
+    state.append_event(
+        AppendEventCommand(
+            "ProjectInitialized",
+            "supervisor",
+            None,
+            None,
+            {"project_id": "project", "base_epoch": epoch.base_epoch, "knowledge_epoch": 0},
+        )
+    )
+    conductor = ResearchConductor(
+        state,
+        tmp_path,
+        SMOKE_ROOT,
+        ResourceGovernor(ResourcePolicy(), disk_free=lambda _path: 3_000_000_000),
+    )
+    before = state.logical_digest()
+
+    def unused_factory(_worker_id: str, _round: int, _delta: dict[str, str] | None):
+        raise AssertionError("backend factory must not run")
+
+    try:
+        with pytest.raises(SharedRunInvariantError, match="START_SNAPSHOT_MISMATCH"):
+            await conductor.run_two_worker(
+                unused_factory, start_epoch=EpochPair("f" * 64, epoch.knowledge_epoch)
+            )
+
+        assert state.logical_digest() == before
+        assert not any(
+            record.envelope.event_type == "RunCreated" for record in state.query_events()
+        )
+    finally:
+        state.close()
 
 
 @pytest.mark.lean_integration

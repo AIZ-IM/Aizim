@@ -27,7 +27,7 @@ _SMOKE_FILES: Final = (
 )
 _MANIFEST: Final = PurePosixPath("AizimSmoke.lean")
 _RESEARCH_IMPORT: Final = re.compile(
-    rb"(?m)^import (AizimSmoke\.Research\.[A-Za-z_][A-Za-z0-9_]*)\n$"
+    rb"^import (AizimSmoke\.Research\.[A-Za-z_][A-Za-z0-9_]*)\n", re.MULTILINE
 )
 _RUN_ID: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 _HASH: Final = re.compile(r"[0-9a-f]{64}")

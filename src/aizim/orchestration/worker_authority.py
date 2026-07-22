@@ -1,21 +1,51 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from aizim.agents import AgentRequest, AgentResult
-from aizim.domain import FileLease
+from aizim.domain import AgentRole, FileLease
 from aizim.gateway import (
     BrokerRegistration,
     CapabilityGrant,
     CapabilityIssuer,
     GatewaySessionBroker,
+    GatewayTool,
     advertised_tools,
 )
 
-if TYPE_CHECKING:
-    from .worker import WorkerDirective
+
+@dataclass(frozen=True, slots=True)
+class WorkerDirective:
+    directive_id: str
+    worker_id: str
+    role: AgentRole
+    initial_source: bytes
+    budget: int
+    timeout_seconds: float
+    operations: tuple[GatewayTool, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            not all(type(value) is str and value for value in (self.directive_id, self.worker_id))
+            or type(self.role) is not AgentRole
+            or type(self.initial_source) is not bytes
+            or not self.initial_source
+            or type(self.budget) is not int
+            or self.budget < 1
+            or not math.isfinite(self.timeout_seconds)
+            or self.timeout_seconds <= 0
+        ):
+            raise ValueError("INVALID_WORKER_DIRECTIVE")
+        operations = advertised_tools(self.role) if self.operations is None else self.operations
+        if (
+            not operations
+            or len(operations) != len(set(operations))
+            or any(operation not in advertised_tools(self.role) for operation in operations)
+        ):
+            raise ValueError("INVALID_WORKER_DIRECTIVE")
 
 
 @dataclass(frozen=True, slots=True)

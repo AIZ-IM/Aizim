@@ -36,7 +36,9 @@ _EVENT_KINDS: Final[dict[str, tuple[str, ...]]] = {
     "AlignmentReviewed": ("alignment_review",),
     "RunCompleted": ("terminal",),
     "RunAborted": ("terminal",),
+    "FormalTraceSealed": ("trace_seal",),
 }
+type TraceSource = tuple[int, str, str, dict[str, JsonValue]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,20 +55,33 @@ class FormalTraceRecord:
 
 
 def build_formal_trace(events: tuple[EventRecord, ...]) -> tuple[FormalTraceRecord, ...]:
-    records: list[FormalTraceRecord] = []
-    previous_hash = _ZERO_HASH
+    sources: list[TraceSource] = []
     for event_record in events:
         document = event_as_dict(event_record.envelope)
-        payload = document["payload"]
-        payload_hash = sha256_json(payload)
-        hashes = _content_hashes(payload, payload_hash)
-        for kind in _event_kinds(event_record.envelope.event_type, payload):
-            record = _record(
-                len(records),
+        sources.append(
+            (
                 event_record.sequence,
-                kind,
                 event_record.envelope.event_id,
                 event_record.envelope.event_type,
+                document["payload"],
+            )
+        )
+    return build_formal_trace_sources(tuple(sources))
+
+
+def build_formal_trace_sources(events: tuple[TraceSource, ...]) -> tuple[FormalTraceRecord, ...]:
+    records: list[FormalTraceRecord] = []
+    previous_hash = _ZERO_HASH
+    for sequence, event_id, event_type, payload in events:
+        payload_hash = sha256_json(payload)
+        hashes = _content_hashes(payload, payload_hash)
+        for kind in _event_kinds(event_type, payload):
+            record = _record(
+                len(records),
+                sequence,
+                kind,
+                event_id,
+                event_type,
                 payload_hash,
                 hashes,
                 previous_hash,

@@ -32,7 +32,7 @@ class ProjectSocketAlias:
             link.unlink(missing_ok=True)
             root.rmdir()
             raise
-        self._root, self._link, self.socket_path = root, link, socket_path
+        self._root, self._link, self.project_root, self.socket_path = root, link, link, socket_path
 
     def close(self) -> None:
         self._link.unlink(missing_ok=True)

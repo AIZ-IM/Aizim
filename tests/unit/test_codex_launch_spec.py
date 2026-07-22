@@ -134,20 +134,24 @@ def test_codex_launch_omits_model_and_all_bypass_routes(tmp_path: Path) -> None:
     assert "raw-capability-value" not in repr(launch)
 
 
-def test_checked_in_codex_result_schema_is_exact_and_closed() -> None:
-    schema_path = Path(__file__).parents[2] / "src/aizim/agents/codex_result.schema.json"
+def test_alignment_request_uses_a_closed_verdict_schema(tmp_path: Path) -> None:
+    agent_request = replace(request(tmp_path), result_schema="alignment")
 
-    schema = json.loads(schema_path.read_text())
+    launch = build_codex_launch_spec(
+        agent_request,
+        sandbox_spec(agent_request),
+        Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+        developer_root(agent_request),
+    )
+    schema = json.loads(launch.output_schema_path.read_text())
 
-    assert schema["type"] == "object"
+    assert launch.argv[launch.argv.index("--output-schema") + 1] == str(
+        launch.output_schema_path
+    )
+    assert launch.output_schema_path.name == "codex_alignment_result.schema.json"
     assert schema["required"] == ["status", "summary"]
     assert schema["additionalProperties"] is False
-    assert schema["properties"]["status"]["enum"] == ["submitted", "abstained", "failed"]
-    assert schema["properties"]["summary"] == {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 2000,
-    }
+    assert schema["properties"]["summary"] == {"enum": ["aligned", "misaligned"]}
 
 
 def _fake_codex(path: Path) -> Path:

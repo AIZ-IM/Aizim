@@ -28,6 +28,7 @@ class AgentRequest:
     gateway_broker_socket: Path
     timeout_seconds: float
     context: dict[str, JsonValue] = field(default_factory=dict)
+    result_schema: Literal["default", "alignment"] = "default"
 
 
 @dataclass(frozen=True, slots=True)

@@ -70,3 +70,26 @@ FAILURE_EVENT_TYPES: Final = frozenset(
 )
 PROOF_EXECUTIONS: Final = ("prover-a", "prover-b", "prover-b")
 REAL_COMPLETIONS: Final = ("alignment-auditor", *PROOF_EXECUTIONS)
+TRACE_KINDS: Final = frozenset(
+    {
+        "accepted_document_action",
+        "alignment_review",
+        "axiom_verification",
+        "build",
+        "contribution",
+        "delta",
+        "delta_consumption",
+        "diagnostics",
+        "directive",
+        "epoch",
+        "goal",
+        "lease",
+        "publication",
+        "run",
+        "source_scan",
+        "terminal",
+        "trace_seal",
+        "trial",
+        "worker",
+    }
+)
