@@ -32,7 +32,7 @@ def _project(tmp_path: Path) -> Path:
     project = tmp_path / "project"
     (project / "AizimSmoke").mkdir(parents=True)
     (project / "lakefile.toml").write_text('name = "Smoke"\n')
-    (project / "lean-toolchain").write_text("leanprover/lean4:v4.32.0\n")
+    (project / "lean-toolchain").write_text("leanprover/lean4:v4.32.1\n")
     (project / "AizimSmoke" / "Base.lean").write_text("import Std\n")
     (project / ".aizim").mkdir()
     (project / ".aizim" / "ignored.lean").write_text("import Std\n")

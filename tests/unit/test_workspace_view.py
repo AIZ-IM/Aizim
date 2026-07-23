@@ -33,7 +33,7 @@ def project(tmp_path: Path) -> Path:
     (root / "Unleased.lean").write_bytes(b"theorem private : True := trivial\n")
     (root / "Nested" / "Prereq.lean").write_bytes(b"theorem prereq : True := trivial\n")
     (root / "lakefile.toml").write_text('name = "fixture"\n')
-    (root / "lean-toolchain").write_text("leanprover/lean4:v4.32.0\n")
+    (root / "lean-toolchain").write_text("leanprover/lean4:v4.32.1\n")
     (root / ".env").write_text("TOKEN=private\n")
     (root / "credentials.json").write_text('{"token":"private"}\n')
     (root / ".git" / "config").write_text("private")

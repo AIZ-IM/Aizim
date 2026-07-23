@@ -534,7 +534,7 @@ when the configured free-space floor is not met.
 The slice-2 project at `examples/smoke_lean/` is explicitly Mathlib-free: it
 imports only Lean 4 core and the `Std` library shipped in the pinned toolchain,
 has no external Lake packages, does not depend on the external `Batteries`
-package, and pins `leanprover/lean4:v4.32.0`. Slice 2 must not download Mathlib or
+package, and pins `leanprover/lean4:v4.32.1`. Slice 2 must not download Mathlib or
 a local Loogle index, and premise search is not exercised by its acceptance run.
 This keeps the formal bridge, lease, promotion, and synchronization test
 independent of the machine's limited free disk.
@@ -700,7 +700,7 @@ The first implementation plan covers slices 1 and 2. It is complete only when:
    modifying each other's documents.
 7. Virtual tactic trials do not edit physical source. An explicitly accepted
    action changes only the leased document through a version-checked broker CAS.
-8. The smoke project builds with pinned Lean `v4.32.0`, Lean core, and the `Std`
+8. The smoke project builds with pinned Lean `v4.32.1`, Lean core, and the `Std`
    library shipped in that toolchain only; its manifest and Lake state contain no
    Mathlib, `Batteries`, or other external package dependency.
 9. A contribution pinned to a stale epoch pair cannot publish directly. A stale
@@ -742,7 +742,7 @@ The first implementation plan covers slices 1 and 2. It is complete only when:
   multi-attempt trials, promotion, knowledge synchronization, and restart.
 - A deterministic fake agent backend keeps orchestration tests reproducible.
 - Standard CI runs Python tests from `uv.lock`. A separate real-Lean workflow
-  installs `elan` and pinned Lean `v4.32.0`, asserts the smoke Lake manifest has
+  installs `elan` and pinned Lean `v4.32.1`, asserts the smoke Lake manifest has
   no external packages, and runs the toolchain-Std-only LSP/promotion integration
   suite.
   Mathlib-heavy tests are out of scope and later run only in an explicitly
@@ -760,8 +760,8 @@ that the foundation works.
 
 Foundation dependencies:
 
-- [Lean 4 `v4.32.0`](https://github.com/leanprover/lean4/tree/8c9756b28d64dab099da31a4c09229a9e6a2ef35), commit
-  `8c9756b28d64dab099da31a4c09229a9e6a2ef35`.
+- [Lean 4 `v4.32.1`](https://github.com/leanprover/lean4/tree/f054605aea4b840552cca2e725580bffd1e1b704), commit
+  `f054605aea4b840552cca2e725580bffd1e1b704`.
 - [lean-lsp-mcp `0.28.1`](https://github.com/oOo0oOo/lean-lsp-mcp/tree/15766fef24246f2159f55a5f6897126a26916ae8), commit
   `15766fef24246f2159f55a5f6897126a26916ae8`, and
   [leanclient `0.12.1`](https://pypi.org/project/leanclient/0.12.1/) are both

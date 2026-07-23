@@ -21,8 +21,8 @@ open-problem result, novelty, or general autonomous proving capability.
 | Python | 3.12–3.14 |
 | uv | 0.11.31 |
 | Codex CLI | 0.145.0 |
-| Lean | 4.32.0 |
-| Lean toolchain | `leanprover/lean4:v4.32.0` |
+| Lean | 4.32.1 |
+| Lean toolchain | `leanprover/lean4:v4.32.1` |
 | lean-lsp-mcp | 0.28.1 |
 | leanclient | 0.12.1 |
 | MCP | 1.28.1 |
@@ -33,7 +33,7 @@ Install `uv` 0.11.31 with the organization's managed Python tooling, install `el
 then install the two executable pins:
 
 ```sh
-elan toolchain install leanprover/lean4:v4.32.0
+elan toolchain install leanprover/lean4:v4.32.1
 npm install --global @openai/codex@0.145.0
 uv sync --frozen
 ```
@@ -48,7 +48,7 @@ codex --version
 uv run python -c 'import importlib.metadata as m; print(m.version("lean-lsp-mcp"), m.version("leanclient"), m.version("mcp"))'
 ```
 
-Expected pins are `uv 0.11.31`, `codex-cli 0.145.0`, Lean `4.32.0`, and Python package versions
+Expected pins are `uv 0.11.31`, `codex-cli 0.145.0`, Lean `4.32.1`, and Python package versions
 `0.28.1 0.12.1 1.28.1`.
 
 ## Initialize a Lean project

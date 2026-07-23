@@ -82,7 +82,7 @@ def _append_run_evidence(
         "epoch_pair": {"base_epoch": HASHES[1], "knowledge_epoch": start_epoch},
         "event_schema_version": 1,
         "lean_lsp_mcp_version": "0.28.1",
-        "lean_version": "4.32.0",
+        "lean_version": "4.32.1",
         "leanclient_version": "0.12.1",
         "mathlib_version": None,
         "model_backend": "codex",
@@ -116,7 +116,7 @@ def _append_run_evidence(
         "search_permissions": [],
         "started_at": "2026-07-22T00:00:00+00:00",
         "timeouts_seconds": [["alignment_auditor", 60.0], ["proof_worker", 60.0]],
-        "toolchain_version": "leanprover/lean4:v4.32.0",
+        "toolchain_version": "leanprover/lean4:v4.32.1",
     }
     state.append_event(
         AppendEventCommand(

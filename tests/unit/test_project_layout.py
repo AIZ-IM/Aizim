@@ -14,7 +14,7 @@ from aizim.runtime.state_process import StateProcessError, acquire_state_process
 
 def lean_project(root: Path) -> Path:
     root.mkdir()
-    (root / "lean-toolchain").write_text("leanprover/lean4:v4.32.0\n")
+    (root / "lean-toolchain").write_text("leanprover/lean4:v4.32.1\n")
     (root / "lakefile.toml").write_text('name = "fixture"\n')
     return root
 

@@ -145,8 +145,8 @@ def _pins(manifest: fe.JsonObject) -> bool:
         dependencies == {"lean-lsp-mcp": "0.28.1", "leanclient": "0.12.1", "mcp": "1.28.1"}
         and settings is not None
         and settings.get("allowed_imports_hash") == sha256_json(("Std",))
-        and manifest.get("lean_version") == "4.32.0"
-        and manifest.get("toolchain_version") == "leanprover/lean4:v4.32.0"
+        and manifest.get("lean_version") == "4.32.1"
+        and manifest.get("toolchain_version") == "leanprover/lean4:v4.32.1"
         and manifest.get("mathlib_version") is None
         and manifest.get("repl_revision") is None
         and resources is not None

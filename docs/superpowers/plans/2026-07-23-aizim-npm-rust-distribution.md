@@ -17,7 +17,7 @@ the sole formal-truth boundary.
 **Tech Stack:** Node.js 26.5.0 for repository builds with a runtime floor of
 22.14.0, npm 12.0.1, Rust 1.97.1 edition 2024, serde 1.0.229,
 serde_json 1.0.151, sha2 0.11.0, fs2 0.4.3, tempfile 3.27.0, Python
-3.12 for npm runtimes, uv 0.11.31, Codex CLI 0.145.0, Lean 4.32.0,
+3.12 for npm runtimes, uv 0.11.31, Codex CLI 0.145.0, Lean 4.32.1,
 pytest 9.1.1, Ruff 0.15.22, ty 0.0.63, and TypeScript 6.0.2 as the newest
 tsserver-compatible JavaScript diagnostics provider.
 

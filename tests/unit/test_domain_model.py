@@ -231,7 +231,7 @@ def test_knowledge_delta_advances_exactly_one_formal_sequence(epoch_pair: EpochP
 
 
 def test_environment_and_base_epoch_hashes_keep_boundaries_separate(tmp_path: Path) -> None:
-    (tmp_path / "lean-toolchain").write_text("leanprover/lean4:v4.32.0\n")
+    (tmp_path / "lean-toolchain").write_text("leanprover/lean4:v4.32.1\n")
     (tmp_path / "lakefile.toml").write_text('name = "AizimSmoke"\n')
     import_policy = {"Std": "toolchain", "AizimSmoke.Research": "promoted-root"}
 

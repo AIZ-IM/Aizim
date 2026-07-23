@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Final, assert_never
 if TYPE_CHECKING:
     from ..domain.model import EpochPair
 
-LEAN_TOOLCHAIN: Final = "leanprover/lean4:v4.32.0"
+LEAN_TOOLCHAIN: Final = "leanprover/lean4:v4.32.1"
 LEAN_LSP_MCP_VERSION: Final = "0.28.1"
 LEANCLIENT_VERSION: Final = "0.12.1"
 MCP_VERSION: Final = "1.28.1"

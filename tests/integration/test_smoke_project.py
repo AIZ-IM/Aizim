@@ -16,7 +16,7 @@ SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
 
 
 def test_smoke_project_is_exact_and_dependency_free() -> None:
-    assert (SMOKE_ROOT / "lean-toolchain").read_bytes() == (b"leanprover/lean4:v4.32.0\n")
+    assert (SMOKE_ROOT / "lean-toolchain").read_bytes() == (b"leanprover/lean4:v4.32.1\n")
     assert (SMOKE_ROOT / "lakefile.toml").read_bytes() == (
         b'name = "aizimSmoke"\n'
         b'version = "0.1.0"\n'

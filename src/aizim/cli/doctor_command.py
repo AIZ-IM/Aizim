@@ -186,7 +186,7 @@ def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
     return (
         _check("python", python_ready, sys.version.split()[0], "Python 3.12-3.14 is required"),
         _uv(layout),
-        _command("lean", ["lake", "env", "lean", "--version"], "4.32.0", layout.root),
+        _command("lean", ["lake", "env", "lean", "--version"], "4.32.1", layout.root),
         _command("lake", ["lake", "--version"], "Lake version", layout.root),
         DoctorCheck("lean_project", "PASS", str(layout.root)),
         _check("disk_floor", free >= floor, f"{free} bytes free", "free-space floor not met"),

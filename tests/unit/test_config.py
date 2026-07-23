@@ -50,8 +50,8 @@ def run_manifest() -> RunManifest:
         run_policy=RunPolicy(),
         resources=ResourcePolicy(),
         alignment_review=AlignmentReview(),
-        lean_version="4.32.0",
-        toolchain_version="leanprover/lean4:v4.32.0",
+        lean_version="4.32.1",
+        toolchain_version="leanprover/lean4:v4.32.1",
         dependency_versions=(("mcp", "1.28.1"),),
         lean_lsp_mcp_version="0.28.1",
         leanclient_version="0.12.1",
@@ -161,7 +161,7 @@ def test_alignment_review_requires_reviewer_metadata() -> None:
 def test_run_manifest_records_evaluation_boundary() -> None:
     manifest = run_manifest()
 
-    assert manifest.lean_version == "4.32.0"
+    assert manifest.lean_version == "4.32.1"
     assert manifest.model_identifier == "gpt-5"
 
 
