@@ -1,0 +1,26 @@
+{
+  "name": "@aiz.im/aizim-darwin-arm64",
+  "version": "0.1.0",
+  "description": "Native Aizim launcher and uv runtime for macOS arm64",
+  "license": "MIT",
+  "author": "Frankie Wang",
+  "main": "index.cjs",
+  "files": [
+    "index.cjs",
+    "bin/",
+    "manifest/",
+    "vendor/",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

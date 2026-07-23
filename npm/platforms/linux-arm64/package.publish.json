@@ -1,0 +1,29 @@
+{
+  "name": "@aiz.im/aizim-linux-arm64",
+  "version": "0.1.0",
+  "description": "Native Aizim launcher and uv runtime for glibc Linux arm64",
+  "license": "MIT",
+  "author": "Frankie Wang",
+  "main": "index.cjs",
+  "files": [
+    "index.cjs",
+    "bin/",
+    "manifest/",
+    "vendor/",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

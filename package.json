@@ -1,0 +1,55 @@
+{
+  "name": "@aiz.im/aizim",
+  "version": "0.1.0",
+  "description": "Formal-native autonomous mathematical research with Lean 4",
+  "license": "MIT",
+  "author": "Frankie Wang",
+  "type": "module",
+  "bin": {
+    "aizim": "bin/aizim.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "manifest/",
+    "vendor/",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "packageManager": "npm@12.0.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIZ-IM/Aizim.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "workspaces": [
+    "npm/platforms/*"
+  ],
+  "scripts": {
+    "build": "node scripts/npm/build.mjs",
+    "test": "node scripts/npm/test.mjs",
+    "pack": "node scripts/npm/pack.mjs",
+    "check": "node scripts/npm/check.mjs",
+    "test:node": "node --test tests/npm/*.test.mjs",
+    "test:rust": "cargo test --workspace --locked",
+    "test:python": "node scripts/npm/test-python.mjs"
+  },
+  "dependencies": {
+    "@openai/codex": "0.145.0"
+  },
+  "devDependencies": {
+    "typescript": "6.0.2"
+  },
+  "optionalDependencies": {
+    "@aiz.im/aizim-darwin-arm64": "0.1.0",
+    "@aiz.im/aizim-darwin-x64": "0.1.0",
+    "@aiz.im/aizim-linux-arm64": "0.1.0",
+    "@aiz.im/aizim-linux-x64": "0.1.0"
+  }
+}

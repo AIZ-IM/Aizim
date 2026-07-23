@@ -1,0 +1,32 @@
+[package]
+name = "aizim-launcher"
+description = "Verified native bootstrap launcher for Aizim npm packages"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["aizim", "lean", "mathematics", "npm"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "aizim_launcher"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aizim-launcher"
+path = "src/main.rs"
+
+[dependencies]
+fs2.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

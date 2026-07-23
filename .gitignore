@@ -9,8 +9,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .ty/
-build/
-dist/
+/build/
+/dist/
+/target/
 
 .DS_Store
 .env
