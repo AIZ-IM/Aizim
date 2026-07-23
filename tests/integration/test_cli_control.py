@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import asyncio  # noqa: ANYIO_OK -- drives the asyncio state RPC client
 import hashlib
 import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
+
+from aizim.domain.serialization import JsonValue
+from aizim.state.operations import RpcRequest, RpcSuccess
+from aizim.state.rpc import rpc_call
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal_lean"
 
@@ -25,6 +32,31 @@ def initialized_project(tmp_path: Path) -> Path:
     root = Path(shutil.copytree(FIXTURE, tmp_path / "lean-project"))
     assert run_cli("init", str(root)).returncode == 0
     return root
+
+
+def wait_for(path: Path, process: subprocess.Popen[str]) -> None:
+    deadline = time.monotonic() + 5
+    while not path.exists() and process.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert path.exists() and process.poll() is None
+
+
+def rpc_projection(
+    socket_path: Path, name: str, entity_id: str
+) -> dict[str, JsonValue]:
+    response = asyncio.run(
+        rpc_call(
+            socket_path,
+            RpcRequest(
+                operation="query_projection",
+                params={"projection_name": name, "entity_id": entity_id},
+                session_id=None,
+            ),
+        )
+    )
+    assert isinstance(response, RpcSuccess)
+    assert type(response.result) is dict
+    return response.result
 
 
 @pytest.mark.parametrize(
@@ -146,6 +178,78 @@ def test_controller_assigns_versioned_tasks_to_persistent_workers(tmp_path: Path
         }
     ]
     assert len(document["workers"][0]["assignment"]["assignment_id"]) == 64
+
+
+def test_live_owner_accepts_public_control_commands_and_remains_owner() -> None:
+    # Given
+    with TemporaryDirectory(prefix="aizim-control-", dir="/tmp") as directory:
+        root = initialized_project(Path(directory))
+        command = [
+            sys.executable,
+            "-m",
+            "aizim",
+            "state",
+            "serve",
+            "--project",
+            str(root),
+        ]
+        owner = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        socket_path = root / ".aizim" / "run" / "state.sock"
+        pid_path = root / ".aizim" / "run" / "state.pid"
+        try:
+            wait_for(socket_path, owner)
+            owner_pid = pid_path.read_text().strip()
+
+            # When
+            configured = run_cli(
+                "controller",
+                "configure",
+                "--project",
+                str(root),
+                "--provider",
+                "codex",
+                "--model",
+                "gpt-5.6-sol",
+            )
+            registered = run_cli(
+                "worker",
+                "register",
+                "--project",
+                str(root),
+                "--worker-id",
+                "worker-1",
+                "--role",
+                "formalizer",
+            )
+            assigned = run_cli(
+                "worker",
+                "assign",
+                "--project",
+                str(root),
+                "--worker-id",
+                "worker-1",
+                "--task",
+                "prove the fixture",
+            )
+
+            # Then
+            assert configured.returncode == registered.returncode == assigned.returncode == 0
+            assert owner.poll() is None
+            assert pid_path.read_text().strip() == owner_pid
+            controller = rpc_projection(socket_path, "controller", "primary")
+            roster = rpc_projection(socket_path, "worker_roster", "worker-1")
+            assignment = rpc_projection(socket_path, "worker_assignments", "worker-1")
+            assert controller["version"] == 1
+            assert roster["version"] == 1
+            assert assignment["version"] == 1
+        finally:
+            owner.terminate()
+            owner.wait(timeout=5)
 
 
 def test_worker_control_rejects_duplicate_and_unregistered_assignment(

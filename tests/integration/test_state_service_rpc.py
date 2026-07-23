@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio  # noqa: ANYIO_OK -- exercises the asyncio Unix-server lifecycle
 import socket
 import stat
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -40,10 +40,20 @@ def project_root() -> Iterator[Path]:
         yield Path(directory)
 
 
-def _service(project_root: Path, session: str = "service-session") -> StateService:
+def _ignore_control_commit(_operation: str) -> None:
+    return
+
+
+def _service(
+    project_root: Path,
+    session: str = "service-session",
+    control_committed: Callable[[str], None] = _ignore_control_commit,
+) -> StateService:
     config = StateServiceConfig(project_root=project_root, service_session=session)
     dependencies = StateDependencies(
-        clock=lambda: datetime(2026, 7, 21, 10, tzinfo=UTC), event_ids=MonotoneIds()
+        clock=lambda: datetime(2026, 7, 21, 10, tzinfo=UTC),
+        event_ids=MonotoneIds(),
+        control_committed=control_committed,
     )
     return StateService(config, dependencies)
 
@@ -224,6 +234,60 @@ async def test_append_requires_socket_bound_service_session(project_root: Path) 
             "event_id": "01J00000000000000000000000",
             "sequence": 1,
         }
+
+
+@pytest.mark.asyncio
+async def test_public_control_mutations_do_not_grant_generic_append_authority(
+    project_root: Path,
+) -> None:
+    # Given
+    committed: list[str] = []
+    async with _service(project_root, control_committed=committed.append) as service:
+        requests = (
+            RpcRequest(
+                operation="control.configure_controller",
+                params={"provider": "codex", "model": "gpt-5.6-sol"},
+                session_id=None,
+            ),
+            RpcRequest(
+                operation="control.register_worker",
+                params={"worker_id": "worker-1", "role": "formalizer"},
+                session_id=None,
+            ),
+            RpcRequest(
+                operation="control.assign_task",
+                params={"worker_id": "worker-1", "task": "prove the fixture"},
+                session_id=None,
+            ),
+        )
+
+        # When
+        configured, registered, assigned = [
+            await rpc_call(service.socket_path, request) for request in requests
+        ]
+        denied = await rpc_call(
+            service.socket_path,
+            RpcRequest(
+                operation="append_event",
+                params={
+                    "event_type": "RunCreated",
+                    "actor": "supervisor",
+                    "run_id": "run-1",
+                    "causation_id": None,
+                    "payload": {},
+                },
+                session_id=None,
+            ),
+        )
+
+        # Then
+        assert configured == RpcSuccess({"version": 1})
+        assert registered == RpcSuccess({"version": 1})
+        assert assigned == RpcSuccess({"version": 1})
+        assert service.query_projection("controller", "primary") is not None
+        assert isinstance(denied, RpcFailure)
+        assert denied.error.code == "NOT_AUTHORIZED"
+        assert committed == [request.operation for request in requests]
 
 
 @pytest.mark.asyncio

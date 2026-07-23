@@ -220,6 +220,59 @@ def _replay(target: StateOperations, request: RpcRequest, trusted: bool) -> RpcR
     return RpcSuccess({"logical_digest": result.logical_digest, "matched": result.matched})
 
 
+def _control(target: StateOperations, request: RpcRequest, trusted: bool) -> RpcResponse:
+    from aizim.domain import AgentRole
+
+    from .control_operations import (
+        ControlOperationError,
+        assign_task,
+        configure_controller,
+        register_worker,
+    )
+
+    del trusted
+    try:
+        match request.operation:
+            case "control.configure_controller":
+                _keys(request.params, frozenset({"provider"}), frozenset({"model"}))
+                version = configure_controller(
+                    target,
+                    _text(request.params, "provider"),
+                    _optional_text(request.params, "model"),
+                )
+            case "control.register_worker":
+                _keys(request.params, frozenset({"worker_id", "role"}))
+                role_text = _text(request.params, "role")
+                try:
+                    role = AgentRole(role_text)
+                except ValueError:
+                    raise ControlOperationError("WORKER_ROLE_INVALID") from None
+                version = register_worker(target, _text(request.params, "worker_id"), role)
+            case "control.assign_task":
+                _keys(request.params, frozenset({"worker_id", "task"}))
+                version = assign_task(
+                    target,
+                    _text(request.params, "worker_id"),
+                    _text(request.params, "task"),
+                )
+            case _:
+                raise RpcProtocolError("INVALID_PARAMS")
+    except ControlOperationError as error:
+        messages = {
+            "CONTROLLER_NOT_CONFIGURED": "controller is not configured",
+            "CONTROLLER_PROVIDER_INVALID": "controller provider is invalid",
+            "CONTROLLER_MODEL_INVALID": "controller model is invalid",
+            "WORKER_ALREADY_REGISTERED": "worker is already registered",
+            "WORKER_NOT_REGISTERED": "worker is not registered",
+            "WORKER_ROLE_INVALID": "worker role is invalid",
+            "WORKER_ID_INVALID": "worker id is invalid",
+            "WORKER_TASK_INVALID": "worker task is invalid",
+            "CONTROL_STATE_INVALID": "control state is invalid",
+        }
+        return rpc_failure(error.code, messages.get(error.code, "control request failed"))
+    return RpcSuccess({"version": version})
+
+
 type OperationHandler = Callable[[StateOperations, RpcRequest, bool], RpcResponse]
 _HANDLERS: Final[dict[str, OperationHandler]] = {
     "health": _health,
@@ -230,6 +283,13 @@ _HANDLERS: Final[dict[str, OperationHandler]] = {
     "logical_digest": _digest,
     "replay_verify": _replay,
 }
+_HANDLERS.update(
+    {
+        "control.configure_controller": _control,
+        "control.register_worker": _control,
+        "control.assign_task": _control,
+    }
+)
 
 
 def dispatch_operation(

@@ -22,13 +22,7 @@ from .events import (
 from .operations import AppendEventCommand, dispatch_operation
 from .projections import ProjectionRecord, ProjectionReducer, apply_event
 from .promotion_state import PromotionStateMethods, PromotionStore
-from .rpc import (
-    Dispatch,
-    RpcRequest,
-    RpcResponse,
-    RpcServer,
-    start_rpc_server,
-)
+from .rpc import RpcRequest, RpcResponse, RpcServer, RpcSuccess, start_rpc_server
 from .service_ownership import (
     StateOwnership,
     StateOwnershipError,
@@ -68,6 +62,7 @@ class StateDependencies:
     reducer: ProjectionReducer = apply_event
     before_initialization_commit: InitializationCheckpoint = continue_initialization
     human_approval: HumanApproval = _deny_human_approval
+    control_committed: Callable[[str], None] = field(default=lambda _operation: None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,11 +133,10 @@ class StateService(DocumentStateMethods, PromotionStateMethods):
     async def start(self) -> None:
         if self._closed or self._rpc is not None:
             raise StateServiceLifecycleError("state service cannot be started in its current state")
-        dispatch: Dispatch = self._dispatch
         started = False
         try:
             self._rpc = await start_rpc_server(
-                self.socket_path, self._config.service_session, dispatch
+                self.socket_path, self._config.service_session, self._dispatch
             )
             started = True
         finally:
@@ -289,4 +283,7 @@ class StateService(DocumentStateMethods, PromotionStateMethods):
         return self._store.replay_verify()
 
     def _dispatch(self, request: RpcRequest, trusted: bool) -> RpcResponse:
-        return dispatch_operation(self, request, trusted)
+        response = dispatch_operation(self, request, trusted)
+        if request.operation.startswith("control.") and isinstance(response, RpcSuccess):
+            self._dependencies.control_committed(request.operation)
+        return response

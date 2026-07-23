@@ -10,16 +10,16 @@ from aizim.domain.serialization import JsonValue
 from aizim.orchestration.control_plane import (
     ControllerProvider,
     ControlPlaneError,
-    assign_task,
-    configure_controller,
-    register_worker,
 )
 from aizim.runtime.layout import LayoutError, ProjectLayout
-from aizim.state import StateService, StateServiceConfig
 from aizim.state.service import StateServiceLifecycleError
 
 from .control_projection import controller_document, worker_document
-from .state_client import StateClientError, load_projections
+from .state_client import (
+    StateClientError,
+    call_control_operation,
+    load_projections,
+)
 
 _MESSAGES: Final = {
     "CONTROLLER_NOT_CONFIGURED": "controller is not configured",
@@ -43,8 +43,11 @@ def run_controller_configure(
     if layout is None:
         return 2
     try:
-        with StateService(StateServiceConfig(layout.root, "controller-configure")) as state:
-            configure_controller(state, provider, model)
+        call_control_operation(
+            layout,
+            "control.configure_controller",
+            {"provider": provider.value, "model": model},
+        )
     except ControlPlaneError as error:
         return _domain_failure("controller", error)
     except StateServiceLifecycleError:
@@ -81,8 +84,11 @@ def run_worker_register(project: Path, worker_id: str, role: AgentRole) -> int:
     if layout is None:
         return 2
     try:
-        with StateService(StateServiceConfig(layout.root, "worker-register")) as state:
-            register_worker(state, worker_id, role)
+        call_control_operation(
+            layout,
+            "control.register_worker",
+            {"worker_id": worker_id, "role": role.value},
+        )
     except ControlPlaneError as error:
         return _domain_failure("worker", error)
     except StateServiceLifecycleError:
@@ -98,8 +104,11 @@ def run_worker_assign(project: Path, worker_id: str, task: str) -> int:
     if layout is None:
         return 2
     try:
-        with StateService(StateServiceConfig(layout.root, "worker-assign")) as state:
-            task_version = assign_task(state, worker_id, task)
+        task_version = call_control_operation(
+            layout,
+            "control.assign_task",
+            {"worker_id": worker_id, "task": task},
+        )
     except ControlPlaneError as error:
         return _domain_failure("worker", error)
     except StateServiceLifecycleError:
@@ -151,7 +160,7 @@ def _layout(project: Path, command: str) -> ProjectLayout | None:
 
 
 def _domain_failure(command: str, error: ControlPlaneError) -> int:
-    message = _MESSAGES.get(error.reason, "control request failed")
+    message = _MESSAGES.get(error.code, "control request failed")
     print(f"aizim {command}: {message}", file=sys.stderr)
     return 4
 
