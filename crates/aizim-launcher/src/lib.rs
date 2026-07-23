@@ -2,6 +2,8 @@
 
 /// Launcher-owned argument parsing.
 pub mod args;
+/// Versioned cache lifecycle and atomic runtime promotion.
+pub mod cache;
 /// Stable, redacted launcher failures.
 pub mod error;
 /// Streaming digest and package-root integrity checks.
