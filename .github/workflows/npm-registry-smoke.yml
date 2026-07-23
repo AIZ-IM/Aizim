@@ -1,0 +1,109 @@
+name: npm registry smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact public Aizim version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Registry smoke ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-15
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-x64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      AIZIM_REGISTRY_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Check out dispatched repository ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Install Lean without caches
+        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9 # v1.5.0
+        with:
+          auto-config: "false"
+          build: "false"
+          test: "false"
+          use-github-cache: "false"
+          use-mathlib-cache: "false"
+          lake-package-directory: examples/smoke_lean
+      - name: Install Linux sandbox dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+      - name: Install latest pinned npm
+        run: |
+          npm install --global npm@12.0.1
+          test "$(node --version)" = "v26.5.0"
+          test "$(npm --version)" = "12.0.1"
+      - name: Verify public registry package
+        run: |
+          node scripts/npm/registry-smoke.mjs \
+            --version "$AIZIM_REGISTRY_VERSION" \
+            --output "$RUNNER_TEMP/registry-smoke-${{ matrix.target }}.json"
+      - name: Upload registry smoke evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aizim-registry-smoke-${{ matrix.target }}-${{ inputs.version }}
+          path: ${{ runner.temp }}/registry-smoke-${{ matrix.target }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  aggregate:
+    name: Aggregate registry smoke
+    needs: smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AIZIM_REGISTRY_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Check out dispatched repository ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Download registry smoke evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: aizim-registry-smoke-*-${{ inputs.version }}
+          path: ${{ runner.temp }}/aizim-registry-smoke
+          merge-multiple: true
+      - name: Aggregate registry smoke evidence
+        run: |
+          node scripts/npm/registry-smoke.mjs \
+            --aggregate \
+            --directory "$RUNNER_TEMP/aizim-registry-smoke" \
+            --version "$AIZIM_REGISTRY_VERSION" \
+            --output "$RUNNER_TEMP/aizim-registry-smoke/aggregate.json"
+      - name: Upload registry smoke aggregate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aizim-registry-smoke-aggregate-${{ inputs.version }}
+          path: ${{ runner.temp }}/aizim-registry-smoke/aggregate.json
+          if-no-files-found: error
+          retention-days: 14

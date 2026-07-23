@@ -36,6 +36,10 @@
     "test": "node scripts/npm/test.mjs",
     "pack": "node scripts/npm/pack.mjs",
     "check": "node scripts/npm/check.mjs",
+    "release:verify": "node scripts/npm/verify-release-bundle.mjs",
+    "registry:verify": "node scripts/npm/registry-verify.mjs",
+    "registry:smoke": "node scripts/npm/registry-smoke.mjs",
+    "release:record": "node scripts/npm/write-release-record.mjs",
     "test:node": "node --test tests/npm/*.test.mjs",
     "test:rust": "cargo test --workspace --locked",
     "test:python": "node scripts/npm/test-python.mjs"

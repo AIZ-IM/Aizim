@@ -29,8 +29,11 @@ open-problem result, novelty, or general autonomous proving capability.
 | Free disk floor | 2,147,483,648 bytes (2 GiB) |
 | Lake imports | `Std` only; no Mathlib, Batteries, REPL, or Loogle index |
 
-Install `uv` 0.11.31 with the organization's managed Python tooling, install `elan` and Node.js,
-then install the two executable pins:
+These global `uv` and Codex prerequisites apply only to the uv-native source workflow in this
+runbook. The npm distribution carries uv and resolves Codex from its package-local dependency; it
+does not use global Python, uv, or Codex. For uv-native development, install `uv` 0.11.31 with the
+organization's managed Python tooling, install `elan` and Node.js, then install the executable
+pins:
 
 ```sh
 elan toolchain install leanprover/lean4:v4.32.1

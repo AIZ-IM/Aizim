@@ -12,7 +12,33 @@ authorized capabilities and materialized worker views.
 Slices 1–2 support macOS first. Linux is a future interface adapter and is not an
 acceptance platform for these slices.
 
-## Quick start
+## Install from npm
+
+The public npm distribution supports macOS and glibc-based Linux on arm64 and x64. It requires
+Node.js 22.14.0 or newer and an external Lean 4 installation managed by `elan`.
+
+Install the command globally:
+
+```sh
+npm install --global @aiz.im/aizim
+aizim --version
+```
+
+Or install it in one project:
+
+```sh
+npm install --save-dev @aiz.im/aizim
+npx --no-install aizim --version
+```
+
+The first command may download and prepare a managed CPython 3.12 runtime in the Aizim cache.
+The npm package uses its own Codex CLI 0.145.0 and bundled uv 0.11.31. It never depends on a
+global Python, uv, or Codex installation. Removing the npm package does not remove Lean projects
+or Aizim runtime caches.
+
+## Build from source
+
+For Python development:
 
 ```sh
 uv sync --frozen
@@ -20,6 +46,21 @@ uv run aizim --version
 uv run python -m aizim --version
 uv run pytest tests/unit/test_package.py -q
 ```
+
+For the complete current-host npm distribution, including the Rust launcher, Python wheel,
+bundled uv, and package-local Codex:
+
+```sh
+npm install --ignore-scripts
+npm run build
+npm test
+npm run pack
+```
+
+This source build requires the exact toolchain versions recorded in `.node-version`,
+`rust-toolchain.toml`, `package.json`, `pyproject.toml`, and `lean-toolchain`. See the
+[npm distribution runbook](docs/operations/npm-distribution.md) for the full four-platform
+qualification and release-readiness procedure.
 
 Slices 1–2 are engineering smoke tests only. They make no open-problem, novelty, or
 general proof-capability claim.

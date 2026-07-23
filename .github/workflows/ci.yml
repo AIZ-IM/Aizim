@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,15 +14,16 @@ concurrency:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
-          version: "0.11.29"
+          version: "0.11.31"
+          enable-cache: false
       - name: Install locked dependencies
         run: uv sync --frozen
       - name: Lint
@@ -31,5 +33,200 @@ jobs:
       - name: Test platform-independent surface
         run: >-
           uv run pytest
-          -m "not lean_integration and not macos_sandbox and not manual_real_codex"
+          -m "not lean_integration and not linux_sandbox and not macos_sandbox and not manual_real_codex"
           -q
+
+  native:
+    name: Native ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-15
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-x64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Install Lean without caches
+        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9 # v1.5.0
+        with:
+          auto-config: "false"
+          build: "false"
+          test: "false"
+          use-github-cache: "false"
+          use-mathlib-cache: "false"
+          lake-package-directory: examples/smoke_lean
+      - name: Install Linux sandbox dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+      - name: Install latest pinned npm
+        run: |
+          npm install --global npm@12.0.1
+          test "$(npm --version)" = "12.0.1"
+      - name: Install source dependencies without lock drift
+        run: |
+          npm install
+          git diff --exit-code -- package-lock.json
+          node --test \
+            tests/npm/package-contract.test.mjs \
+            tests/npm/package-contents.test.mjs
+      - name: Build native distribution
+        run: npm run build
+      - name: Test native distribution
+        run: npm test
+      - name: Pack native distribution
+        run: npm run pack
+      - name: Write native evidence
+        run: |
+          node scripts/npm/write-ci-evidence.mjs \
+            --target "${{ matrix.target }}" \
+            --output "$GITHUB_WORKSPACE/dist/npm/native-evidence-${{ matrix.target }}.json"
+      - name: Upload native evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aizim-native-${{ matrix.target }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+          path: |
+            dist/npm/*.tgz
+            dist/npm/pack-summary.json
+            dist/npm/native-evidence-${{ matrix.target }}.json
+            build/npm/build-summary.json
+            build/npm/install-smoke-evidence.json
+            build/npm/test-summary.json
+            build/npm/meta/manifest/distribution.json
+            build/npm/${{ matrix.target }}/manifest/platform.json
+
+  minimum-node:
+    name: Minimum Node.js 22.14.0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install build Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Install Lean without caches
+        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9 # v1.5.0
+        with:
+          auto-config: "false"
+          build: "false"
+          test: "false"
+          use-github-cache: "false"
+          use-mathlib-cache: "false"
+          lake-package-directory: examples/smoke_lean
+      - name: Install Linux sandbox dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+      - name: Install latest pinned npm
+        run: |
+          npm install --global npm@12.0.1
+          test "$(npm --version)" = "12.0.1"
+      - name: Install and build from source
+        run: |
+          npm install
+          git diff --exit-code -- package-lock.json
+          node --test \
+            tests/npm/package-contract.test.mjs \
+            tests/npm/package-contents.test.mjs
+          npm run build
+          npm run pack
+      - name: Install minimum Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22.14.0"
+      - name: Install current npm on minimum Node.js
+        run: |
+          npm install --global npm@12.0.1
+          test "$(node --version)" = "v22.14.0"
+          test "$(npm --version)" = "12.0.1"
+      - name: Test minimum Node.js consumer
+        run: |
+          node --test \
+            tests/npm/package-contract.test.mjs \
+            tests/npm/platform-resolution.test.mjs \
+            tests/npm/codex-resolution.test.mjs \
+            tests/npm/assets.test.mjs \
+            tests/npm/launch.test.mjs
+          node scripts/npm/install-smoke.mjs
+          node -e 'const x=require("./build/npm/install-smoke-evidence.json"); if(x.node_version!=="v22.14.0") process.exit(1)'
+      - name: Write minimum Node.js evidence
+        run: |
+          node scripts/npm/write-ci-evidence.mjs \
+            --target linux-x64 \
+            --minimum-node-version v22.14.0 \
+            --output "$GITHUB_WORKSPACE/dist/npm/minimum-node-evidence.json"
+      - name: Upload minimum Node.js evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aizim-minimum-node-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+          path: |
+            dist/npm/*.tgz
+            dist/npm/pack-summary.json
+            dist/npm/minimum-node-evidence.json
+            build/npm/build-summary.json
+            build/npm/install-smoke-evidence.json
+            build/npm/meta/manifest/distribution.json
+            build/npm/linux-x64/manifest/platform.json
+
+  aggregate:
+    name: Aggregate native evidence
+    needs:
+      - native
+      - minimum-node
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Download native evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: aizim-native-*-${{ github.sha }}
+          path: ${{ runner.temp }}/aizim-native-evidence
+          merge-multiple: false
+      - name: Download minimum Node.js evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: aizim-minimum-node-${{ github.sha }}
+          path: ${{ runner.temp }}/aizim-native-evidence/aizim-minimum-node-${{ github.sha }}
+      - name: Verify aggregate evidence
+        run: |
+          node scripts/npm/verify-ci-evidence.mjs \
+            --directory "$RUNNER_TEMP/aizim-native-evidence" \
+            --commit "$GITHUB_SHA" \
+            --version 0.1.0 \
+            --minimum-node-version v22.14.0 \
+            --output "$RUNNER_TEMP/aizim-native-evidence/aggregate.json"
+      - name: Upload aggregate evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aizim-native-aggregate-${{ github.sha }}
+          path: ${{ runner.temp }}/aizim-native-evidence/aggregate.json
+          if-no-files-found: error
+          retention-days: 14

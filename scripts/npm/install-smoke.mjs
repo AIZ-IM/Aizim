@@ -165,6 +165,38 @@ async function requireSuccess(program, arguments_, options, label) {
   return result;
 }
 
+export function doctorDocument(result, label) {
+  let document;
+  try {
+    document = JSON.parse(result.stdout);
+  } catch {
+    throw new Error(`${label} returned invalid JSON`);
+  }
+  const failures = document.checks
+    ?.filter?.((check) => check.status === "FAIL")
+    .map((check) => check.id);
+  if (
+    result.code !== 0 ||
+    result.signal !== null ||
+    document.ready !== true
+  ) {
+    throw new Error(
+      `${label} failed checks (${failures?.join(",") || "unknown"})`,
+    );
+  }
+  return document;
+}
+
+function requireCodexDoctor(document, label) {
+  const codex = document.checks?.find?.((check) => check.id === "codex");
+  if (
+    codex?.status !== "PASS" ||
+    !codex.detail.includes("0.145.0")
+  ) {
+    throw new Error(`${label} did not resolve Codex 0.145.0`);
+  }
+}
+
 async function writeConsumer(path) {
   await mkdir(path, { mode: 0o700, recursive: true });
   await writeFile(
@@ -377,6 +409,15 @@ export async function installSmoke() {
     if (!doctor.stdout.split(/\r?\n/u).includes("READY")) {
       throw new Error("npm doctor did not report READY");
     }
+    const localDoctorResult = await execute(
+      layout.localBinary,
+      ["doctor", "--project", layout.project, "--json"],
+      { cwd: layout.local, env: environment },
+    );
+    requireCodexDoctor(
+      doctorDocument(localDoctorResult, "npm doctor"),
+      "npm doctor",
+    );
     const gate = await requireSuccess(
       layout.localBinary,
       [
@@ -474,6 +515,15 @@ export async function installSmoke() {
     if (globalVersion.stdout.trim() !== "aizim 0.1.0") {
       throw new Error("global version mismatch");
     }
+    const globalDoctorResult = await execute(
+      layout.globalBinary,
+      ["doctor", "--project", layout.project, "--json"],
+      { cwd: layout.global, env: environment },
+    );
+    requireCodexDoctor(
+      doctorDocument(globalDoctorResult, "global npm doctor"),
+      "global npm doctor",
+    );
 
     command = npm(
       "install",
@@ -549,6 +599,8 @@ export async function installSmoke() {
         python_312_bootstrap: true,
         cache_reused: true,
         uninstall_preserved_cache: true,
+        local_codex_01450: true,
+        global_codex_01450: true,
         ready: true,
         security_gate: true,
         aizim_run: true,

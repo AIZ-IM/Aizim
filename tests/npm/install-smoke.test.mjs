@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   consumerEnvironment,
   createSmokeLayout,
+  doctorDocument,
   installArguments,
   validatePrivateRoot,
 } from "../../scripts/npm/install-smoke.mjs";
@@ -100,4 +101,23 @@ test("consumer environment is minimal and removes injection variables", () => {
     npm_config_prefix: layout.npmPrefix,
     PATH: "/node/bin:/lean/bin:/usr/bin:/bin",
   });
+});
+
+test("doctor failures name the exact failed checks", () => {
+  const result = {
+    code: 3,
+    signal: null,
+    stdout: JSON.stringify({
+      ready: false,
+      checks: [
+        { id: "disk_floor", status: "FAIL" },
+        { id: "codex", status: "PASS" },
+      ],
+    }),
+  };
+
+  assert.throws(
+    () => doctorDocument(result, "global npm doctor"),
+    /global npm doctor failed checks \(disk_floor\)/u,
+  );
 });

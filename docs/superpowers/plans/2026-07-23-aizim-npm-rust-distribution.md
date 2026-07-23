@@ -2759,7 +2759,8 @@ this shape:
     "python_312_bootstrap": true,
     "cache_reused": true,
     "uninstall_preserved_cache": true,
-    "local_codex_01446": true,
+    "local_codex_01450": true,
+    "global_codex_01450": true,
     "ready": true,
     "security_gate": true,
     "aizim_run": true,
@@ -2855,9 +2856,9 @@ Extend `.github/workflows/ci.yml` with this exact matrix:
 Set `fail-fast: false` and a 45-minute timeout. Every native job:
 
 1. checks out with
-   `actions/checkout@11d5960a326750d5838078e36cf38b85af677262`;
+   `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1`;
 2. installs Node from `.node-version` with
-   `actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020`;
+   `actions/setup-node@820762786026740c76f36085b0efc47a31fe5020`;
 3. installs the pinned Lean toolchain with
    `leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9`,
    both GitHub and Mathlib caches disabled;
@@ -2867,7 +2868,7 @@ Set `fail-fast: false` and a 45-minute timeout. Every native job:
 5. runs `npm run build`, `npm test`, and `npm run pack`;
 6. writes `dist/npm/native-evidence-<target>.json`;
 7. uploads the two tarballs, manifests, summaries, and native evidence with
-   `actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02`.
+   `actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`.
 
 The artifact name is
 `aizim-native-<target>-${{ github.sha }}`. Use
@@ -2876,7 +2877,7 @@ uv, Python, or build caches in these jobs.
 
 The aggregate job runs on `ubuntu-24.04`, depends on all native jobs,
 downloads artifacts with
-`actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093`,
+`actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c`,
 and runs:
 
 ```bash
