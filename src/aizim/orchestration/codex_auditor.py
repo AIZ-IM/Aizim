@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import secrets
-import sys
 import time
 from datetime import timedelta
 from hashlib import sha256
@@ -9,7 +8,7 @@ from pathlib import Path
 
 from aizim.agents import AgentBackend, AgentRequest
 from aizim.config.model import ALIGNMENT_AUDITOR_TIMEOUT_SECONDS
-from aizim.domain import AgentRole, canonical_json, sha256_bytes
+from aizim.domain import AgentRole, canonical_json
 from aizim.domain.serialization import JsonValue
 from aizim.gateway import (
     BrokerRegistration,
@@ -20,6 +19,7 @@ from aizim.gateway import (
     GatewayLimits,
     GatewaySessionBroker,
     GatewayTool,
+    current_process_image_sha256,
 )
 from aizim.gateway.socket_alias import ProjectSocketAlias
 from aizim.state import AppendEventCommand, StateService
@@ -71,7 +71,7 @@ async def audit_alignment(
                 run_id,
                 "alignment-auditor",
                 AgentRole.FORMALIZER,
-                sha256_bytes(Path(sys.executable).read_bytes()),
+                current_process_image_sha256(),
                 expires_at,
                 token,
                 operations=(GatewayTool.ALIGNMENT_SUBMIT,),

@@ -29,7 +29,7 @@ const installChecks = {
   local_install: true,
   global_install: true,
   npx_no_install: true,
-  python_312_bootstrap: true,
+  python_314_bootstrap: true,
   cache_reused: true,
   uninstall_preserved_cache: true,
   local_codex_01450: true,
@@ -123,7 +123,7 @@ async function evidenceFixture() {
     commit_sha: commit,
     version,
     target: "linux-x64",
-    minimum_node_version: "v22.14.0",
+    minimum_node_version: "v22.22.2",
     dirty_tracked_inputs: false,
     restored_build_cache: false,
     runner: targetRecords["linux-x64"],
@@ -148,7 +148,7 @@ async function verify(fixture) {
     directory: fixture.root,
     commit,
     version,
-    minimumNodeVersion: "v22.14.0",
+    minimumNodeVersion: "v22.22.2",
     output: fixture.output,
   });
 }
@@ -293,6 +293,8 @@ test("CI pins current actions and qualifies the exact four native runners withou
     "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
     "fail-fast: false",
     "timeout-minutes: 45",
+    "kernel.unprivileged_userns_clone=1",
+    "kernel.apparmor_restrict_unprivileged_userns=0",
   ]) {
     assert.ok(workflow.includes(value), `missing CI contract: ${value}`);
   }
@@ -346,7 +348,7 @@ test("aggregates exactly four native targets and the minimum Node runtime", asyn
     assert.deepEqual(aggregate.targets, Object.keys(targetRecords).sort());
     assert.equal(aggregate.commit_sha, commit);
     assert.equal(aggregate.version, version);
-    assert.equal(aggregate.minimum_node_version, "v22.14.0");
+    assert.equal(aggregate.minimum_node_version, "v22.22.2");
     assert.equal(aggregate.platforms.length, 4);
     assert.equal(
       aggregate.meta.sha256,

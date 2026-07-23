@@ -45,7 +45,7 @@ export const INSTALL_CHECK_NAMES = Object.freeze([
   "local_install",
   "global_install",
   "npx_no_install",
-  "python_312_bootstrap",
+  "python_314_bootstrap",
   "cache_reused",
   "uninstall_preserved_cache",
   "local_codex_01450",

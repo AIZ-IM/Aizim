@@ -79,11 +79,13 @@ jobs:
           use-github-cache: "false"
           use-mathlib-cache: "false"
           lake-package-directory: examples/smoke_lean
-      - name: Install Linux sandbox dependency
+      - name: Enable Linux sandbox namespaces
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Install latest pinned npm
         run: |
           npm install --global npm@12.0.1
@@ -124,7 +126,7 @@ jobs:
             build/npm/${{ matrix.target }}/manifest/platform.json
 
   minimum-node:
-    name: Minimum Node.js 22.14.0
+    name: Minimum Node.js 22.22.2
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -149,10 +151,12 @@ jobs:
           use-github-cache: "false"
           use-mathlib-cache: "false"
           lake-package-directory: examples/smoke_lean
-      - name: Install Linux sandbox dependency
+      - name: Enable Linux sandbox namespaces
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Install latest pinned npm
         run: |
           npm install --global npm@12.0.1
@@ -169,12 +173,12 @@ jobs:
       - name: Install minimum Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22.14.0"
+          node-version: "22.22.2"
           package-manager-cache: false
       - name: Install current npm on minimum Node.js
         run: |
           npm install --global npm@12.0.1
-          test "$(node --version)" = "v22.14.0"
+          test "$(node --version)" = "v22.22.2"
           test "$(npm --version)" = "12.0.1"
       - name: Test minimum Node.js consumer
         run: |
@@ -185,12 +189,12 @@ jobs:
             tests/npm/assets.test.mjs \
             tests/npm/launch.test.mjs
           node scripts/npm/install-smoke.mjs
-          node -e 'const x=require("./build/npm/install-smoke-evidence.json"); if(x.node_version!=="v22.14.0") process.exit(1)'
+          node -e 'const x=require("./build/npm/install-smoke-evidence.json"); if(x.node_version!=="v22.22.2") process.exit(1)'
       - name: Write minimum Node.js evidence
         run: |
           node scripts/npm/write-ci-evidence.mjs \
             --target linux-x64 \
-            --minimum-node-version v22.14.0 \
+            --minimum-node-version v22.22.2 \
             --output "$GITHUB_WORKSPACE/dist/npm/minimum-node-evidence.json"
       - name: Upload minimum Node.js evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -240,7 +244,7 @@ jobs:
             --directory "$RUNNER_TEMP/aizim-native-evidence" \
             --commit "$GITHUB_SHA" \
             --version 0.1.0 \
-            --minimum-node-version v22.14.0 \
+            --minimum-node-version v22.22.2 \
             --output "$RUNNER_TEMP/aizim-native-evidence/aggregate.json"
       - name: Upload aggregate evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

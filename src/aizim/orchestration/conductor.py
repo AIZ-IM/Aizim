@@ -10,7 +10,7 @@ from pathlib import Path
 
 from aizim.agents import FakeAgentBackend
 from aizim.config.model import PROOF_WORKER_TIMEOUT_SECONDS, LeanRuntimeMode
-from aizim.domain import AgentRole, EpochPair, sha256_bytes
+from aizim.domain import AgentRole, EpochPair
 from aizim.gateway import (
     CapabilityDependencies,
     CapabilityGateway,
@@ -18,6 +18,7 @@ from aizim.gateway import (
     GatewayLimits,
     GatewaySessionBroker,
     connect_gateway,
+    current_process_image_sha256,
 )
 from aizim.gateway.socket_alias import ProjectSocketAlias
 from aizim.knowledge import ArtifactStore, RuntimePromotionVerifier
@@ -140,7 +141,7 @@ class ResearchConductor:
         alias = ProjectSocketAlias(self._project_root)
         sessions = GatewaySessionBroker(alias.socket_path, gateway=gateway)
         authority = BrokerWorkerAuthority(
-            CapabilityIssuer(self._state), sessions, sha256_bytes(Path(sys.executable).read_bytes())
+            CapabilityIssuer(self._state), sessions, current_process_image_sha256()
         )
 
         runner = WorkerRunner(

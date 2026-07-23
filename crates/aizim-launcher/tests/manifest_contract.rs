@@ -122,7 +122,7 @@ fn fixture() -> TestResult<Fixture> {
     let distribution_json = json!({
         "schema_version": 1,
         "aizim_version": "0.1.0",
-        "python_version": "3.12",
+        "python_version": "3.14.6",
         "wheel": {
             "path": "vendor/aizim-0.1.0-py3-none-any.whl",
             "size": 4,
@@ -134,7 +134,7 @@ fn fixture() -> TestResult<Fixture> {
             "sha256": TEST_SHA256
         },
         "codex_version": "0.145.0",
-        "minimum_node_version": "22.14.0",
+        "minimum_node_version": "22.22.2",
         "platform_schema_version": 1
     });
     let platform_json = json!({

@@ -196,7 +196,7 @@ fn validate_distribution(manifest: &DistributionManifest) -> Result<(), Launcher
     require_equal(
         "DISTRIBUTION_VERSION_MISMATCH",
         &manifest.python_version,
-        "3.12",
+        "3.14.6",
     )?;
     require_equal(
         "DISTRIBUTION_VERSION_MISMATCH",
@@ -206,7 +206,7 @@ fn validate_distribution(manifest: &DistributionManifest) -> Result<(), Launcher
     require_equal(
         "DISTRIBUTION_VERSION_MISMATCH",
         &manifest.minimum_node_version,
-        "22.14.0",
+        "22.22.2",
     )?;
     require_number("MANIFEST_INVALID", manifest.platform_schema_version, 1)
 }

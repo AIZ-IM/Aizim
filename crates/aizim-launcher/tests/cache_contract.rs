@@ -28,7 +28,7 @@ fn key() -> CacheKey {
         aizim_version: "0.1.0".to_owned(),
         target: "darwin-arm64".to_owned(),
         wheel_sha256: "a".repeat(64),
-        python_version: "3.12".to_owned(),
+        python_version: "3.14.6".to_owned(),
     }
 }
 
@@ -64,7 +64,7 @@ fn ready_marker() -> ReadyMarker {
         aizim_version: "0.1.0".to_owned(),
         target: "darwin-arm64".to_owned(),
         wheel_sha256: "a".repeat(64),
-        python_version: "3.12".to_owned(),
+        python_version: "3.14.6".to_owned(),
         aizim_entrypoint: "venv/bin/aizim".to_owned(),
         sidecar_entrypoint: "venv/bin/aizim-gateway-sidecar".to_owned(),
     }
@@ -179,7 +179,7 @@ fn cache_path_changes_for_every_identity_input_and_schema() -> TestResult {
             ..base.clone()
         },
         CacheKey {
-            python_version: "3.13".to_owned(),
+            python_version: "3.14.5".to_owned(),
             ..base.clone()
         },
     ];

@@ -139,7 +139,7 @@ async def _run_live_gate(
                 setup.run_id,
                 WORKER_ID,
                 AgentRole.RESEARCH_CONDUCTOR,
-                sha256_file(Path(sys.executable).resolve(strict=True)),
+                gateway_api.current_process_image_sha256(),
                 setup.expires_at,
                 setup.raw_token,
             )

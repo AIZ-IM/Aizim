@@ -5,7 +5,7 @@ launcher, Lean 4 verification, and a package-local Codex executable.
 
 ## Install
 
-Node.js 22.14.0 or newer is required. The package has no installation
+Node.js 22.22.2 or newer is required. The package has no installation
 lifecycle script; the verified Python runtime is provisioned on first use.
 
 ```sh
@@ -13,7 +13,7 @@ npm install --global @aiz.im/aizim
 aizim --version
 ```
 
-The first command invocation downloads the locked CPython runtime and
+The first command invocation downloads the locked CPython 3.14.6 runtime and
 hash-verified Python dependencies through the bundled uv 0.11.31 binary.
 Subsequent invocations reuse the versioned local runtime cache.
 

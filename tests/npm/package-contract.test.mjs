@@ -23,6 +23,7 @@ test("uses one version and exact dependencies when manifests are loaded", () => 
   // Given
   const meta = readJson("package.json");
   const pyproject = readText("pyproject.toml");
+  const pythonVersion = readText(".python-version").trim();
   const cargo = readText("Cargo.toml");
 
   // When
@@ -35,9 +36,10 @@ test("uses one version and exact dependencies when manifests are loaded", () => 
   assert.equal(meta.name, "@aiz.im/aizim");
   assert.equal(meta.version, "0.1.0");
   assert.equal(meta.packageManager, "npm@12.0.1");
-  assert.equal(meta.engines.node, ">=22.14.0");
+  assert.equal(meta.engines.node, ">=22.22.2");
   assert.equal(meta.dependencies["@openai/codex"], "0.145.0");
   assert.equal(meta.devDependencies.typescript, "6.0.2");
+  assert.equal(pythonVersion, "3.14.6");
   assert.deepEqual(meta.workspaces, ["npm/platforms/*"]);
   assert.ok(meta.files.includes("lib/"));
   assert.match(pyproject, /^version = "0\.1\.0"$/m);

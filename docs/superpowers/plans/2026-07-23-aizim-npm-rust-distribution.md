@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship Aizim as `@aiz.im/aizim` with four native platform packages, a
-Rust bootstrap launcher, automatic isolated Python 3.12 provisioning, a clean
+Rust bootstrap launcher, automatic isolated Python 3.14.6 provisioning, a clean
 `npm install && npm run build` source workflow, and qualified macOS and Linux
 sandbox execution.
 
@@ -15,9 +15,9 @@ sandbox adapters remain the fail-closed authority boundary, and Lean remains
 the sole formal-truth boundary.
 
 **Tech Stack:** Node.js 26.5.0 for repository builds with a runtime floor of
-22.14.0, npm 12.0.1, Rust 1.97.1 edition 2024, serde 1.0.229,
+22.22.2, npm 12.0.1, Rust 1.97.1 edition 2024, serde 1.0.229,
 serde_json 1.0.151, sha2 0.11.0, fs2 0.4.3, tempfile 3.27.0, Python
-3.12 for npm runtimes, uv 0.11.31, Codex CLI 0.145.0, Lean 4.32.1,
+3.14.6 for npm runtimes, uv 0.11.31, Codex CLI 0.145.0, Lean 4.32.1,
 pytest 9.1.1, Ruff 0.15.22, ty 0.0.63, and TypeScript 6.0.2 as the newest
 tsserver-compatible JavaScript diagnostics provider.
 
@@ -59,7 +59,7 @@ tsserver-compatible JavaScript diagnostics provider.
 11. Initial Linux support is glibc only. Windows and musl-only Linux are
     unsupported and must fail with exit 78 before native execution.
 12. Keep the existing uv-native Python path working for Python 3.12–3.14.
-    npm mode provisions managed CPython 3.12 only.
+    npm mode provisions managed CPython 3.14.6 only.
 13. Linux is supported only after real `READY`, `SECURITY GATE PASS`, and
     `AIZIM RUN PASS` evidence on both Linux architectures. There is no
     unsandboxed fallback.
@@ -170,7 +170,7 @@ test("all distribution versions and exact dependencies agree", () => {
   assert.equal(meta.name, "@aiz.im/aizim");
   assert.equal(meta.version, "0.1.0");
   assert.equal(meta.packageManager, "npm@12.0.1");
-  assert.equal(meta.engines.node, ">=22.14.0");
+  assert.equal(meta.engines.node, ">=22.22.2");
   assert.equal(meta.dependencies["@openai/codex"], "0.145.0");
   assert.equal(meta.devDependencies.typescript, "6.0.2");
   assert.deepEqual(meta.workspaces, ["npm/platforms/*"]);
@@ -260,7 +260,7 @@ Create `package.json` with this metadata and no lifecycle hook:
     "THIRD_PARTY_NOTICES.md"
   ],
   "engines": {
-    "node": ">=22.14.0"
+    "node": ">=22.22.2"
   },
   "packageManager": "npm@12.0.1",
   "repository": {
@@ -935,7 +935,7 @@ and use these manifest shapes:
 {
   "schema_version": 1,
   "aizim_version": "0.1.0",
-  "python_version": "3.12",
+  "python_version": "3.14.6",
   "wheel": {
     "path": "vendor/aizim-0.1.0-py3-none-any.whl",
     "size": 4,
@@ -947,7 +947,7 @@ and use these manifest shapes:
     "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
   },
   "codex_version": "0.145.0",
-  "minimum_node_version": "22.14.0",
+  "minimum_node_version": "22.22.2",
   "platform_schema_version": 1
 }
 ```
@@ -1097,7 +1097,7 @@ platform root, and platform artifacts may not resolve below the meta root.
 
 - all schema versions are 1;
 - all Aizim/launcher versions equal `env!("CARGO_PKG_VERSION")`;
-- Python is `3.12`, minimum Node is `22.14.0`, uv is `0.11.31`, and Codex is
+- Python is `3.14.6`, minimum Node is `22.22.2`, uv is `0.11.31`, and Codex is
   `0.145.0`;
 - package name, target, Node platform/architecture, Rust triple, and libc are
   one of the four closed combinations;
@@ -1229,10 +1229,10 @@ pub struct CacheLayout {
 The runtime path is:
 
 ```text
-<root>/runtime/v1/<aizim-version>/<target>/<wheel-sha256>/py3.12
+<root>/runtime/v1/<aizim-version>/<target>/<wheel-sha256>/py3.14.6
 ```
 
-The lock file is a sibling of the final `py3.12` directory. Normalize absolute
+The lock file is a sibling of the final `py3.14.6` directory. Normalize absolute
 paths lexically, create missing roots with mode 0700, use `symlink_metadata`
 before and after creation, and reject symlink components.
 
@@ -1328,8 +1328,8 @@ Use an injected fake `CommandRunner` and assert a cold bootstrap issues these
 programs in order:
 
 ```text
-<bundled-uv> --no-config python install --install-dir <python-root> 3.12
-<bundled-uv> --no-config venv --managed-python --python 3.12 <staging>/venv
+<bundled-uv> --no-config python install --install-dir <python-root> 3.14.6
+<bundled-uv> --no-config venv --managed-python --python 3.14.6 <staging>/venv
 <bundled-uv> --no-config pip install --python <venv-python> \
   --require-hashes --no-deps --default-index https://pypi.org/simple \
   -r <runtime-requirements>
@@ -1422,7 +1422,7 @@ digests, Codex executable, and expected version. `ensure_runtime`:
 On a cold path, write these stable status forms to inherited stderr:
 
 ```text
-aizim: provisioning managed Python 3.12 runtime (<cache-key>)
+aizim: provisioning managed Python 3.14.6 runtime (<cache-key>)
 aizim: runtime ready (<cache-key>)
 ```
 
@@ -2756,7 +2756,7 @@ this shape:
     "local_install": true,
     "global_install": true,
     "npx_no_install": true,
-    "python_312_bootstrap": true,
+    "python_314_bootstrap": true,
     "cache_reused": true,
     "uninstall_preserved_cache": true,
     "local_codex_01450": true,
@@ -2771,9 +2771,9 @@ this shape:
 ```
 
 The other target documents change only target-specific package and runner
-fields. A separate minimum-runtime document records Node `v22.14.0`, the
+fields. A separate minimum-runtime document records Node `v22.22.2`, the
 Linux x64 target, exact package hashes, local/global/`npx --no-install`
-version success, Python 3.12 bootstrap, cache reuse, Gate B, and deterministic
+version success, Python 3.14.6 bootstrap, cache reuse, Gate B, and deterministic
 run success. Tests require the exact target set plus that document and reject:
 
 - an unknown or duplicate target;
@@ -2831,7 +2831,7 @@ It validates the four documents and their tarballs, then writes one aggregate
 document containing schema 1, the exact commit, version, sorted target list,
 the common meta digest and integrity, and the four platform digests and
 integrities. It separately verifies the minimum-runtime document against
-`v22.14.0`. It writes no home paths, runner temporary paths, environments,
+`v22.22.2`. It writes no home paths, runner temporary paths, environments,
 credentials, or URLs.
 
 - [ ] **Step 4: Make the install smoke evidence authoritative.**
@@ -2885,7 +2885,7 @@ node scripts/npm/verify-ci-evidence.mjs \
   --directory "$RUNNER_TEMP/aizim-native-evidence" \
   --commit "$GITHUB_SHA" \
   --version 0.1.0 \
-  --minimum-node-version v22.14.0 \
+  --minimum-node-version v22.22.2 \
   --output "$RUNNER_TEMP/aizim-native-evidence/aggregate.json"
 ```
 
@@ -2895,7 +2895,7 @@ aggregate job receives a model or npm credential.
 Add a `minimum-node` job on `ubuntu-24.04`. It first installs Node `26.5.0`,
 Lean, dependencies, and builds/packs the Linux x64 tarballs without caches.
 It then invokes the pinned setup-node action again with `node-version:
-"22.14.0"` and runs:
+"22.22.2"` and runs:
 
 ```bash
 node --test tests/npm/package-contract.test.mjs \
@@ -2904,16 +2904,16 @@ node --test tests/npm/package-contract.test.mjs \
   tests/npm/assets.test.mjs \
   tests/npm/launch.test.mjs
 node scripts/npm/install-smoke.mjs
-node -e 'const x=require("./build/npm/install-smoke-evidence.json"); if(x.node_version!=="v22.14.0") process.exit(1)'
+node -e 'const x=require("./build/npm/install-smoke-evidence.json"); if(x.node_version!=="v22.22.2") process.exit(1)'
 node scripts/npm/write-ci-evidence.mjs \
   --target linux-x64 \
-  --minimum-node-version v22.14.0 \
+  --minimum-node-version v22.22.2 \
   --output dist/npm/minimum-node-evidence.json
 ```
 
 It uploads the strict minimum-runtime document and exact tarballs as
 `aizim-minimum-node-${{ github.sha }}`. The aggregate job depends on this job
-as well as the native matrix and rejects missing or non-`v22.14.0` evidence.
+as well as the native matrix and rejects missing or non-`v22.22.2` evidence.
 
 - [ ] **Step 6: Run local evidence and workflow checks.**
 
@@ -3072,7 +3072,7 @@ receipt.
 `registry-smoke.mjs` creates a mode-0700 consumer, home, npm prefix, cache, and
 project root below the runner's private temporary directory. It installs only
 `@aiz.im/aizim@<exact-version>` with lifecycle scripts disabled, then observes
-local and global version output, first-run Python 3.12 bootstrap, cache reuse,
+local and global version output, first-run Python 3.14.6 bootstrap, cache reuse,
 doctor, Gate B, deterministic fake run, and foundation acceptance. It writes
 one path-free evidence document and removes only its validated generated
 root.
@@ -3114,8 +3114,8 @@ Update `README.md` with:
 
 - global `npm install --global @aiz.im/aizim` and project-local
   `npm install --save-dev @aiz.im/aizim`;
-- first use may download managed CPython 3.12;
-- Node `>=22.14.0`, external Lean/elan, and glibc-only Linux requirements;
+- first use may download managed CPython 3.14.6;
+- Node `>=22.22.2`, external Lean/elan, and glibc-only Linux requirements;
 - npm mode uses package-local Codex 0.145.0 and bundled uv, never global
   Python, uv, or Codex;
 - source mode remains `uv sync --frozen` for Python development or
@@ -3343,7 +3343,7 @@ SECURITY GATE PASS
 AIZIM RUN PASS
 ```
 
-Also require first-run Python 3.12 provisioning, second-run cache reuse,
+Also require first-run Python 3.14.6 provisioning, second-run cache reuse,
 package-local Codex 0.145.0, and both local and temporary-global invocation.
 No workflow receives a model or npm credential.
 
@@ -3547,7 +3547,7 @@ created.
 | 3. Exactly two correct tarballs per target | Tasks 8, 12–14 |
 | 4. Fresh local tarball install | Tasks 12–13 |
 | 5. Fresh temporary-global tarball install | Tasks 12–13 |
-| 6. First-run isolated Python 3.12 provisioning | Tasks 6, 12–13 |
+| 6. First-run isolated Python 3.14.6 provisioning | Tasks 6, 12–13 |
 | 7. Completed-cache reuse | Tasks 5, 12–13 |
 | 8. Exact local Codex 0.145.0 | Tasks 2, 9, 12–13 |
 | 9. macOS arm64/x64 READY, Gate B, and run | Tasks 10, 12–13 |

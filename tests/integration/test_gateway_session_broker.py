@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from aizim.domain import AgentRole, sha256_file
+from aizim.domain import AgentRole
 from aizim.gateway import (
     BrokerDependencies,
     BrokerLifecycleError,
@@ -21,6 +21,7 @@ from aizim.gateway import (
     GatewaySessionBroker,
     PeerIdentity,
     SessionDeniedError,
+    current_process_image_sha256,
     redeem_session,
 )
 
@@ -92,7 +93,7 @@ def fake_dependencies(image_hash: str) -> BrokerDependencies:
 async def test_real_darwin_identity_redeems_over_private_socket(socket_path: Path) -> None:
     if sys.platform != "darwin":
         pytest.skip("Darwin audit-token identity is macOS-only")
-    image_hash = sha256_file(Path(sys.executable).resolve())
+    image_hash = current_process_image_sha256()
     broker = GatewaySessionBroker(
         socket_path,
         dependencies=BrokerDependencies(

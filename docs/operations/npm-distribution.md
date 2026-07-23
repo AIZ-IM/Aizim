@@ -15,9 +15,11 @@ The distribution supports:
 | `linux-arm64` | Linux arm64 with glibc |
 | `linux-x64` | Linux x64 with glibc |
 
-Consumers need Node.js 22.14.0 or newer and an external Lean toolchain managed by `elan`. The npm
-package supplies Codex CLI 0.145.0, uv 0.11.31, and a managed CPython 3.12 runtime. It does not
+Consumers need Node.js 22.22.2 or newer and an external Lean toolchain managed by `elan`. The npm
+package supplies Codex CLI 0.145.0, uv 0.11.31, and a managed CPython 3.14.6 runtime. It does not
 consult global Python, uv, or Codex installations. musl Linux and Windows are unsupported.
+Linux hosts must permit unprivileged user namespaces for Codex's package-local bubblewrap sandbox;
+on Ubuntu 24.04, grant that permission with an AppArmor profile for the installed executable.
 
 ## Install as a consumer
 
@@ -35,7 +37,7 @@ npm install --save-dev @aiz.im/aizim
 npx --no-install aizim --version
 ```
 
-The first invocation may download and assemble CPython 3.12 below the Aizim runtime cache. A
+The first invocation may download and assemble CPython 3.14.6 below the Aizim runtime cache. A
 successful second invocation reuses the same verified `READY.json` record. Uninstalling the npm
 package never removes a Lean project or the runtime cache.
 
@@ -117,7 +119,7 @@ Python, or uv first on `PATH`.
 `.github/workflows/ci.yml` builds the exact four targets without restored npm, Cargo, uv, Python,
 or build caches. Every target runs source build, full tests, pack, local/global tarball
 installation, managed Python preparation, cache reuse, Gate B, deterministic fake execution, and
-negative integrity/platform checks. A separate Node 22.14.0 job verifies the minimum runtime.
+negative integrity/platform checks. A separate Node 22.22.2 job verifies the minimum runtime.
 
 Each target emits a path-free native evidence document bound to the full Git SHA, package version,
 runner ABI, tarball size, SHA-256, npm integrity, clean tracked inputs, and no restored build

@@ -39,7 +39,9 @@ const expected = Object.freeze({
   codex: "0.145.0",
   node: "26.5.0",
   npm: "12.0.1",
-  python: "3.12",
+  minimumNode: "22.22.2",
+  python: "3.14.6",
+  pythonRange: ">=3.12,<3.15",
   rust: "1.97.1",
   uv: "0.11.31",
 });
@@ -118,7 +120,7 @@ async function sourceVersions() {
   if (
     meta.packageManager !== `npm@${expected.npm}` ||
     meta.dependencies?.["@openai/codex"] !== expected.codex ||
-    !python.includes(`requires-python = ">=${expected.python},`) ||
+    !python.includes(`requires-python = "${expected.pythonRange}"`) ||
     !python.includes(`uv_build==${expected.uv}`) ||
     !cargo.includes(`rust-version = "${expected.rust}"`)
   ) {
@@ -211,7 +213,7 @@ async function assembleArtifacts(target, uv) {
       "vendor/runtime-requirements.txt",
     ),
     codex_version: expected.codex,
-    minimum_node_version: "22.14.0",
+    minimum_node_version: expected.minimumNode,
     platform_schema_version: 1,
   };
   const platform = {

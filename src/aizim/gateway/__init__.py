@@ -19,6 +19,7 @@ from .peer_identity import (
     PeerIdentityError,
     RedeemedSession,
     SessionDeniedError,
+    current_process_image_sha256,
     redeem_session,
 )
 from .service import CapabilityDependencies, CapabilityGateway, GatewayLimits
@@ -51,5 +52,6 @@ __all__ = [
     "SessionDeniedError",
     "advertised_tools",
     "connect_gateway",
+    "current_process_image_sha256",
     "redeem_session",
 ]

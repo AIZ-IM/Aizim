@@ -27,7 +27,7 @@ npm run build
 
 The npm distribution does not replace the Python control plane. It packages the
 existing Aizim wheel, selects a prebuilt platform package, provisions an
-isolated Python 3.12 runtime with a bundled pinned uv executable, and then runs
+isolated Python 3.14.6 runtime with a bundled pinned uv executable, and then runs
 the same Python CLI.
 
 Rust owns the small native bootstrap and process-lifecycle boundary required by
@@ -63,7 +63,7 @@ The following decisions are fixed for this implementation:
    downloaded native code.
 9. Python and its dependencies are provisioned lazily on the first `aizim`
    invocation.
-10. The npm runtime uses CPython 3.12. The existing uv-native source workflow
+10. The npm runtime uses CPython 3.14.6. The existing uv-native source workflow
     continues to support the range declared in `pyproject.toml`.
 11. uv is pinned to `0.11.31`, matching the Python build backend pin.
 12. Codex is an exact npm dependency at `@openai/codex@0.145.0`. An npm
@@ -125,7 +125,7 @@ aizim --version
 aizim doctor --project /absolute/path/to/lean-project
 ```
 
-The first invocation may download CPython 3.12 and locked Python dependency
+The first invocation may download CPython 3.14.6 and locked Python dependency
 artifacts. It prints a concise bootstrap status to stderr while preserving
 stdout for the requested CLI command.
 
@@ -250,7 +250,7 @@ anything and explains that the likely causes are an unsupported platform,
 unsupported libc, a corrupted installation, or installation with
 `--omit=optional`.
 
-The package requires Node.js `>=22.14.0`. Repository and release automation
+The package requires Node.js `>=22.22.2`. Repository and release automation
 uses the exact Node.js `26.5.0` and npm `12.0.1` pair. A compatibility job also
 exercises the minimum supported Node.js version.
 
@@ -338,7 +338,7 @@ fallback and no release claim for that target.
 
 - schema version;
 - Aizim package version;
-- Python requirement `3.12`;
+- Python runtime `3.14.6`;
 - wheel filename, size, and SHA-256;
 - locked runtime-requirements filename and SHA-256;
 - expected Codex package version `0.145.0`;
@@ -419,7 +419,7 @@ artifact hashes required by the Aizim wheel.
 
 Provisioning uses the bundled uv executable to:
 
-1. obtain a managed CPython 3.12 interpreter when one is not already present in
+1. obtain a managed CPython 3.14.6 interpreter when one is not already present in
    the Aizim-managed cache;
 2. create a virtual environment in a same-filesystem staging directory;
 3. install the locked dependency set with hash verification;
@@ -777,7 +777,7 @@ The implementation is complete only when all of the following are observed:
    `npx aizim --version`.
 5. A fresh temporary global prefix can install those tarballs and run
    `aizim --version`.
-6. The first invocation provisions Python 3.12 without using global Python or
+6. The first invocation provisions Python 3.14.6 without using global Python or
    uv.
 7. The second invocation reuses the complete versioned environment.
 8. An npm-installed Aizim uses only its exact local Codex `0.145.0`.

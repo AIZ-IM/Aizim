@@ -226,6 +226,21 @@ def _process_image_path(raw_token: bytes) -> str:
         raise PeerIdentityError("peer process image path is invalid") from error
 
 
+def _current_process_image_path() -> str:
+    buffer = ctypes.create_string_buffer(_MAX_PATH)
+    library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+    function = library.proc_pidpath
+    function.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+    function.restype = ctypes.c_int
+    result = function(os.getpid(), buffer, len(buffer))
+    if result <= 0:
+        raise PeerIdentityError("current process image is unavailable")
+    try:
+        return buffer.raw[:result].rstrip(b"\0").decode()
+    except UnicodeDecodeError as error:
+        raise PeerIdentityError("current process image path is invalid") from error
+
+
 def _hash_regular_file(path: str) -> str:
     flags = os.O_RDONLY | os.O_CLOEXEC
     nofollow = getattr(os, "O_NOFOLLOW", 0)
@@ -239,6 +254,18 @@ def _hash_regular_file(path: str) -> str:
     finally:
         os.close(descriptor)
     return digest.hexdigest()
+
+
+def current_process_image_sha256() -> str:
+    try:
+        path = (
+            _current_process_image_path()
+            if sys.platform == "darwin"
+            else str(Path(sys.executable).resolve(strict=True))
+        )
+        return _hash_regular_file(path)
+    except (OSError, AttributeError) as error:
+        raise PeerIdentityError("current process identity verification failed") from error
 
 
 class DarwinPeerIdentityVerifier:

@@ -60,11 +60,13 @@ jobs:
           use-github-cache: "false"
           use-mathlib-cache: "false"
           lake-package-directory: examples/smoke_lean
-      - name: Install Linux sandbox dependency
+      - name: Enable Linux sandbox namespaces
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Validate exact release inputs
         run: |
           node -e 'const {AIZIM_RELEASE_COMMIT:c,AIZIM_RELEASE_VERSION:v}=process.env;if(!/^[0-9a-f]{40}$/.test(c)||!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v))process.exit(1)'

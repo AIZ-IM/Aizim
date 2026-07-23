@@ -596,7 +596,7 @@ export async function installSmoke() {
         local_install: true,
         global_install: true,
         npx_no_install: true,
-        python_312_bootstrap: true,
+        python_314_bootstrap: true,
         cache_reused: true,
         uninstall_preserved_cache: true,
         local_codex_01450: true,
