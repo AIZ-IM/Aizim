@@ -32,7 +32,7 @@ from .sandbox import (
     protected_asset_digests,
 )
 
-_CODEX_VERSION: Final = "codex-cli 0.144.6"
+_CODEX_VERSION: Final = "codex-cli 0.145.0"
 _SANDBOX_EXECUTABLE: Final = Path("/usr/bin/sandbox-exec")
 _OUTPUT_LIMIT: Final = 256 * 1024
 

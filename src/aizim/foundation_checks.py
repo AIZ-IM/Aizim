@@ -190,7 +190,7 @@ def _codex(manifest: fe.JsonObject) -> bool:
     policy = _object(manifest.get("run_policy"))
     return (
         manifest.get("agent_harness_name") == manifest.get("model_backend") == "codex"
-        and manifest.get("agent_harness_version") == "codex-cli 0.144.6"
+        and manifest.get("agent_harness_version") == "codex-cli 0.145.0"
         and fe.is_hash(manifest.get("agent_harness_binary_hash"))
         and type(manifest.get("model_identifier")) is str
         and manifest.get("process_isolation_profile") == "macos-sandbox-aizim-worker"

@@ -14,7 +14,7 @@ from .launcher import CodexLaunchOutcome, CodexLaunchSpec
 from .macos_profile import validate_macos_profile
 from .sandbox import SandboxLaunchSpec
 
-_CODEX_VERSION = "codex-cli 0.144.6"
+_CODEX_VERSION = "codex-cli 0.145.0"
 type SandboxCompiler = Callable[[AgentRequest], SandboxLaunchSpec]
 type CodexVersion = Callable[[Path], str]
 type CodexLauncher = Callable[[CodexLaunchSpec], Awaitable[CodexLaunchOutcome]]

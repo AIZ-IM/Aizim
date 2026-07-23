@@ -56,7 +56,7 @@ def run_manifest() -> RunManifest:
         lean_lsp_mcp_version="0.28.1",
         leanclient_version="0.12.1",
         agent_harness_name="codex-cli",
-        agent_harness_version="0.144.6",
+        agent_harness_version="0.145.0",
         agent_harness_binary_hash="1" * 64,
         model_backend="openai",
         model_identifier="gpt-5",

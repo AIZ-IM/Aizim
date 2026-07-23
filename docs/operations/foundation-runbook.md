@@ -19,8 +19,8 @@ open-problem result, novelty, or general autonomous proving capability.
 |---|---|
 | Platform | macOS with `/usr/bin/sandbox-exec` |
 | Python | 3.12–3.14 |
-| uv | 0.11.29 |
-| Codex CLI | 0.144.6 |
+| uv | 0.11.31 |
+| Codex CLI | 0.145.0 |
 | Lean | 4.32.0 |
 | Lean toolchain | `leanprover/lean4:v4.32.0` |
 | lean-lsp-mcp | 0.28.1 |
@@ -29,12 +29,12 @@ open-problem result, novelty, or general autonomous proving capability.
 | Free disk floor | 2,147,483,648 bytes (2 GiB) |
 | Lake imports | `Std` only; no Mathlib, Batteries, REPL, or Loogle index |
 
-Install `uv` 0.11.29 with the organization's managed Python tooling, install `elan` and Node.js,
+Install `uv` 0.11.31 with the organization's managed Python tooling, install `elan` and Node.js,
 then install the two executable pins:
 
 ```sh
 elan toolchain install leanprover/lean4:v4.32.0
-npm install --global @openai/codex@0.144.6
+npm install --global @openai/codex@0.145.0
 uv sync --frozen
 ```
 
@@ -48,7 +48,7 @@ codex --version
 uv run python -c 'import importlib.metadata as m; print(m.version("lean-lsp-mcp"), m.version("leanclient"), m.version("mcp"))'
 ```
 
-Expected pins are `uv 0.11.29`, `codex-cli 0.144.6`, Lean `4.32.0`, and Python package versions
+Expected pins are `uv 0.11.31`, `codex-cli 0.145.0`, Lean `4.32.0`, and Python package versions
 `0.28.1 0.12.1 1.28.1`.
 
 ## Initialize a Lean project

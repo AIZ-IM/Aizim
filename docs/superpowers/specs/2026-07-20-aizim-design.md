@@ -214,7 +214,7 @@ backend.
 ### 4.6 Platform sandbox adapters
 
 Slices 1 and 2 support macOS first. `MacOSSandboxAdapter` pins Codex CLI
-`0.144.6` and uses its native permission-profile compiler, which enforces
+`0.145.0` and uses its native permission-profile compiler, which enforces
 filesystem and network policy with Seatbelt through `/usr/bin/sandbox-exec`.
 Before launch, `WorkspaceViewBuilder` materializes a symlink-free worker view
 containing only approved source; `.aizim/`, `.git/`, unleased documents, and
@@ -766,8 +766,8 @@ Foundation dependencies:
   `15766fef24246f2159f55a5f6897126a26916ae8`, and
   [leanclient `0.12.1`](https://pypi.org/project/leanclient/0.12.1/) are both
   direct Aizim dependency pins.
-- [Codex CLI `0.144.6`](https://github.com/openai/codex/tree/5d1fbf26c43abc65a203928b2e31561cb039e06d), commit
-  `5d1fbf26c43abc65a203928b2e31561cb039e06d`, is the foundation agent-harness
+- [Codex CLI `0.145.0`](https://github.com/openai/codex/tree/25af12f7e61572b0bc18ddb1008be543b91519b0), commit
+  `25af12f7e61572b0bc18ddb1008be543b91519b0`, is the foundation agent-harness
   and platform-sandbox baseline.
 - [leanprover-community/repl](https://github.com/leanprover-community/repl/tree/68a3b3a059787a7db44fb1e6281e4a657efee470)
   tag `v4.32.0`, commit `68a3b3a059787a7db44fb1e6281e4a657efee470`,

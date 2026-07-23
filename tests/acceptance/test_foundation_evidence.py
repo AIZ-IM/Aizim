@@ -62,7 +62,7 @@ def _append_run_evidence(
     start_manifest: dict[str, JsonValue] = {
         "agent_harness_binary_hash": HASHES[0],
         "agent_harness_name": "codex",
-        "agent_harness_version": "codex-cli 0.144.6",
+        "agent_harness_version": "codex-cli 0.145.0",
         "alignment_review": {
             "protocol_revision": None,
             "review_kind": "none",

@@ -156,7 +156,7 @@ async def test_repeated_cancellation_cannot_skip_revoke_or_cleanup(tmp_path: Pat
     backend = CodexBackend(
         CodexBackendDependencies(
             executable,
-            lambda _path: "codex-cli 0.144.6",
+            lambda _path: "codex-cli 0.145.0",
             lambda _request: replace(sandbox),
             _developer_root(request),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
@@ -199,7 +199,7 @@ async def test_replaced_codex_is_rejected_before_the_sandbox_compiler(tmp_path: 
     backend = CodexBackend(
         CodexBackendDependencies(
             executable,
-            lambda _path: "codex-cli 0.144.6",
+            lambda _path: "codex-cli 0.145.0",
             compile_sandbox,
             _developer_root(request),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),

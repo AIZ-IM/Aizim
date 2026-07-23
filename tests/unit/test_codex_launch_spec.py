@@ -243,7 +243,7 @@ async def test_codex_backend_has_verified_identity_and_always_finalizes(
     base = sandbox_spec(agent_request)
     dependencies = CodexBackendDependencies(
         codex_executable=executable,
-        codex_version=lambda _path: "codex-cli 0.144.6",
+        codex_version=lambda _path: "codex-cli 0.145.0",
         sandbox=lambda _request: replace(base, argv=(str(executable), *base.argv[1:])),
         developer_root=developer_root(agent_request),
         sidecar_executable=Path("/opt/aizim/bin/aizim-gateway-sidecar"),
@@ -270,7 +270,7 @@ async def test_codex_backend_has_verified_identity_and_always_finalizes(
             await backend.run(agent_request)
 
     assert backend.identity.executable_sha256 == original_hash
-    assert backend.identity.version == "codex-cli 0.144.6"
+    assert backend.identity.version == "codex-cli 0.145.0"
     expected_actions = (
         ["revoke", "cleanup"]
         if mode == "replaced"

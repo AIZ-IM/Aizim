@@ -14,7 +14,7 @@ from aizim.orchestration.codex_worker import (
 
 
 class RecordingBackend:
-    identity = BackendIdentity("codex", "codex-cli 0.144.6", "a" * 64)
+    identity = BackendIdentity("codex", "codex-cli 0.145.0", "a" * 64)
 
     def __init__(self) -> None:
         self.request: AgentRequest | None = None

@@ -54,16 +54,19 @@ The following decisions are fixed for this implementation:
    Rust, or a global Codex installation.
 7. Source builds are orchestrated by npm. They require Node.js/npm and the
    pinned Rust toolchain, but not a preinstalled Python or uv executable.
-   Repository and release builds pin Node.js `26.5.0`, npm `12.0.0`, and Rust
-   `1.97.1`.
+   Repository and release builds pin Node.js `26.5.0`, npm `12.0.1`, and Rust
+   `1.97.1`. JavaScript editor diagnostics use TypeScript `6.0.2`, the newest
+   release that still provides the tsserver protocol; TypeScript `7.0.2`
+   replaces that integration with the native Go toolchain and is not a
+   compatible tsserver provider.
 8. Installation has no `postinstall` or other lifecycle script that executes
    downloaded native code.
 9. Python and its dependencies are provisioned lazily on the first `aizim`
    invocation.
 10. The npm runtime uses CPython 3.12. The existing uv-native source workflow
     continues to support the range declared in `pyproject.toml`.
-11. uv is pinned to `0.11.29`, matching the Python build backend pin.
-12. Codex is an exact npm dependency at `@openai/codex@0.144.6`. An npm
+11. uv is pinned to `0.11.31`, matching the Python build backend pin.
+12. Codex is an exact npm dependency at `@openai/codex@0.145.0`. An npm
     installation never falls back to a global Codex executable.
 13. Lean and elan remain external prerequisites. `aizim doctor` reports their
     readiness; the npm package does not install or bundle a Lean toolchain.
@@ -71,6 +74,9 @@ The following decisions are fixed for this implementation:
     users can install them without npm organization membership.
 15. No npm package is published until the user separately authorizes the
     external release action.
+16. Distribution-critical and developer-tool pins are refreshed to the latest
+    stable compatible releases at implementation time and recorded explicitly;
+    they are never silently downgraded to satisfy one local tool.
 
 ## 3. Goals and non-goals
 
@@ -163,7 +169,7 @@ uv run aizim --version
 ├── vendor/runtime-requirements.txt
 ├── LICENSE
 ├── THIRD_PARTY_NOTICES.md
-├── dependency: @openai/codex@0.144.6
+├── dependency: @openai/codex@0.145.0
 └── optionalDependencies
     ├── @aiz.im/aizim-darwin-arm64@0.1.0
     ├── @aiz.im/aizim-darwin-x64@0.1.0
@@ -245,7 +251,7 @@ unsupported libc, a corrupted installation, or installation with
 `--omit=optional`.
 
 The package requires Node.js `>=22.14.0`. Repository and release automation
-uses the exact Node.js `26.5.0` and npm `12.0.0` pair. A compatibility job also
+uses the exact Node.js `26.5.0` and npm `12.0.1` pair. A compatibility job also
 exercises the minimum supported Node.js version.
 
 ### 7.2 Rust launcher
@@ -291,7 +297,7 @@ These values are consumed by the trusted composition root. They are not passed
 into model-controlled shell environments.
 
 The npm distribution mode requires the injected Codex executable. The Python
-runtime validates its absolute path and exact `codex-cli 0.144.6` version and
+runtime validates its absolute path and exact `codex-cli 0.145.0` version and
 does not search `PATH` as a fallback. Direct uv development retains the current
 explicit host-resolution path.
 
@@ -335,7 +341,7 @@ fallback and no release claim for that target.
 - Python requirement `3.12`;
 - wheel filename, size, and SHA-256;
 - locked runtime-requirements filename and SHA-256;
-- expected Codex package version `0.144.6`;
+- expected Codex package version `0.145.0`;
 - minimum Node.js version;
 - compatible platform manifest schema version.
 
@@ -350,7 +356,7 @@ fallback and no release claim for that target.
 - Rust target triple;
 - Linux libc requirement where applicable;
 - launcher build version;
-- bundled uv version `0.11.29`;
+- bundled uv version `0.11.31`;
 - uv filename, size, and SHA-256;
 - compatible distribution manifest schema version.
 
@@ -368,7 +374,7 @@ The matching uv release archives are:
 - `uv-aarch64-unknown-linux-gnu.tar.gz`
 - `uv-x86_64-unknown-linux-gnu.tar.gz`
 
-Build scripts download those exact `0.11.29` artifacts over HTTPS and verify
+Build scripts download those exact `0.11.31` artifacts over HTTPS and verify
 them against committed release checksums before packaging.
 
 ### 8.3 Security meaning
@@ -548,7 +554,7 @@ The repository commits:
 - `Cargo.lock`
 - `rust-toolchain.toml`
 - `.node-version` containing `26.5.0`
-- root `packageManager` metadata selecting `npm@12.0.0`
+- root `packageManager` metadata selecting `npm@12.0.1`
 - uv release URLs and SHA-256 values
 - package file allowlists
 - third-party license notices
@@ -774,7 +780,7 @@ The implementation is complete only when all of the following are observed:
 6. The first invocation provisions Python 3.12 without using global Python or
    uv.
 7. The second invocation reuses the complete versioned environment.
-8. An npm-installed Aizim uses only its exact local Codex `0.144.6`.
+8. An npm-installed Aizim uses only its exact local Codex `0.145.0`.
 9. macOS arm64 and x64 finish `READY`, `SECURITY GATE PASS`, and
    `AIZIM RUN PASS`.
 10. Linux arm64 and x64 finish `READY`, `SECURITY GATE PASS`, and

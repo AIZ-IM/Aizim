@@ -112,7 +112,7 @@ def test_real_macos_sandbox_denies_all_protected_surfaces() -> None:
                 assert len(restarted.query_events("run-1")) == 11
 
             assert report.passed
-            assert report.codex_version == "codex-cli 0.144.6"
+            assert report.codex_version == "codex-cli 0.145.0"
             assert report.sandbox_executable == "/usr/bin/sandbox-exec"
             assert len(report.policy_hash) == 64
             assert tuple(attempt.operation for attempt in report.attempts) == tuple(ProbeOperation)
