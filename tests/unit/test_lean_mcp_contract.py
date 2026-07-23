@@ -188,6 +188,31 @@ class _ColdElaboratingClient:
         )
 
 
+class _SlowElaboratingClient:
+    def __init__(self) -> None:
+        self.calls: list[int | None] = []
+
+    async def diagnostics(
+        self,
+        _path: Path,
+        _start_line: int | None,
+        _end_line: int | None,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> DiagnosticsResult:
+        self.calls.append(timeout_seconds)
+        complete = len(self.calls) == 5
+        return DiagnosticsResult(
+            not complete,
+            None if complete else (1,),
+            True,
+            not complete,
+            (),
+            (),
+            "b" * 64,
+        )
+
+
 @pytest.mark.asyncio
 async def test_promotion_yields_while_waiting_for_cold_elaboration(
     monkeypatch: pytest.MonkeyPatch,
@@ -211,6 +236,23 @@ async def test_promotion_yields_while_waiting_for_cold_elaboration(
     assert not result.partial
     assert not result.timed_out
     assert client.calls == [60, 60, 60]
+
+
+@pytest.mark.asyncio
+async def test_promotion_allows_a_bounded_cold_elaboration_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _SlowElaboratingClient()
+    monkeypatch.setattr(promotion_runtime, "_DIAGNOSTICS_POLL_SECONDS", 0)
+
+    result = await _complete_diagnostics(
+        cast(LeanMcpClient, cast(object, client)),
+        SMOKE_ROOT / "AizimSmoke" / "Base.lean",
+    )
+
+    assert not result.partial
+    assert not result.timed_out
+    assert client.calls == [60, 60, 60, 60, 60]
 
 
 class _PreparationClient:

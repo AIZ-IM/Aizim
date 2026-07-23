@@ -13,8 +13,8 @@ from .verification import BuildResult, VerificationResult
 type EnsureClient = Callable[[Path], Awaitable[LeanMcpClient]]
 
 _DIAGNOSTICS_TIMEOUT_SECONDS = 60
-_DIAGNOSTICS_ATTEMPTS = 3
-_DIAGNOSTICS_POLL_SECONDS = 1
+_DIAGNOSTICS_ATTEMPTS = 5
+_DIAGNOSTICS_POLL_SECONDS = 5
 
 
 @dataclass(frozen=True, slots=True)

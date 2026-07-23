@@ -87,6 +87,7 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
         gateway_path = private_root / "gateway.sock"
         gateway = listener(gateway_path)
         secret = "linux-sandbox-secret-must-not-appear"
+        codex = packaged_codex()
         try:
             with StateService(StateServiceConfig(root, "linux-sandbox-test")) as state:
                 shared = layout.artifact_root / "shared.txt"
@@ -95,7 +96,7 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
                 before_digest = state.logical_digest()
                 tcp_host, tcp_port = tcp.getsockname()
                 report = asyncio.run(
-                    LinuxSandboxAdapter.for_executable(packaged_codex()).launch_probe(
+                    LinuxSandboxAdapter.for_executable(codex).launch_probe(
                         ProbeRequest(
                             probe_id="probe-linux-1",
                             run_id="run-linux-1",
@@ -114,6 +115,7 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
                             parent_env=dict(os.environ, AIZIM_ATTACK_SECRET=secret),
                             event_sink=state,
                             timeout_seconds=20.0,
+                            runtime_read_roots=(codex.parents[2].resolve(strict=True),),
                         )
                     )
                 )
