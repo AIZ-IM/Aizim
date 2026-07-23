@@ -11,8 +11,7 @@ from aizim.domain import sha256_file
 
 from .backend import AgentRequest, AgentResult, BackendIdentity
 from .launcher import CodexLaunchOutcome, CodexLaunchSpec
-from .macos_profile import validate_macos_profile
-from .sandbox import SandboxLaunchSpec
+from .sandbox import SandboxLaunchSpec, validate_launch_spec
 
 _CODEX_VERSION = "codex-cli 0.145.0"
 type SandboxCompiler = Callable[[AgentRequest], SandboxLaunchSpec]
@@ -34,7 +33,6 @@ class CodexBackendDependencies:
     codex_executable: Path
     codex_version: CodexVersion = field(repr=False)
     sandbox: SandboxCompiler = field(repr=False)
-    developer_root: Path
     sidecar_executable: Path
     launch: CodexLauncher = field(repr=False)
     revoke: AgentFinalizer = field(repr=False)
@@ -52,11 +50,6 @@ class CodexBackend:
             raise CodexBackendError("UNSUPPORTED_CODEX_VERSION")
         if not dependencies.sidecar_executable.is_absolute():
             raise CodexBackendError("SIDECAR_EXECUTABLE_INVALID")
-        if (
-            not dependencies.developer_root.is_absolute()
-            or dependencies.developer_root != dependencies.developer_root.resolve()
-        ):
-            raise CodexBackendError("DEVELOPER_ROOT_INVALID")
         self._dependencies = dependencies
         self._executable = executable
         self._image_hash = sha256_file(executable)
@@ -95,7 +88,6 @@ class CodexBackend:
             request,
             sandbox,
             self._dependencies.sidecar_executable,
-            self._dependencies.developer_root,
         )
         outcome = await self._dependencies.launch(spec)
         return AgentResult(
@@ -130,7 +122,6 @@ def build_codex_launch_spec(
     request: AgentRequest,
     sandbox: SandboxLaunchSpec,
     sidecar_executable: Path,
-    developer_root: Path,
 ) -> CodexLaunchSpec:
     if (
         sandbox.cwd != request.view_root
@@ -140,8 +131,8 @@ def build_codex_launch_spec(
     ):
         raise CodexBackendError("SANDBOX_SPEC_MISMATCH")
     try:
-        project_root = _project_root(request)
-        validate_macos_profile(sandbox, project_root, developer_root)
+        _project_root(request)
+        validate_launch_spec(request, sandbox)
     except (OSError, ValueError) as error:
         raise CodexBackendError("SANDBOX_SPEC_INVALID") from error
     sandbox_command = 9

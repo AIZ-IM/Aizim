@@ -17,11 +17,8 @@ from aizim.agents import (
     WorkspaceViewBuilder,
 )
 from aizim.agents.launcher import launch_codex
-from aizim.agents.macos_sandbox import (
-    MacOSSandboxAdapter,
-    SandboxHostError,
-    host_command_output,
-)
+from aizim.agents.macos_sandbox import SandboxHostError, host_command_output
+from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import SandboxRequest
 from aizim.domain import sha256_file
 from aizim.runtime.distribution import (
@@ -89,13 +86,15 @@ def create_codex_backend(parent_environment: Mapping[str, str] | None = None) ->
         raise CodexWorkerError(error.code) from error
     sidecar = _sidecar_executable()
     environment = without_distribution_environment(source_environment)
-    sandbox = MacOSSandboxAdapter()
-    try:
-        developer_root = Path(host_command_output(("/usr/bin/xcode-select", "-p"))).resolve(
-            strict=True
+    sandbox = sandbox_adapter(executable)
+    runtime_read_roots = tuple(
+        dict.fromkeys(
+            (
+                Path(sys.prefix).resolve(strict=True),
+                executable.parents[2].resolve(strict=True),
+            )
         )
-    except (OSError, SandboxHostError) as error:
-        raise CodexWorkerError("CODEX_HOST_COMMAND_FAILED") from error
+    )
 
     def compile_sandbox(request: AgentRequest):
         return sandbox.compile(
@@ -105,6 +104,7 @@ def create_codex_backend(parent_environment: Mapping[str, str] | None = None) ->
                 request.scratch_root,
                 (str(executable),),
                 environment,
+                runtime_read_roots,
             )
         )
 
@@ -113,7 +113,6 @@ def create_codex_backend(parent_environment: Mapping[str, str] | None = None) ->
             executable,
             _codex_version,
             compile_sandbox,
-            developer_root,
             sidecar,
             launch_codex,
             _noop,

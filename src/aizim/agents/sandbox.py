@@ -30,6 +30,7 @@ class ProbeOperation(StrEnum):
 
 
 type ProbeVerdict = Literal["denied", "allowed"]
+type SandboxPlatform = Literal["darwin", "linux"]
 
 
 class ProbeEventSink(Protocol):
@@ -45,10 +46,12 @@ class SandboxRequest:
     scratch_root: Path
     command: tuple[str, ...]
     parent_env: Mapping[str, str] = field(repr=False)
+    runtime_read_roots: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class SandboxLaunchSpec:
+    platform_id: SandboxPlatform
     argv: tuple[str, ...]
     cwd: Path
     parent_env: Mapping[str, str] = field(repr=False)
@@ -78,6 +81,7 @@ class ProbeRequest:
     parent_env: Mapping[str, str] = field(repr=False)
     event_sink: ProbeEventSink = field(repr=False)
     timeout_seconds: float = 20.0
+    runtime_read_roots: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +93,7 @@ class ProbeAttempt:
 
 @dataclass(frozen=True, slots=True)
 class ProbeReport:
+    platform_id: SandboxPlatform
     passed: bool
     codex_version: str
     sandbox_executable: str
@@ -100,9 +105,46 @@ class ProbeReport:
 
 
 class SandboxAdapter(Protocol):
+    @property
+    def platform_id(self) -> SandboxPlatform: ...
+
     def compile(self, request: SandboxRequest) -> SandboxLaunchSpec: ...
 
     async def launch_probe(self, request: ProbeRequest) -> ProbeReport: ...
+
+
+class LaunchRequest(Protocol):
+    @property
+    def view_root(self) -> Path: ...
+
+    @property
+    def scratch_root(self) -> Path: ...
+
+
+def validate_launch_spec(request: LaunchRequest, spec: SandboxLaunchSpec) -> None:
+    digest = spec.policy_hash
+    command = request.command if isinstance(request, SandboxRequest) else None
+    if (
+        spec.platform_id not in {"darwin", "linux"}
+        or spec.cwd != request.view_root
+        or spec.view_root != request.view_root
+        or spec.scratch_root != request.scratch_root
+        or spec.profile_id != "aizim-worker"
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+        or not spec.argv
+        or not Path(spec.argv[0]).is_absolute()
+        or (
+            command is not None
+            and (
+                not command
+                or not Path(command[0]).is_absolute()
+                or len(spec.argv) < len(command)
+                or spec.argv[-len(command) :] != command
+            )
+        )
+    ):
+        raise ValueError("invalid sandbox launch specification")
 
 
 def probe_document(request: ProbeRequest) -> str:

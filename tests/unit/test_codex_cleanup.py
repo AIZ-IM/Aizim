@@ -17,7 +17,7 @@ from aizim.agents.codex_backend import (
     build_codex_launch_spec,
 )
 from aizim.agents.launcher import AgentLaunchError, CodexLaunchOutcome, launch_codex
-from aizim.agents.macos_profile import compile_macos_profile
+from aizim.agents.macos_profile import compile_macos_profile, validate_macos_profile
 from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
 from aizim.domain import AgentRole
 
@@ -69,7 +69,6 @@ def test_parent_owned_result_path_is_outside_model_writable_scratch(tmp_path: Pa
         request,
         _sandbox(request, executable),
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
-        _developer_root(request),
     )
 
     assert spec.final_message_path.parent == request.view_root
@@ -100,11 +99,10 @@ def test_launch_spec_rejects_a_weakened_compiled_profile(tmp_path: Path, weakeni
         ).hexdigest()
         sandbox = replace(sandbox, policy_hash=policy_hash)
 
-    with pytest.raises(CodexBackendError, match="SANDBOX_SPEC_INVALID"):
-        build_codex_launch_spec(
-            request,
+    with pytest.raises(ValueError, match="invalid macOS sandbox profile"):
+        validate_macos_profile(
             replace(sandbox, argv=argv),
-            Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+            request.gateway_broker_socket.parents[2],
             _developer_root(request),
         )
 
@@ -117,7 +115,6 @@ async def test_launcher_rejects_a_dangling_result_symlink_before_spawn(tmp_path:
         request,
         _sandbox(request, executable),
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
-        _developer_root(request),
     )
     outside = tmp_path / "outside"
     os.symlink(outside, spec.final_message_path)
@@ -158,7 +155,6 @@ async def test_repeated_cancellation_cannot_skip_revoke_or_cleanup(tmp_path: Pat
             executable,
             lambda _path: "codex-cli 0.145.0",
             lambda _request: replace(sandbox),
-            _developer_root(request),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
             launch,
             revoke,
@@ -201,7 +197,6 @@ async def test_replaced_codex_is_rejected_before_the_sandbox_compiler(tmp_path: 
             executable,
             lambda _path: "codex-cli 0.145.0",
             compile_sandbox,
-            _developer_root(request),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
             unreachable_launch,
             finalize,
@@ -242,10 +237,9 @@ def test_launch_spec_rejects_profile_roots_outside_authorized_bindings(
         json.dumps(overrides, ensure_ascii=False, separators=(",", ":")).encode()
     ).hexdigest()
 
-    with pytest.raises(CodexBackendError, match="SANDBOX_SPEC_INVALID"):
-        build_codex_launch_spec(
-            request,
+    with pytest.raises(ValueError, match="invalid macOS sandbox profile"):
+        validate_macos_profile(
             replace(sandbox, argv=argv, policy_hash=policy_hash),
-            Path("/opt/aizim/bin/aizim-gateway-sidecar"),
+            request.gateway_broker_socket.parents[2],
             developer_root,
         )

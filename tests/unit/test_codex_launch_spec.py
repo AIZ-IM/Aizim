@@ -70,7 +70,7 @@ def test_codex_launch_reuses_profile_and_adds_required_sidecar(tmp_path: Path) -
     sandbox = sandbox_spec(agent_request)
     sidecar = Path("/opt/aizim/bin/aizim-gateway-sidecar")
 
-    launch = build_codex_launch_spec(agent_request, sandbox, sidecar, developer_root(agent_request))
+    launch = build_codex_launch_spec(agent_request, sandbox, sidecar)
 
     assert launch.argv[:9] == sandbox.argv[:9]
     assert launch.argv.index("--strict-config") < launch.argv.index("exec")
@@ -119,7 +119,6 @@ def test_codex_launch_omits_model_and_all_bypass_routes(tmp_path: Path) -> None:
         agent_request,
         sandbox_spec(agent_request),
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
-        developer_root(agent_request),
     )
 
     forbidden = (
@@ -141,7 +140,6 @@ def test_alignment_request_uses_a_closed_verdict_schema(tmp_path: Path) -> None:
         agent_request,
         sandbox_spec(agent_request),
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
-        developer_root(agent_request),
     )
     schema = json.loads(launch.output_schema_path.read_text())
 
@@ -195,7 +193,6 @@ async def test_launcher_executes_fake_codex_with_parent_environment_split(
         agent_request,
         sandbox,
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
-        developer_root(agent_request),
     )
 
     outcome = await launch_codex(launch)
@@ -245,7 +242,6 @@ async def test_codex_backend_has_verified_identity_and_always_finalizes(
         codex_executable=executable,
         codex_version=lambda _path: "codex-cli 0.145.0",
         sandbox=lambda _request: replace(base, argv=(str(executable), *base.argv[1:])),
-        developer_root=developer_root(agent_request),
         sidecar_executable=Path("/opt/aizim/bin/aizim-gateway-sidecar"),
         launch=launch,
         revoke=revoke,

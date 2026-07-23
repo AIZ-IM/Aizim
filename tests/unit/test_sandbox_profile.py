@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from aizim.agents import macos_sandbox, process_io
+from aizim.agents import macos_sandbox, probe_execution, process_io
 from aizim.agents.macos_sandbox import (
     MacOSSandboxAdapter,
     MacOSSandboxDependencies,
     SandboxHostError,
-    SandboxProbeError,
 )
+from aizim.agents.probe_execution import SandboxProbeError
 from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
 
 _EPHEMERAL_ROOTS: set[Path] = set()
@@ -71,6 +71,7 @@ def request(tmp_path: Path, secret: str = "do-not-render") -> SandboxRequest:
 
 def launch_spec(tmp_path: Path, argv: tuple[str, ...]) -> SandboxLaunchSpec:
     return SandboxLaunchSpec(
+        platform_id="darwin",
         argv=argv,
         cwd=tmp_path,
         parent_env={},
@@ -124,6 +125,53 @@ def test_policy_contract_hash_is_stable_across_concrete_roots(tmp_path: Path) ->
     second = adapter.compile(request(tmp_path / "two"))
 
     assert first.policy_hash == second.policy_hash
+
+
+def test_runtime_roots_are_exact_read_only_profile_entries(tmp_path: Path) -> None:
+    adapter = MacOSSandboxAdapter(dependencies())
+    sandbox_request = request(tmp_path)
+    runtime = tmp_path / "managed-runtime"
+    runtime.mkdir()
+    sandbox_request = replace(
+        sandbox_request,
+        runtime_read_roots=(runtime.resolve(),),
+    )
+
+    spec = adapter.compile(sandbox_request)
+    permission = next(
+        value for value in spec.argv if value.startswith("permissions.aizim-worker=")
+    )
+
+    assert f'"{runtime.resolve()}"="read"' in permission
+    assert f'"{runtime.resolve()}"="write"' not in permission
+
+
+@pytest.mark.parametrize("kind", ("relative", "symlink", "project", "view", "scratch"))
+def test_runtime_roots_reject_noncanonical_or_overlapping_paths(
+    tmp_path: Path,
+    kind: str,
+) -> None:
+    adapter = MacOSSandboxAdapter(dependencies())
+    sandbox_request = request(tmp_path)
+    runtime = tmp_path / "managed-runtime"
+    runtime.mkdir()
+    symlink = tmp_path / "runtime-link"
+    symlink.symlink_to(runtime, target_is_directory=True)
+    candidates = {
+        "relative": Path("relative-runtime"),
+        "symlink": symlink,
+        "project": sandbox_request.project_root,
+        "view": sandbox_request.view_root,
+        "scratch": sandbox_request.scratch_root,
+    }
+
+    with pytest.raises(SandboxHostError):
+        adapter.compile(
+            replace(
+                sandbox_request,
+                runtime_read_roots=(candidates[kind],),
+            )
+        )
 
 
 def test_contract_hash_does_not_mask_concrete_root_tampering(tmp_path: Path) -> None:
@@ -228,11 +276,11 @@ def test_adapter_rejects_canonical_project_inside_private_var_tmp(tmp_path: Path
 
 async def test_probe_output_reader_enforces_limit_while_streaming() -> None:
     reader = asyncio.StreamReader()
-    reader.feed_data(b"x" * (macos_sandbox._OUTPUT_LIMIT + 1))
+    reader.feed_data(b"x" * (probe_execution.OUTPUT_LIMIT + 1))
     reader.feed_eof()
 
     with pytest.raises(process_io.ProcessOutputLimitError):
-        await process_io._read_bounded(reader, macos_sandbox._OUTPUT_LIMIT)
+        await process_io._read_bounded(reader, probe_execution.OUTPUT_LIMIT)
 
 
 async def test_execute_kills_process_group_at_output_limit(tmp_path: Path) -> None:
@@ -240,13 +288,13 @@ async def test_execute_kills_process_group_at_output_limit(tmp_path: Path) -> No
     script = (
         "import os,pathlib,sys,time;"
         "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()));"
-        f"sys.stdout.buffer.write(b'x'*{macos_sandbox._OUTPUT_LIMIT * 8});"
+        f"sys.stdout.buffer.write(b'x'*{probe_execution.OUTPUT_LIMIT * 8});"
         "sys.stdout.flush();time.sleep(30)"
     )
 
     with pytest.raises(SandboxProbeError, match="PROBE_OUTPUT_LIMIT"):
         await asyncio.wait_for(
-            macos_sandbox._execute(
+            probe_execution.run_probe_process(
                 launch_spec(tmp_path, ("/usr/bin/python3", "-c", script, str(pid_file))),
                 1.0,
             ),
@@ -273,6 +321,9 @@ async def test_execute_reads_probe_source_before_spawning(
     monkeypatch.setattr(Path, "read_bytes", unavailable_source)
 
     with pytest.raises(OSError, match="probe source unavailable"):
-        await macos_sandbox._execute(launch_spec(tmp_path, ("/usr/bin/false",)), 1.0)
+        await probe_execution.run_probe_process(
+            launch_spec(tmp_path, ("/usr/bin/false",)),
+            1.0,
+        )
 
     assert not spawned

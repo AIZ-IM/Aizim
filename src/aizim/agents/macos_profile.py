@@ -51,6 +51,7 @@ def compile_macos_profile(
         *request.command,
     )
     return SandboxLaunchSpec(
+        platform_id="darwin",
         argv=argv,
         cwd=request.view_root,
         parent_env=MappingProxyType(dict(request.parent_env)),
@@ -66,6 +67,7 @@ def validate_macos_profile(
     spec: SandboxLaunchSpec,
     project_root: Path,
     developer_root: Path,
+    runtime_read_roots: tuple[Path, ...] = (),
 ) -> None:
     argv = spec.argv
     expected_environment = {
@@ -94,7 +96,13 @@ def validate_macos_profile(
         or overrides[1] != 'approval_policy="never"'
         or overrides[3] != _environment_override(spec.shell_env)
         or spec.policy_hash != _policy_contract_hash()
-        or not _permission_is_strict(overrides[2], spec, project_root, developer_root)
+        or not _permission_is_strict(
+            overrides[2],
+            spec,
+            project_root,
+            developer_root,
+            runtime_read_roots,
+        )
     ):
         raise ValueError("invalid macOS sandbox profile")
 
@@ -104,6 +112,7 @@ def _permission_is_strict(
     spec: SandboxLaunchSpec,
     project_root: Path,
     developer_root: Path,
+    runtime_read_roots: tuple[Path, ...],
 ) -> bool:
     try:
         document = tomllib.loads(value)
@@ -124,6 +133,7 @@ def _permission_is_strict(
     expected_filesystem = {
         ":minimal": "read",
         str(developer_root): "read",
+        **{str(root): "read" for root in runtime_read_roots},
         str(spec.view_root): "read",
         str(spec.scratch_root): "write",
         f"{project}/.aizim": "deny",
@@ -138,6 +148,7 @@ def _permission_override(request: SandboxRequest, developer_root: Path) -> str:
     filesystem = (
         (":minimal", "read"),
         (str(developer_root), "read"),
+        *((str(root), "read") for root in request.runtime_read_roots),
         (str(request.view_root), "read"),
         (str(request.scratch_root), "write"),
         (str(request.project_root / ".aizim"), "deny"),
@@ -159,6 +170,10 @@ def _policy_contract_hash() -> str:
         scratch,
         (),
         {},
+        (
+            Path("/__aizim_contract__/runtime-python"),
+            Path("/__aizim_contract__/runtime-codex"),
+        ),
     )
     environment = {
         "PATH": _BASE_PATH,

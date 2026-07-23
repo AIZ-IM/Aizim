@@ -44,7 +44,6 @@ def test_codex_launch_accepts_a_short_alias_to_the_canonical_project(tmp_path: P
         request,
         sandbox,
         Path("/opt/aizim/bin/aizim-gateway-sidecar"),
-        developer_root,
     )
 
     assert str(request.gateway_broker_socket) in "\n".join(launch.argv)

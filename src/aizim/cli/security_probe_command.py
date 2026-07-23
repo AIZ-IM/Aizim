@@ -8,7 +8,6 @@ from aizim.security_gate import run_security_gate
 _PASS_LINES = (
     "SECURITY GATE PASS",
     "gateway_matrix=pass",
-    "seatbelt_profile=pass",
     "filesystem_denials=6/6",
     "socket_denials=2/2",
     "environment_denials=1/1",
@@ -28,5 +27,10 @@ def run_security_probe(project: Path) -> int:
     if not report.passed:
         print("SECURITY GATE FAIL")
         return 3
-    print("\n".join(_PASS_LINES))
+    profile = (
+        "seatbelt_profile=pass"
+        if report.platform_id == "darwin"
+        else "linux_profile=pass"
+    )
+    print("\n".join((*_PASS_LINES[:2], profile, *_PASS_LINES[2:])))
     return 0

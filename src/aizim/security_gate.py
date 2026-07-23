@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import secrets
 import socket
 import stat
@@ -11,8 +12,14 @@ from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile, mkdtemp
 
 import aizim.gateway as gateway_api
-from aizim.agents.macos_sandbox import MacOSSandboxAdapter
-from aizim.agents.sandbox import ProbeAttempt, ProbeOperation, ProbeRequest, record_gate_completion
+from aizim.agents.platform_sandbox import sandbox_adapter
+from aizim.agents.sandbox import (
+    ProbeAttempt,
+    ProbeOperation,
+    ProbeRequest,
+    SandboxPlatform,
+    record_gate_completion,
+)
 from aizim.agents.workspace_view import ViewSource, WorkspaceView, WorkspaceViewBuilder
 from aizim.cli.doctor_command import scrubbed_command_environment
 from aizim.domain import AgentRole, sha256_file
@@ -22,6 +29,7 @@ from aizim.gateway.authority_probe import (
     authority_denial_reasons,
     run_authority_probe,
 )
+from aizim.runtime.distribution import resolve_codex_executable
 from aizim.runtime.layout import ProjectLayout
 from aizim.state import StateService, StateServiceConfig
 
@@ -32,6 +40,7 @@ class SecurityGateError(RuntimeError): ...
 @dataclass(frozen=True, slots=True)
 class SecurityGateReport:
     passed: bool
+    platform_id: SandboxPlatform
     gateway_denials: tuple[str, ...]
     target_dispatches: int
     attempts: tuple[ProbeAttempt, ...]
@@ -139,8 +148,20 @@ async def _run_live_gate(
         canonical_socket = resources.layout.run_root / "gateway.sock"
         if not stat.S_ISSOCK(canonical_socket.lstat().st_mode):
             raise SecurityGateError("broker did not bind the canonical socket entry")
-        probe = await MacOSSandboxAdapter().launch_probe(
-            _probe_request(state, resources, broker.socket_path)
+        codex_executable = resolve_codex_executable(os.environ)
+        runtime_read_roots = tuple(
+            dict.fromkeys(
+                (
+                    Path(sys.prefix).resolve(strict=True),
+                    codex_executable.parents[2].resolve(strict=True),
+                )
+            )
+        )
+        probe = await sandbox_adapter(codex_executable).launch_probe(
+            replace(
+                _probe_request(state, resources, broker.socket_path),
+                runtime_read_roots=runtime_read_roots,
+            )
         )
     finally:
         try:
@@ -170,6 +191,7 @@ async def _run_live_gate(
     return (
         SecurityGateReport(
             False,
+            probe.platform_id,
             setup.denial_reasons,
             setup.target_dispatches,
             probe.attempts,
