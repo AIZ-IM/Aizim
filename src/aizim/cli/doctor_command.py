@@ -10,6 +10,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from aizim.agents.launcher import AgentLaunchError, HostCommandSpec, run_host_command
+from aizim.agents.linux_sandbox import LinuxSandboxAdapter
 from aizim.config import (
     CODEX_CLI_VERSION,
     LEAN_LSP_MCP_VERSION,
@@ -122,12 +123,49 @@ def _codex(layout: ProjectLayout) -> DoctorCheck:
     )
 
 
+def _sandbox_check(
+    executable: Path,
+    platform: str | None = None,
+) -> DoctorCheck:
+    host = sys.platform if platform is None else platform
+    if host == "darwin":
+        sandbox = Path("/usr/bin/sandbox-exec")
+        return _check(
+            "sandbox_exec",
+            sandbox.is_file() and os.access(sandbox, os.X_OK),
+            "sandbox-exec available",
+            "sandbox mechanism is unavailable",
+        )
+    if host == "linux":
+        try:
+            LinuxSandboxAdapter.for_executable(executable).validate_host()
+        except (OSError, RuntimeError, ValueError):
+            return DoctorCheck(
+                "sandbox_exec",
+                "FAIL",
+                "sandbox mechanism is unavailable",
+            )
+        return DoctorCheck(
+            "sandbox_exec",
+            "PASS",
+            "Codex Linux sandbox available",
+        )
+    return DoctorCheck("sandbox_exec", "FAIL", "sandbox mechanism is unavailable")
+
+
+def _sandbox(layout: ProjectLayout) -> DoctorCheck:
+    try:
+        executable = resolve_codex_executable(os.environ)
+    except DistributionError:
+        return DoctorCheck("sandbox_exec", "FAIL", "sandbox mechanism is unavailable")
+    return _sandbox_check(executable)
+
+
 def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
     config, runtime = _configuration(layout)
     floor = MIN_FREE_DISK_BYTES if config is None else config.resources.min_free_disk_bytes
     free = shutil.disk_usage(layout.root).free
     python_ready = (3, 12) <= sys.version_info[:2] < (3, 15)
-    sandbox = Path("/usr/bin/sandbox-exec")
     try:
         check_state_health(layout)
         state = DoctorCheck("state_service", "PASS", "schema 1 ready")
@@ -142,12 +180,7 @@ def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
         _check("disk_floor", free >= floor, f"{free} bytes free", "free-space floor not met"),
         runtime,
         _codex(layout),
-        _check(
-            "sandbox_exec",
-            sandbox.is_file() and os.access(sandbox, os.X_OK),
-            "sandbox-exec available",
-            "sandbox mechanism is unavailable",
-        ),
+        _sandbox(layout),
         _package("lean_lsp_mcp", "lean-lsp-mcp", LEAN_LSP_MCP_VERSION),
         _package("leanclient", "leanclient", LEANCLIENT_VERSION),
         state,

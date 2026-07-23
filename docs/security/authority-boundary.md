@@ -1,8 +1,8 @@
 # Aizim authority boundary
 
 Slices 1 and 2 admit an agent only after two independent controls agree: the
-capability gateway authorizes the requested logical operation, and the macOS
-Seatbelt profile permits the operating-system action. Passing either control
+capability gateway authorizes the requested logical operation, and the
+platform sandbox profile permits the operating-system action. Passing either control
 alone grants no authority.
 
 ## Trusted and untrusted processes
@@ -10,7 +10,7 @@ alone grants no authority.
 The trusted computing base contains the Aizim CLI security-gate orchestrator,
 `StateService` and its single SQLite event store, the capability issuer and
 gateway, the gateway session broker, the materialized-view builder, the macOS
-sandbox adapter, and the launcher-owned Codex parent process. These components
+sandbox adapters, and the launcher-owned Codex parent process. These components
 may read canonical project state and append validated audit events.
 
 Agents, model-controlled commands, and the gateway sidecar are untrusted. The
@@ -31,7 +31,7 @@ status and output only after killing and reaping any same-group descendants,
 including descendants that detached from standard input and output. Cleanup is
 completed before cancellation is propagated.
 
-## Materialized view and Seatbelt profile
+## Materialized view and platform sandbox profile
 
 `WorkspaceViewBuilder` accepts an explicit project-relative allowlist. It opens
 the canonical root once, rejects traversal, reserved `.git` and `.aizim`
@@ -49,6 +49,15 @@ parent environment, and disables child network access. The production attack
 probe exercises six filesystem denials, two socket denials, one environment
 denial, and two allowed controls. A synthetic environment value verifies that
 shell isolation is real without using user credentials.
+
+`LinuxSandboxAdapter` enforces the same permission contract through the
+package-local Codex CLI and its exact bundled `codex-resources/bwrap`. It
+accepts only Linux, Codex `0.145.0`, canonical regular executable images, and
+a working user-namespace/bwrap probe. Missing or unusable bwrap fails before a
+worker starts; there is no Landlock or unsandboxed fallback. The Linux profile
+uses a minimal fixed `PATH`, reads only the materialized view and declared
+runtime roots, writes only scratch, denies the canonical project, and disables
+child network access.
 
 ## Capability and socket lifecycle
 
@@ -76,7 +85,7 @@ The sandbox must make zero accepted connections to this socket and to a
 non-allowlisted loopback listener.
 
 Authorization failures append fixed, redacted `CapabilityDenied` events.
-Seatbelt results append `SandboxProbeDenied` or `SandboxProbePassed` events with
+Sandbox results append `SandboxProbeDenied` or `SandboxProbePassed` events with
 fixed operation and reason codes. The gate takes its protected logical digest
 after capability setup, verifies protected file hashes and that digest after all
 attacks, closes every broker, listener, view, scratch directory, and state
@@ -93,7 +102,8 @@ native launcher with a separately authenticated image. The controls also assume
 the host kernel, Apple Seatbelt implementation, pinned Codex CLI image, and Aizim
 trusted process are not compromised.
 
-Linux is unsupported for this gate. An absent Seatbelt mechanism, a Codex
+Linux support is glibc-only and becomes qualified per architecture only after
+the real attack probe passes in the native CI job. An absent platform sandbox mechanism, a Codex
 version mismatch, a skipped or inconclusive attack, an unexpected allow, or a
 replay or digest mismatch fails closed.
 

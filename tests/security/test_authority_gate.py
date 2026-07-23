@@ -4,12 +4,14 @@ import asyncio
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
 from aizim.agents.sandbox import ProbeOperation
+from aizim.cli import security_probe_command
 from aizim.domain.serialization import JsonValue
 from aizim.gateway import (
     CapabilityGateway,
@@ -43,6 +45,17 @@ PASS_LINES = (
     "protected_assets=unchanged",
     "protected_state=unchanged",
 )
+LINUX_PASS_LINES = (
+    *PASS_LINES[:2],
+    "linux_profile=pass",
+    *PASS_LINES[3:],
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _PlatformReport:
+    passed: bool
+    platform_id: str
 
 
 def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -205,6 +218,20 @@ def test_security_probe_requires_the_fixed_credential_free_shape(tmp_path: Path)
     assert failed.returncode == 3
     assert failed.stdout == "SECURITY GATE FAIL\n"
     assert failed.stderr == ""
+
+
+def test_security_probe_renders_the_linux_profile_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async def linux_report(_project: Path) -> _PlatformReport:
+        return _PlatformReport(True, "linux")
+
+    monkeypatch.setattr(security_probe_command, "run_security_gate", linux_report)
+
+    assert security_probe_command.run_security_probe(tmp_path) == 0
+    assert capsys.readouterr().out.splitlines() == list(LINUX_PASS_LINES)
 
 
 @pytest.mark.macos_sandbox

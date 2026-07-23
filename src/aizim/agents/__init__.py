@@ -1,6 +1,8 @@
 from .backend import AgentBackend, AgentRequest, AgentResult, BackendIdentity
 from .codex_backend import CodexBackend, CodexBackendDependencies
 from .fake_backend import FakeAgentBackend, FakeToolAction
+from .linux_sandbox import LinuxSandboxAdapter, LinuxSandboxDependencies
+from .macos_sandbox import MacOSSandboxAdapter, MacOSSandboxDependencies
 from .platform_sandbox import sandbox_adapter
 from .sandbox import (
     ProbeAttempt,
@@ -30,6 +32,10 @@ __all__ = [
     "CodexBackendDependencies",
     "FakeAgentBackend",
     "FakeToolAction",
+    "LinuxSandboxAdapter",
+    "LinuxSandboxDependencies",
+    "MacOSSandboxAdapter",
+    "MacOSSandboxDependencies",
     "ProbeAttempt",
     "ProbeOperation",
     "ProbeReport",

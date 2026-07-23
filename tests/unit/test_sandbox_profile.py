@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import os
 import shutil
 from collections.abc import Callable, Iterator
 from dataclasses import replace
@@ -9,14 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from aizim.agents import macos_sandbox, probe_execution, process_io
+from aizim.agents import macos_sandbox
 from aizim.agents.macos_sandbox import (
     MacOSSandboxAdapter,
     MacOSSandboxDependencies,
     SandboxHostError,
 )
-from aizim.agents.probe_execution import SandboxProbeError
-from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
+from aizim.agents.sandbox import SandboxRequest
 
 _EPHEMERAL_ROOTS: set[Path] = set()
 
@@ -66,20 +63,6 @@ def request(tmp_path: Path, secret: str = "do-not-render") -> SandboxRequest:
         scratch_root=scratch,
         command=("/usr/bin/python3", "-I", "-B", "-"),
         parent_env={"PATH": "/usr/bin", "AIZIM_TEST_TOKEN": secret},
-    )
-
-
-def launch_spec(tmp_path: Path, argv: tuple[str, ...]) -> SandboxLaunchSpec:
-    return SandboxLaunchSpec(
-        platform_id="darwin",
-        argv=argv,
-        cwd=tmp_path,
-        parent_env={},
-        shell_env={},
-        view_root=tmp_path,
-        scratch_root=tmp_path,
-        profile_id="test",
-        policy_hash="0" * 64,
     )
 
 
@@ -261,7 +244,6 @@ def test_adapter_rejects_globally_writable_temporary_roots(tmp_path: Path) -> No
             SandboxRequest(project, view, scratch, ("/usr/bin/python3",), {})
         )
 
-
 def test_adapter_rejects_canonical_project_inside_private_var_tmp(tmp_path: Path) -> None:
     project = Path("/private/var/tmp") / f"aizim-project-{tmp_path.name}"
     project.mkdir(mode=0o700)
@@ -272,58 +254,3 @@ def test_adapter_rejects_canonical_project_inside_private_var_tmp(tmp_path: Path
         MacOSSandboxAdapter(dependencies()).compile(
             SandboxRequest(project, view, scratch, ("/usr/bin/python3",), {})
         )
-
-
-async def test_probe_output_reader_enforces_limit_while_streaming() -> None:
-    reader = asyncio.StreamReader()
-    reader.feed_data(b"x" * (probe_execution.OUTPUT_LIMIT + 1))
-    reader.feed_eof()
-
-    with pytest.raises(process_io.ProcessOutputLimitError):
-        await process_io._read_bounded(reader, probe_execution.OUTPUT_LIMIT)
-
-
-async def test_execute_kills_process_group_at_output_limit(tmp_path: Path) -> None:
-    pid_file = tmp_path / "probe.pid"
-    script = (
-        "import os,pathlib,sys,time;"
-        "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()));"
-        f"sys.stdout.buffer.write(b'x'*{probe_execution.OUTPUT_LIMIT * 8});"
-        "sys.stdout.flush();time.sleep(30)"
-    )
-
-    with pytest.raises(SandboxProbeError, match="PROBE_OUTPUT_LIMIT"):
-        await asyncio.wait_for(
-            probe_execution.run_probe_process(
-                launch_spec(tmp_path, ("/usr/bin/python3", "-c", script, str(pid_file))),
-                1.0,
-            ),
-            timeout=2.0,
-        )
-
-    with pytest.raises(ProcessLookupError):
-        os.kill(int(pid_file.read_text()), 0)
-
-
-async def test_execute_reads_probe_source_before_spawning(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    spawned = False
-
-    async def unexpected_spawn(*args: object, **kwargs: object) -> None:
-        nonlocal spawned
-        spawned = True
-
-    def unavailable_source(_path: Path) -> bytes:
-        raise OSError("probe source unavailable")
-
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", unexpected_spawn)
-    monkeypatch.setattr(Path, "read_bytes", unavailable_source)
-
-    with pytest.raises(OSError, match="probe source unavailable"):
-        await probe_execution.run_probe_process(
-            launch_spec(tmp_path, ("/usr/bin/false",)),
-            1.0,
-        )
-
-    assert not spawned

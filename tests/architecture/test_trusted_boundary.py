@@ -27,7 +27,13 @@ PROCESS_CREATORS = {
     *(f"subprocess.{name}" for name in ["check_call", "check_output"]),
     *(f"subprocess.{name}" for name in ["getoutput", "getstatusoutput"]),
 }
-PROCESS_OWNERS = {"agents/launcher.py", "agents/macos_sandbox.py", "lean/mcp_client.py"}
+PROCESS_OWNERS = {
+    "agents/launcher.py",
+    "agents/linux_sandbox.py",
+    "agents/macos_sandbox.py",
+    "agents/probe_execution.py",
+    "lean/mcp_client.py",
+}
 TRUSTED_OPERATIONS = {
     GatewayTool.STATE_APPEND,
     GatewayTool.DOCUMENT_RESOLVE_PATH,

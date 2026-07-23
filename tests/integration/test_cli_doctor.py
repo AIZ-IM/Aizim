@@ -7,6 +7,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from aizim.agents.linux_sandbox import LinuxSandboxAdapter
+from aizim.cli import doctor_command
+
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal_lean"
 CHECK_IDS = {
     "python",
@@ -174,3 +179,54 @@ def test_doctor_source_mode_still_resolves_codex_from_path(tmp_path: Path) -> No
 
     assert codex["status"] == "PASS"
     assert "0.145.0" in codex["detail"]
+
+
+def test_doctor_reports_linux_sandbox_only_after_host_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    codex = executable(tmp_path / "packaged-codex", "codex-cli 0.145.0")
+    validated: list[Path] = []
+
+    def validate_host(adapter: LinuxSandboxAdapter) -> Path:
+        validated.append(adapter.codex_executable)
+        return tmp_path / "bwrap"
+
+    monkeypatch.setattr(
+        doctor_command.LinuxSandboxAdapter,
+        "validate_host",
+        validate_host,
+    )
+
+    check = doctor_command._sandbox_check(codex.resolve(), "linux")
+
+    assert check == doctor_command.DoctorCheck(
+        "sandbox_exec",
+        "PASS",
+        "Codex Linux sandbox available",
+    )
+    assert validated == [codex.resolve()]
+
+
+def test_doctor_fails_closed_when_linux_sandbox_validation_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    codex = executable(tmp_path / "packaged-codex", "codex-cli 0.145.0")
+
+    def fail_host(_adapter: LinuxSandboxAdapter) -> Path:
+        raise RuntimeError("bwrap unavailable")
+
+    monkeypatch.setattr(
+        doctor_command.LinuxSandboxAdapter,
+        "validate_host",
+        fail_host,
+    )
+
+    check = doctor_command._sandbox_check(codex.resolve(), "linux")
+
+    assert check == doctor_command.DoctorCheck(
+        "sandbox_exec",
+        "FAIL",
+        "sandbox mechanism is unavailable",
+    )

@@ -8,6 +8,8 @@ STORE_PATH = REPOSITORY_ROOT / "src" / "aizim" / "state" / "store.py"
 SERVICE_PATH = REPOSITORY_ROOT / "src" / "aizim" / "state" / "service.py"
 AGENT_ROOT = REPOSITORY_ROOT / "src" / "aizim" / "agents"
 MACOS_SANDBOX_PATH = AGENT_ROOT / "macos_sandbox.py"
+LINUX_SANDBOX_PATH = AGENT_ROOT / "linux_sandbox.py"
+PROBE_EXECUTION_PATH = AGENT_ROOT / "probe_execution.py"
 LAUNCHER_PATH = AGENT_ROOT / "launcher.py"
 
 
@@ -158,12 +160,18 @@ def test_task_five_authored_files_stay_within_pure_loc_limit() -> None:
     assert oversized == []
 
 
-def test_only_macos_sandbox_and_agent_launcher_create_processes() -> None:
+def test_only_trusted_sandbox_and_agent_launcher_modules_create_processes() -> None:
     assert LAUNCHER_PATH.is_file()
+    allowed = {
+        MACOS_SANDBOX_PATH,
+        LINUX_SANDBOX_PATH,
+        PROBE_EXECUTION_PATH,
+        LAUNCHER_PATH,
+    }
     violations: list[str] = []
     for path in AGENT_ROOT.glob("*.py"):
         tree = ast.parse(path.read_text(), filename=str(path))
-        if path not in {MACOS_SANDBOX_PATH, LAUNCHER_PATH}:
+        if path not in allowed:
             violations.extend(
                 f"{path.relative_to(REPOSITORY_ROOT)}:{node.lineno}"
                 for node in ast.walk(tree)
