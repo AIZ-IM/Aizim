@@ -7,7 +7,7 @@ from aizim.domain.serialization import JsonValue, canonical_json
 
 from .event_payload import thaw_payload
 from .events import EventEnvelope
-from .projections import ProjectionRecord
+from .projection_types import ProjectionRecord
 
 _EVENT_PROJECTION: Final = {
     "ProjectInitialized": "project",
@@ -18,7 +18,10 @@ _EVENT_PROJECTION: Final = {
     "FormalTraceSealed": "evaluations",
     "EvaluationTransitionRejected": "evaluations",
     "ScheduleProposed": "schedules",
+    "ControllerConfigured": "controller",
     "WorkerRegistered": "workers",
+    "WorkerConfigured": "worker_roster",
+    "WorkerTaskAssigned": "worker_assignments",
     "WorkerStarted": "workers",
     "WorkerStopped": "workers",
     "WorkerCrashed": "workers",
@@ -63,7 +66,10 @@ _ENTITY_FIELD: Final = {
     "ProjectInitialized": "project_id",
     "ArtifactRegistered": "content_hash",
     "EvaluationTransitionRejected": "requested_hash",
+    "ControllerConfigured": "controller_id",
     "WorkerRegistered": "worker_id",
+    "WorkerConfigured": "worker_id",
+    "WorkerTaskAssigned": "worker_id",
     "WorkerStarted": "worker_id",
     "WorkerStopped": "worker_id",
     "WorkerCrashed": "worker_id",

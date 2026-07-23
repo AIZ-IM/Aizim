@@ -133,7 +133,8 @@ def test_event_envelope_has_exact_immutable_contract_fields() -> None:
         "causation_id",
         "payload",
     )
-    assert EventEnvelope.__dataclass_params__.frozen
+    dataclass_params = getattr(EventEnvelope, "__dataclass_params__", None)
+    assert dataclass_params is not None and dataclass_params.frozen
 
 
 @pytest.mark.parametrize(
@@ -232,7 +233,10 @@ def test_projection_registry_is_fixed() -> None:
         "artifacts",
         "evaluations",
         "schedules",
+        "controller",
         "workers",
+        "worker_roster",
+        "worker_assignments",
         "worker_cursors",
         "epochs",
         "leases",

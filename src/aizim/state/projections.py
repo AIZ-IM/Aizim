@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Final
 
 from .events import EventEnvelope
+from .projection_types import ProjectionRecord, ProjectionReducer
+
+__all__ = [
+    "AUDIT_PROJECTIONS",
+    "PROJECTION_NAMES",
+    "ProjectionRecord",
+    "ProjectionReducer",
+    "apply_event",
+]
 
 PROJECTION_NAMES: Final = (
     "project",
@@ -12,7 +19,10 @@ PROJECTION_NAMES: Final = (
     "artifacts",
     "evaluations",
     "schedules",
+    "controller",
     "workers",
+    "worker_roster",
+    "worker_assignments",
     "worker_cursors",
     "epochs",
     "leases",
@@ -28,19 +38,6 @@ PROJECTION_NAMES: Final = (
     "interventions",
 )
 AUDIT_PROJECTIONS: Final = frozenset({"denials"})
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectionRecord:
-    projection_name: str
-    entity_id: str
-    version: int
-    state_json: bytes
-
-
-type ProjectionReducer = Callable[
-    [tuple[ProjectionRecord, ...], EventEnvelope], tuple[ProjectionRecord, ...]
-]
 
 
 def apply_event(

@@ -8,6 +8,31 @@ from .schema_v1_validation import integer_payload, sha256_payload
 def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
     codecs.update(
         {
+            "ControllerConfigured": codec(
+                ("controller_id", "provider"),
+                ("model",),
+                {
+                    "provider": lambda value: (
+                        type(value) is str and value in {"codex", "claude"}
+                    )
+                },
+            ),
+            "WorkerConfigured": codec(("worker_id", "role", "status")),
+            "WorkerTaskAssigned": codec(
+                (
+                    "assignment_id",
+                    "controller_id",
+                    "worker_id",
+                    "task",
+                    "task_hash",
+                    "task_version",
+                ),
+                validators={
+                    "assignment_id": sha256_payload,
+                    "task_hash": sha256_payload,
+                    "task_version": lambda value: type(value) is int and value > 0,
+                },
+            ),
             "ScheduleProposed": codec(("directive_id", "worker_id", "execution_id"), ("role",)),
             "WorkerCursorSaved": codec(
                 (

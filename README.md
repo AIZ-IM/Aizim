@@ -62,6 +62,34 @@ This source build requires the exact toolchain versions recorded in `.node-versi
 [npm distribution runbook](docs/operations/npm-distribution.md) for the full three-platform
 qualification and release-readiness procedure.
 
+## Persistent controller and workers
+
+Initialize a Lean project, select one primary controller provider, then register workers and
+assign versioned tasks:
+
+```sh
+aizim init /absolute/path/to/lean-project
+aizim controller configure \
+  --project /absolute/path/to/lean-project \
+  --provider codex \
+  --model gpt-5.6-sol
+aizim worker register \
+  --project /absolute/path/to/lean-project \
+  --worker-id counterexample-a \
+  --role counterexample_agent
+aizim worker assign \
+  --project /absolute/path/to/lean-project \
+  --worker-id counterexample-a \
+  --task "search quartic families"
+aizim controller show --project /absolute/path/to/lean-project --json
+aizim worker list --project /absolute/path/to/lean-project --json
+```
+
+Use `--provider claude` to select Claude; `--model` is optional for either provider. Controller
+configuration, worker registration, and the latest task version survive process restarts in the
+append-only Aizim state. These control-plane commands do not yet start detached controller or
+worker processes; the current executable research path remains `aizim run`.
+
 Slices 1–2 are engineering smoke tests only. They make no open-problem, novelty, or
 general proof-capability claim.
 

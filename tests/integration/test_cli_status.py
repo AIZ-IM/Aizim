@@ -151,7 +151,7 @@ def test_state_supervisor_command_is_hidden_from_public_help() -> None:
     result = run_cli("--help")
 
     assert result.returncode == 0
-    assert "{init,doctor,status,run,security-probe}" in result.stdout
+    assert "{init,doctor,status,controller,worker,run,security-probe}" in result.stdout
     assert "state" not in result.stdout
 
 
