@@ -16,7 +16,6 @@ _FIXED_LAUNCH_POLICY: Final = (
     "--permission-profile",
     _PROFILE_ID,
     "--sandbox-state-disable-network",
-    "--log-denials",
     "-C",
 )
 
@@ -74,10 +73,7 @@ def _permission_override(request: SandboxRequest) -> str:
         *((str(root), "read") for root in request.runtime_read_roots),
         (str(request.view_root), "read"),
         (str(request.scratch_root), "write"),
-        (str(request.project_root / ".aizim"), "deny"),
-        (str(request.project_root / ".aizim" / "**"), "deny"),
         (str(request.project_root), "deny"),
-        (str(request.project_root / "**"), "deny"),
     )
     entries = ",".join(
         f"{_toml_string(path)}={_toml_string(permission)}"

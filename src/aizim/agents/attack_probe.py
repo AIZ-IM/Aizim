@@ -9,7 +9,9 @@ import sys
 from collections.abc import Callable
 from contextlib import suppress
 
-_DENIED_ERRNOS = frozenset({errno.EACCES, errno.EPERM})
+_DENIED_ERRNOS = frozenset(
+    {errno.EACCES, errno.ENOENT, errno.ENOTDIR, errno.EPERM}
+)
 
 
 def _read(path: str) -> None:

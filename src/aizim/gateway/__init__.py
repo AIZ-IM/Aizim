@@ -10,6 +10,7 @@ from .capabilities import (
     GatewayTool,
     advertised_tools,
 )
+from .linux_peer_identity import LinuxPeerIdentityVerifier
 from .peer_identity import (
     BrokerDependencies,
     BrokerLifecycleError,
@@ -46,6 +47,7 @@ __all__ = [
     "GatewayTool",
     "GatewayTransport",
     "GatewayTransportError",
+    "LinuxPeerIdentityVerifier",
     "PeerIdentity",
     "PeerIdentityError",
     "RedeemedSession",

@@ -49,6 +49,7 @@ def test_linux_profile_is_exact_closed_and_root_independent(tmp_path: Path) -> N
     }
     assert first.argv[-len(first_request.command) :] == first_request.command
     assert 'approval_policy="never"' in first.argv
+    assert "--log-denials" not in first.argv
     permission = next(
         value for value in first.argv if value.startswith("permissions.aizim-worker=")
     )
@@ -57,6 +58,8 @@ def test_linux_profile_is_exact_closed_and_root_independent(tmp_path: Path) -> N
     assert f'"{first_request.view_root}"="read"' in permission
     assert f'"{first_request.scratch_root}"="write"' in permission
     assert f'"{first_request.project_root}"="deny"' in permission
+    assert str(first_request.project_root / ".aizim") not in permission
+    assert f"{first_request.project_root}/**" not in permission
     assert "hidden" not in repr(first)
 
 

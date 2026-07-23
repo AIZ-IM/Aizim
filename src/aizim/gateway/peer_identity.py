@@ -120,7 +120,7 @@ class BrokerDependencies:
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     session_ids: Callable[[], str] = lambda: secrets.token_urlsafe(32)
     peer_identity: Callable[[PeerSocket], PeerIdentity] = field(
-        default_factory=lambda: DarwinPeerIdentityVerifier()
+        default_factory=lambda: _platform_peer_identity_verifier()
     )
 
 
@@ -245,14 +245,18 @@ def _hash_regular_file(path: str) -> str:
     flags = os.O_RDONLY | os.O_CLOEXEC
     nofollow = getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags | nofollow)
-    digest = sha256()
     try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise PeerIdentityError("peer process image is not a regular file")
-        while chunk := os.read(descriptor, 1024 * 1024):
-            digest.update(chunk)
+        return _hash_regular_descriptor(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _hash_regular_descriptor(descriptor: int) -> str:
+    if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        raise PeerIdentityError("peer process image is not a regular file")
+    digest = sha256()
+    while chunk := os.read(descriptor, 1024 * 1024):
+        digest.update(chunk)
     return digest.hexdigest()
 
 
@@ -281,3 +285,13 @@ class DarwinPeerIdentityVerifier:
         except (OSError, AttributeError) as error:
             raise PeerIdentityError("peer identity verification failed") from error
         return PeerIdentity(euid, image_hash)
+
+
+def _platform_peer_identity_verifier() -> Callable[[PeerSocket], PeerIdentity]:
+    if sys.platform == "darwin":
+        return DarwinPeerIdentityVerifier()
+    if sys.platform == "linux":
+        from .linux_peer_identity import LinuxPeerIdentityVerifier
+
+        return LinuxPeerIdentityVerifier()
+    raise PeerIdentityError("peer identity platform is unavailable")

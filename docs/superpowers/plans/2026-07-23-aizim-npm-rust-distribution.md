@@ -2363,7 +2363,6 @@ _FIXED_LAUNCH_POLICY = (
     "--permission-profile",
     _PROFILE_ID,
     "--sandbox-state-disable-network",
-    "--log-denials",
     "-C",
 )
 ```
@@ -2377,7 +2376,7 @@ The resulting argv is:
 -c permissions.aizim-worker={...network={enabled=false}}
 -c shell_environment_policy={inherit="none",...}
 sandbox --permission-profile aizim-worker
---sandbox-state-disable-network --log-denials
+--sandbox-state-disable-network
 -C <view> <absolute-command> <arguments...>
 ```
 
