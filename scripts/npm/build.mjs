@@ -309,6 +309,7 @@ export async function build() {
       "--locked",
       "--no-dev",
       "--no-emit-project",
+      "--no-header",
       "--format",
       "requirements.txt",
       "--output-file",

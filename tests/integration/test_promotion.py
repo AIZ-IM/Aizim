@@ -260,7 +260,18 @@ def test_source_scan_warnings_block_publication(tmp_path: Path) -> None:
             for event in events
             if event.envelope.event_type == "PromotionVerificationRecorded"
         )
+        failure = next(
+            event.envelope.payload
+            for event in events
+            if event.envelope.event_type == "PromotionFailed"
+        )
+        artifact_hash = failure["artifact_hash"]
+        assert type(artifact_hash) is str
+        failure_evidence = json.loads(
+            artifacts.load("run-1", "diagnostics", artifact_hash)
+        )
         assert verification["source_scan_verdict"] == "failed"
+        assert failure_evidence["diagnostics"] == ["source scan did not close cleanly"]
     finally:
         service.close()
 

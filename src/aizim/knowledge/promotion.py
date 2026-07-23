@@ -257,7 +257,11 @@ class PromotionService:
             entry,
             run_id,
             reason,
-            () if evidence is None else evidence.diagnostics,
+            (
+                ()
+                if evidence is None
+                else (*evidence.diagnostics, *evidence.source_scan_warnings)
+            ),
             () if evidence is None else evidence.axioms,
         )
         return PromotionOutcome(entry.contribution_id, quarantined.state, None)

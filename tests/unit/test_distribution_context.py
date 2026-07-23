@@ -5,11 +5,13 @@ from pathlib import Path
 
 import pytest
 
+import aizim.runtime.distribution as distribution
 from aizim.runtime.distribution import (
     DISTRIBUTION_ENVIRONMENT,
     DistributionError,
     load_distribution_context,
     resolve_codex_executable,
+    resolve_ripgrep_executable,
     without_distribution_environment,
 )
 
@@ -136,6 +138,43 @@ def test_npm_resolution_ignores_path_and_source_resolution_uses_it(tmp_path: Pat
 
     assert resolve_codex_executable(npm_environment) == npm_codex
     assert resolve_codex_executable({"PATH": str(path_root)}) == path_codex
+
+
+def test_npm_resolution_uses_ripgrep_from_the_verified_codex_bundle(tmp_path: Path) -> None:
+    triple = tmp_path / "codex-native" / "vendor" / "aarch64-apple-darwin"
+    (triple / "bin").mkdir(parents=True)
+    (triple / "codex-path").mkdir()
+    codex = _executable(triple / "bin" / "codex")
+    ripgrep = _executable(triple / "codex-path" / "rg")
+    environment = _npm_environment(codex)
+    environment["PATH"] = ""
+
+    assert resolve_ripgrep_executable(environment) == ripgrep
+
+
+def test_source_resolution_uses_ripgrep_from_the_codex_native_dependency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    meta = tmp_path / "codex"
+    (meta / "bin").mkdir(parents=True)
+    codex = _executable(meta / "bin" / "codex")
+    triple = (
+        meta
+        / "node_modules"
+        / "@openai"
+        / "codex-darwin-arm64"
+        / "vendor"
+        / "aarch64-apple-darwin"
+    )
+    (triple / "codex-path").mkdir(parents=True)
+    ripgrep = _executable(triple / "codex-path" / "rg")
+    monkeypatch.setattr(
+        distribution,
+        "_host_codex_layout",
+        lambda: ("darwin-arm64", "aarch64-apple-darwin"),
+    )
+
+    assert resolve_ripgrep_executable({"PATH": str(codex.parent)}) == ripgrep
 
 
 def test_source_resolution_rejects_an_unavailable_codex() -> None:

@@ -5,6 +5,7 @@ import os
 import signal
 import subprocess
 import sys
+from collections.abc import Mapping
 from contextlib import AsyncExitStack, suppress
 from datetime import timedelta
 from pathlib import Path
@@ -15,6 +16,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.types import TextContent
 
 from aizim.domain import sha256_json
+from aizim.runtime.distribution import resolve_ripgrep_executable
 
 from .mcp_parsing import parse_attempts, parse_diagnostics, parse_goal, parse_hover_info
 from .models import (
@@ -101,7 +103,7 @@ class LeanMcpClient:
                     StdioServerParameters(
                         command=str(executable),
                         args=list(self.arguments),
-                        env={"PATH": os.environ.get("PATH", ""), "LEAN_LOG_LEVEL": "CRITICAL"},
+                        env=_lean_mcp_environment(os.environ),
                         cwd=str(self._project_root),
                     ),
                     errlog=stderr,
@@ -270,3 +272,12 @@ def _sanitize(value: object, project_root: Path) -> object:
     if type(value) is dict:
         return {key: _sanitize(item, project_root) for key, item in value.items()}
     return value
+
+
+def _lean_mcp_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    ripgrep = resolve_ripgrep_executable(environ)
+    inherited = environ.get("PATH", "")
+    path = str(ripgrep.parent)
+    if inherited:
+        path = f"{path}{os.pathsep}{inherited}"
+    return {"PATH": path, "LEAN_LOG_LEVEL": "CRITICAL"}

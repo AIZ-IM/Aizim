@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import stat
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,6 +90,39 @@ def resolve_codex_executable(environ: Mapping[str, str]) -> Path:
     return executable
 
 
+def resolve_ripgrep_executable(environ: Mapping[str, str]) -> Path:
+    value = shutil.which("rg", path=environ.get("PATH"))
+    if value is not None:
+        try:
+            executable = Path(value).resolve(strict=True)
+        except OSError as error:
+            raise DistributionError("RIPGREP_EXECUTABLE_UNAVAILABLE") from error
+        if executable.is_file() and os.access(executable, os.X_OK):
+            return executable
+    try:
+        context = load_distribution_context(environ)
+        codex = resolve_codex_executable(environ)
+        if context.mode == "npm":
+            candidate = codex.parent.parent / "codex-path" / "rg"
+        else:
+            package, triple = _host_codex_layout()
+            candidate = (
+                codex.parent.parent
+                / "node_modules"
+                / "@openai"
+                / f"codex-{package}"
+                / "vendor"
+                / triple
+                / "codex-path"
+                / "rg"
+            )
+        return _executable(str(candidate), "RIPGREP_EXECUTABLE_UNAVAILABLE")
+    except DistributionError as error:
+        if error.code == "RIPGREP_EXECUTABLE_UNAVAILABLE":
+            raise
+        raise DistributionError("RIPGREP_EXECUTABLE_UNAVAILABLE") from error
+
+
 def without_distribution_environment(environ: Mapping[str, str]) -> dict[str, str]:
     return {
         name: value
@@ -127,3 +162,14 @@ def _executable(value: str, code: str) -> Path:
     ):
         raise DistributionError(code)
     return resolved
+
+
+def _host_codex_layout() -> tuple[str, str]:
+    layout = {
+        ("darwin", "arm64"): ("darwin-arm64", "aarch64-apple-darwin"),
+        ("linux", "aarch64"): ("linux-arm64", "aarch64-unknown-linux-musl"),
+        ("linux", "x86_64"): ("linux-x64", "x86_64-unknown-linux-musl"),
+    }.get((sys.platform, platform.machine().lower()))
+    if layout is None:
+        raise DistributionError("RIPGREP_EXECUTABLE_UNAVAILABLE")
+    return layout
