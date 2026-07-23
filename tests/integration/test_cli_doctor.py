@@ -40,6 +40,23 @@ def initialized_project(tmp_path: Path) -> Path:
     return root
 
 
+def executable(path: Path, output: str) -> Path:
+    path.write_text(f"#!/bin/sh\nprintf '%s\\n' '{output}'\n")
+    path.chmod(0o755)
+    return path
+
+
+def npm_environment(codex: Path) -> dict[str, str]:
+    return {
+        "AIZIM_DISTRIBUTION_MODE": "npm",
+        "AIZIM_DISTRIBUTION_VERSION": "0.1.0",
+        "AIZIM_DISTRIBUTION_TARGET": "darwin-arm64",
+        "AIZIM_CODEX_EXECUTABLE": str(codex),
+        "AIZIM_DISTRIBUTION_MANIFEST_SHA256": "1" * 64,
+        "AIZIM_PLATFORM_MANIFEST_SHA256": "2" * 64,
+    }
+
+
 def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
     tmp_path: Path,
 ) -> None:
@@ -116,3 +133,44 @@ def test_doctor_readiness_failure_uses_exit_three(tmp_path: Path) -> None:
 
     assert result.returncode == 3
     assert document["ready"] is False
+
+
+def test_doctor_npm_mode_uses_the_injected_codex_instead_of_path(tmp_path: Path) -> None:
+    root = initialized_project(tmp_path)
+    wrong_bin = tmp_path / "wrong-bin"
+    wrong_bin.mkdir()
+    executable(wrong_bin / "codex", "codex-cli 0.0.0")
+    injected = executable(tmp_path / "packaged-codex", "codex-cli 0.145.0")
+    environment = dict(os.environ)
+    environment.update(npm_environment(injected))
+    environment["PATH"] = f"{wrong_bin}:{environment['PATH']}"
+
+    result = run_cli("doctor", "--project", str(root), "--json", environ=environment)
+    document = json.loads(result.stdout)
+    codex = next(check for check in document["checks"] if check["id"] == "codex")
+
+    assert codex["status"] == "PASS"
+    assert "0.145.0" in codex["detail"]
+    assert "0.0.0" not in result.stdout
+    assert str(injected) not in result.stdout + result.stderr
+
+
+def test_doctor_source_mode_still_resolves_codex_from_path(tmp_path: Path) -> None:
+    root = initialized_project(tmp_path)
+    source_bin = tmp_path / "source-bin"
+    source_bin.mkdir()
+    executable(source_bin / "codex", "codex-cli 0.145.0")
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith("AIZIM_DISTRIBUTION_")
+        and name != "AIZIM_CODEX_EXECUTABLE"
+    }
+    environment["PATH"] = f"{source_bin}:{environment['PATH']}"
+
+    result = run_cli("doctor", "--project", str(root), "--json", environ=environment)
+    document = json.loads(result.stdout)
+    codex = next(check for check in document["checks"] if check["id"] == "codex")
+
+    assert codex["status"] == "PASS"
+    assert "0.145.0" in codex["detail"]

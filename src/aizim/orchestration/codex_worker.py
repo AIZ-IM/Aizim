@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import replace
@@ -25,6 +24,11 @@ from aizim.agents.macos_sandbox import (
 )
 from aizim.agents.sandbox import SandboxRequest
 from aizim.domain import sha256_file
+from aizim.runtime.distribution import (
+    DistributionError,
+    resolve_codex_executable,
+    without_distribution_environment,
+)
 
 from .run_identity import candidate_name, contribution_id
 
@@ -78,9 +82,13 @@ class CodexWorkspaceBackend:
 
 
 def create_codex_backend(parent_environment: Mapping[str, str] | None = None) -> CodexBackend:
-    executable = _executable("codex")
+    source_environment = dict(os.environ if parent_environment is None else parent_environment)
+    try:
+        executable = resolve_codex_executable(source_environment)
+    except DistributionError as error:
+        raise CodexWorkerError(error.code) from error
     sidecar = _sidecar_executable()
-    environment = dict(os.environ if parent_environment is None else parent_environment)
+    environment = without_distribution_environment(source_environment)
     sandbox = MacOSSandboxAdapter()
     try:
         developer_root = Path(host_command_output(("/usr/bin/xcode-select", "-p"))).resolve(
@@ -217,19 +225,6 @@ def _second_worker_instruction(
         "complete_type=(n : Nat) : n + 0 = n, imports=[Std], and empty dependencies, "
         "assumptions, and evidence_links. Do not write files or use unlisted tools."
     )
-
-
-def _executable(name: str) -> Path:
-    value = shutil.which(name)
-    if value is None:
-        raise CodexWorkerError("CODEX_EXECUTABLE_UNAVAILABLE")
-    try:
-        executable = Path(value).resolve(strict=True)
-    except OSError as error:
-        raise CodexWorkerError("CODEX_EXECUTABLE_UNAVAILABLE") from error
-    if not executable.is_file() or not os.access(executable, os.X_OK):
-        raise CodexWorkerError("CODEX_EXECUTABLE_UNAVAILABLE")
-    return executable
 
 
 def _sidecar_executable() -> Path:

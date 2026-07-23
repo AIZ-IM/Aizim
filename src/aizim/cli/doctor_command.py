@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import sys
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -16,6 +17,11 @@ from aizim.config import (
     MIN_FREE_DISK_BYTES,
     AizimConfig,
     load_config,
+)
+from aizim.runtime.distribution import (
+    DISTRIBUTION_ENVIRONMENT,
+    DistributionError,
+    resolve_codex_executable,
 )
 from aizim.runtime.layout import LayoutError, ProjectLayout
 
@@ -49,17 +55,26 @@ def _check(identifier: str, passed: bool, success: str, failure: str) -> DoctorC
     return DoctorCheck(identifier, "PASS" if passed else "FAIL", success if passed else failure)
 
 
-def scrubbed_command_environment() -> dict[str, str]:
+def scrubbed_command_environment(
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    source = os.environ if environ is None else environ
     return {
         name: value
-        for name, value in os.environ.items()
-        if not any(marker in name.upper() for marker in _SECRET_MARKERS)
+        for name, value in source.items()
+        if name not in DISTRIBUTION_ENVIRONMENT
+        and not any(marker in name.upper() for marker in _SECRET_MARKERS)
     }
 
 
 def _command(identifier: str, argv: list[str], expected: str, cwd: Path) -> DoctorCheck:
     environment = scrubbed_command_environment()
-    executable = shutil.which(argv[0], path=environment.get("PATH"))
+    candidate = Path(argv[0])
+    executable = (
+        str(candidate)
+        if candidate.is_absolute()
+        else shutil.which(argv[0], path=environment.get("PATH"))
+    )
     if executable is None:
         return DoctorCheck(identifier, "FAIL", "required executable is unavailable")
     try:
@@ -94,6 +109,19 @@ def _configuration(layout: ProjectLayout) -> tuple[AizimConfig | None, DoctorChe
     return config, DoctorCheck("runtime_mode", "PASS", config.run.lean_runtime.value)
 
 
+def _codex(layout: ProjectLayout) -> DoctorCheck:
+    try:
+        executable = resolve_codex_executable(os.environ)
+    except DistributionError:
+        return DoctorCheck("codex", "FAIL", "Codex distribution is invalid")
+    return _command(
+        "codex",
+        [str(executable), "--version"],
+        CODEX_CLI_VERSION,
+        layout.root,
+    )
+
+
 def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
     config, runtime = _configuration(layout)
     floor = MIN_FREE_DISK_BYTES if config is None else config.resources.min_free_disk_bytes
@@ -113,7 +141,7 @@ def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
         DoctorCheck("lean_project", "PASS", str(layout.root)),
         _check("disk_floor", free >= floor, f"{free} bytes free", "free-space floor not met"),
         runtime,
-        _command("codex", ["codex", "--version"], CODEX_CLI_VERSION, layout.root),
+        _codex(layout),
         _check(
             "sandbox_exec",
             sandbox.is_file() and os.access(sandbox, os.X_OK),

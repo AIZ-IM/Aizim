@@ -5,9 +5,11 @@ from pathlib import Path
 import pytest
 
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity, WorkspaceViewBuilder
-from aizim.domain import AgentRole
+from aizim.domain import AgentRole, sha256_file
+from aizim.orchestration import codex_worker
 from aizim.orchestration.codex_worker import (
     CodexWorkspaceBackend,
+    create_codex_backend,
     project_view_sources,
     proof_instruction,
 )
@@ -51,6 +53,24 @@ def _request(project: Path) -> AgentRequest:
         30.0,
         {"document_id": "document-test"},
     )
+
+
+def _executable(path: Path) -> Path:
+    path.write_text("#!/bin/sh\nprintf 'codex-cli 0.145.0\\n'\n")
+    path.chmod(0o755)
+    return path
+
+
+def _npm_environment(executable: Path, path: str) -> dict[str, str]:
+    return {
+        "AIZIM_DISTRIBUTION_MODE": "npm",
+        "AIZIM_DISTRIBUTION_VERSION": "0.1.0",
+        "AIZIM_DISTRIBUTION_TARGET": "darwin-arm64",
+        "AIZIM_CODEX_EXECUTABLE": str(executable),
+        "AIZIM_DISTRIBUTION_MANIFEST_SHA256": "1" * 64,
+        "AIZIM_PLATFORM_MANIFEST_SHA256": "2" * 64,
+        "PATH": path,
+    }
 
 
 def test_project_view_sources_exclude_runtime_state(tmp_path: Path) -> None:
@@ -125,3 +145,30 @@ def test_second_round_instruction_binds_only_verified_delta() -> None:
     assert "AizimSmoke.Research.a_add_zero" in instruction
     assert "import_module=Generated" in instruction
     assert "document-test" in instruction
+
+
+def test_backend_identity_uses_injected_codex_despite_global_path_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    injected = _executable(tmp_path / "injected-codex")
+    wrong_bin = tmp_path / "wrong-bin"
+    wrong_bin.mkdir()
+    _executable(wrong_bin / "codex").write_text("#!/bin/sh\nprintf 'wrong\\n'\n")
+    sidecar = _executable(tmp_path / "aizim-gateway-sidecar")
+    developer = tmp_path / "developer"
+    developer.mkdir()
+    monkeypatch.setattr(codex_worker, "_sidecar_executable", lambda: sidecar)
+    monkeypatch.setattr(
+        codex_worker,
+        "host_command_output",
+        lambda argv: str(developer)
+        if argv == ("/usr/bin/xcode-select", "-p")
+        else "codex-cli 0.145.0",
+    )
+
+    first = create_codex_backend(_npm_environment(injected, str(wrong_bin)))
+    second = create_codex_backend(_npm_environment(injected, "/different/global/path"))
+
+    assert first.identity.executable_sha256 == sha256_file(injected)
+    assert second.identity == first.identity
