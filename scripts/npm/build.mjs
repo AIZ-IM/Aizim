@@ -11,6 +11,7 @@ import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { detectTarget } from "../../lib/platform.mjs";
+import { assemblePackages } from "./assemble.mjs";
 import { fetchUv } from "./fetch-uv.mjs";
 import { capture, run } from "./lib/command.mjs";
 import {
@@ -31,6 +32,7 @@ import {
   uvToolPath,
   wheelBuildPath,
 } from "./lib/paths.mjs";
+import { writeNotices } from "./write-notices.mjs";
 
 const expected = Object.freeze({
   aizim: "0.1.0",
@@ -272,6 +274,7 @@ async function writeBuildSummary(target, artifacts, inputs, sourceDigest) {
 
 export async function build() {
   const target = detectBuildTarget();
+  await writeNotices();
   const meta = await sourceVersions();
   await verifyToolchain(target);
   await resetBuildOutputs(target.id);
@@ -318,6 +321,7 @@ export async function build() {
     { cwd: repositoryRoot },
   );
   const artifacts = await assembleArtifacts(target, uv);
+  await assemblePackages(target.id, artifacts);
   const inputs = await sourceInputPaths();
   const sourceDigest = await hashInputPaths(repositoryRoot, inputs);
   await writeBuildSummary(target, artifacts, inputs, sourceDigest);
