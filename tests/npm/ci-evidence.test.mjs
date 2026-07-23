@@ -308,12 +308,30 @@ test("CI pins current actions and qualifies the exact four native runners withou
     'version: "0.11.31"',
     "npm@12.0.1",
     "@openai/codex@0.145.0",
+    'cp -R tests/fixtures/attack_probe_project "$RUNNER_TEMP/attack-probe-project"',
+    'uv run aizim init "$RUNNER_TEMP/attack-probe-project"',
+    '--project "$RUNNER_TEMP/attack-probe-project"',
   ]) {
     assert.ok(leanWorkflow.includes(value), `missing Lean CI contract: ${value}`);
   }
   assert.doesNotMatch(
     `${workflow}\n${leanWorkflow}`,
     /0\.11\.29|0\.144\.6|NODE_AUTH_TOKEN|NPM_TOKEN|id-token:\s*write/u,
+  );
+  const combinedWorkflows = `${workflow}\n${leanWorkflow}`;
+  assert.equal(
+    combinedWorkflows.match(/actions\/setup-node@/gu)?.length,
+    combinedWorkflows.match(/package-manager-cache:\s*false/gu)?.length,
+  );
+  assert.equal(
+    combinedWorkflows.match(
+      /echo "TMPDIR=\$RUNNER_TEMP\/aizim-private-tmp" >> "\$GITHUB_ENV"/gu,
+    )?.length,
+    4,
+  );
+  assert.equal(
+    combinedWorkflows.match(/name: Create private temporary root/gu)?.length,
+    4,
   );
   for (const line of `${workflow}\n${leanWorkflow}`.match(/^\s*uses:\s*.+$/gmu) ?? []) {
     assert.match(line, /@[0-9a-f]{40}(?:\s+#\s+v\d+\.\d+\.\d+)?$/u);

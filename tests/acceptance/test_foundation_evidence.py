@@ -39,7 +39,7 @@ class _GateFixture:
 
 @pytest.fixture
 def foundation_project() -> Iterator[Path]:
-    with tempfile.TemporaryDirectory(prefix="aizim-foundation-", dir="/tmp") as directory:
+    with tempfile.TemporaryDirectory(prefix="aizim-foundation-") as directory:
         yield Path(directory)
 
 

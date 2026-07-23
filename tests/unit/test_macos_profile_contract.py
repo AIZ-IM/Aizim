@@ -10,6 +10,8 @@ from aizim.agents.macos_profile import validate_macos_profile
 from aizim.agents.macos_sandbox import MacOSSandboxAdapter, MacOSSandboxDependencies
 from aizim.agents.sandbox import SandboxRequest
 
+pytestmark = pytest.mark.macos_sandbox
+
 
 def _dependencies() -> MacOSSandboxDependencies:
     return MacOSSandboxDependencies(

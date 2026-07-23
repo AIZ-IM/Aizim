@@ -62,6 +62,7 @@ def npm_environment(codex: Path) -> dict[str, str]:
     }
 
 
+@pytest.mark.lean_integration
 def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
     tmp_path: Path,
 ) -> None:
@@ -90,6 +91,7 @@ def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
     assert all(secret not in result.stdout + result.stderr for secret in secret_values)
 
 
+@pytest.mark.lean_integration
 def test_doctor_human_output_ends_ready(tmp_path: Path) -> None:
     root = initialized_project(tmp_path)
 

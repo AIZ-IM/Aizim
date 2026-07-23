@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from tempfile import mkdtemp
 
@@ -21,7 +22,8 @@ class ProjectSocketAlias:
             raise SocketAliasError("PROJECT_ROOT_UNAVAILABLE") from error
         if not canonical.is_dir():
             raise SocketAliasError("PROJECT_ROOT_UNAVAILABLE")
-        root = Path(mkdtemp(prefix="aizim-gw-", dir="/private/tmp"))
+        temporary_root = "/private/tmp" if sys.platform == "darwin" else "/tmp"
+        root = Path(mkdtemp(prefix="aizim-gw-", dir=temporary_root))
         link = root / "project"
         try:
             link.symlink_to(canonical, target_is_directory=True)

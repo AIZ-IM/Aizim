@@ -83,16 +83,22 @@ def _remove_owned(path: Path, identity: FileIdentity) -> None:
 
 
 class StateProcessOwnership:
-    def __init__(self, pid_path: Path, identity: FileIdentity) -> None:
+    def __init__(self, pid_path: Path, identity: FileIdentity, descriptor: int) -> None:
         self._pid_path = pid_path
         self._identity: FileIdentity | None = identity
+        self._descriptor: int | None = descriptor
 
     def close(self) -> None:
         identity = self._identity
-        if identity is None:
+        descriptor = self._descriptor
+        if identity is None or descriptor is None:
             return
         self._identity = None
-        _remove_owned(self._pid_path, identity)
+        self._descriptor = None
+        try:
+            _remove_owned(self._pid_path, identity)
+        finally:
+            os.close(descriptor)
 
 
 def acquire_state_process(pid_path: Path, socket_path: Path) -> StateProcessOwnership:
@@ -120,6 +126,11 @@ def acquire_state_process(pid_path: Path, socket_path: Path) -> StateProcessOwne
         os.write(descriptor, f"{os.getpid()}\n".encode())
         os.fsync(descriptor)
         status = os.fstat(descriptor)
-    finally:
+    except BaseException:
         os.close(descriptor)
-    return StateProcessOwnership(pid_path, FileIdentity(status.st_dev, status.st_ino))
+        raise
+    return StateProcessOwnership(
+        pid_path,
+        FileIdentity(status.st_dev, status.st_ino),
+        descriptor,
+    )

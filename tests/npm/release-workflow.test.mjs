@@ -40,6 +40,16 @@ test("release workflow is manual-only, exact-commit, four-target, and non-publis
   }
   assert.doesNotMatch(workflow, /^\s+(?:push|pull_request|release):/gmu);
   assert.doesNotMatch(workflow, forbidden);
+  assert.equal(
+    workflow.match(/actions\/setup-node@/gu)?.length,
+    workflow.match(/package-manager-cache:\s*false/gu)?.length,
+  );
+  assert.ok(
+    workflow.includes(
+      'echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"',
+    ),
+  );
+  assert.match(workflow, /name: Create private temporary root/u);
   for (const line of workflow.match(/^\s*uses:\s*.+$/gmu) ?? []) {
     assert.match(line, /@[0-9a-f]{40}(?:\s+#\s+v\d+\.\d+\.\d+)?$/u);
   }
@@ -71,6 +81,16 @@ test("registry smoke workflow is manual-only, four-target, read-only, and exact-
   }
   assert.doesNotMatch(workflow, /^\s+(?:push|pull_request|release):/gmu);
   assert.doesNotMatch(workflow, forbidden);
+  assert.equal(
+    workflow.match(/actions\/setup-node@/gu)?.length,
+    workflow.match(/package-manager-cache:\s*false/gu)?.length,
+  );
+  assert.ok(
+    workflow.includes(
+      'echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"',
+    ),
+  );
+  assert.match(workflow, /name: Create private temporary root/u);
   for (const line of workflow.match(/^\s*uses:\s*.+$/gmu) ?? []) {
     assert.match(line, /@[0-9a-f]{40}(?:\s+#\s+v\d+\.\d+\.\d+)?$/u);
   }

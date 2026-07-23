@@ -104,3 +104,10 @@ test("declares no package lifecycle hook when installation metadata is inspected
   // Then
   assert.deepEqual(lifecycleHooks, []);
 });
+
+test("commits a dependency-free Lake manifest for the smoke project", () => {
+  const manifest = readJson("examples/smoke_lean/lake-manifest.json");
+
+  assert.equal(manifest.name, "aizimSmoke");
+  assert.deepEqual(manifest.packages, []);
+});

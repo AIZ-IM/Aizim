@@ -19,10 +19,16 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create private temporary root
+        run: |
+          mkdir -p "$RUNNER_TEMP/aizim-private-tmp"
+          chmod 700 "$RUNNER_TEMP/aizim-private-tmp"
+          echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
+          package-manager-cache: false
       - name: Install latest pinned npm
         run: |
           npm install --global npm@12.0.1
@@ -53,8 +59,10 @@ jobs:
           --ignore=tests/e2e/test_real_codex_smoke.py
           -q
       - name: Run Gate B without a model
-        run: >-
-          uv run aizim security-probe
-          --project tests/fixtures/attack_probe_project
-          --backend codex
-          --no-model
+        run: |
+          cp -R tests/fixtures/attack_probe_project "$RUNNER_TEMP/attack-probe-project"
+          uv run aizim init "$RUNNER_TEMP/attack-probe-project"
+          uv run aizim security-probe \
+            --project "$RUNNER_TEMP/attack-probe-project" \
+            --backend codex \
+            --no-model

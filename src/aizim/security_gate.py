@@ -256,7 +256,8 @@ def _create_shared_artifact(root: Path) -> Path:
 
 
 def _broker_alias(project_root: Path) -> tuple[Path, Path]:
-    root = Path(mkdtemp(prefix="aizim-gate-", dir="/private/tmp"))
+    temporary_root = "/private/tmp" if sys.platform == "darwin" else "/tmp"
+    root = Path(mkdtemp(prefix="aizim-gate-", dir=temporary_root))
     link = root / "project"
     try:
         link.symlink_to(project_root, target_is_directory=True)

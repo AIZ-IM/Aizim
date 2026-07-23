@@ -19,6 +19,7 @@ from aizim.state import StateService
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
 
 
+@pytest.mark.lean_integration
 @pytest.mark.asyncio
 async def test_pinned_mcp_server_exposes_only_the_reviewed_tool_surface(tmp_path: Path) -> None:
     project = materialize_smoke_project(tmp_path, "run-1", SMOKE_ROOT)

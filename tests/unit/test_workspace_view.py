@@ -28,6 +28,8 @@ def project(tmp_path: Path) -> Path:
     root.mkdir(parents=True)
     (root / "Nested").mkdir()
     (root / ".git").mkdir()
+    if not (root / ".GIT").exists():
+        (root / ".GIT").mkdir()
     (root / ".aizim").mkdir()
     (root / "Allowed.lean").write_bytes(b"theorem allowed : True := trivial\n")
     (root / "Unleased.lean").write_bytes(b"theorem private : True := trivial\n")
@@ -37,6 +39,7 @@ def project(tmp_path: Path) -> Path:
     (root / ".env").write_text("TOKEN=private\n")
     (root / "credentials.json").write_text('{"token":"private"}\n')
     (root / ".git" / "config").write_text("private")
+    (root / ".GIT" / "config").write_text("private")
     (root / ".aizim" / "state.sqlite3").write_text("private")
     return root
 

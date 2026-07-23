@@ -41,10 +41,16 @@ jobs:
         with:
           ref: ${{ inputs.commit_sha }}
           persist-credentials: false
+      - name: Create private temporary root
+        run: |
+          mkdir -p "$RUNNER_TEMP/aizim-private-tmp"
+          chmod 700 "$RUNNER_TEMP/aizim-private-tmp"
+          echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
+          package-manager-cache: false
       - name: Install Lean without caches
         uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9 # v1.5.0
         with:
@@ -81,7 +87,7 @@ jobs:
           node scripts/npm/write-ci-evidence.mjs \
             --target "${{ matrix.target }}" \
             --output "$GITHUB_WORKSPACE/dist/npm/native-evidence-${{ matrix.target }}.json"
-          node -e 'const fs=require("node:fs");const p=`dist/npm/native-evidence-${process.env.AIZIM_TARGET}.json`;const d=JSON.parse(fs.readFileSync(p));if(d.dirty_tracked_inputs!==false||d.restored_build_cache!==false)process.exit(1)'
+          node -e 'const fs=require("node:fs");const p="dist/npm/native-evidence-"+process.env.AIZIM_TARGET+".json";const d=JSON.parse(fs.readFileSync(p));if(d.dirty_tracked_inputs!==false||d.restored_build_cache!==false)process.exit(1)'
         env:
           AIZIM_TARGET: ${{ matrix.target }}
       - name: Upload native release evidence
@@ -113,6 +119,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
+          package-manager-cache: false
       - name: Download native release evidence
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

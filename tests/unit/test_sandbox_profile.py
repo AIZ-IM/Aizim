@@ -16,6 +16,7 @@ from aizim.agents.macos_sandbox import (
 from aizim.agents.sandbox import SandboxRequest
 
 _EPHEMERAL_ROOTS: set[Path] = set()
+pytestmark = pytest.mark.macos_sandbox
 
 
 @pytest.fixture(autouse=True)
