@@ -89,7 +89,7 @@ test("resolves the exact nested native Codex executable", () => {
 
 for (const [name, options] of [
   ["wrong meta version", { metaVersion: "0.145.1" }],
-  ["wrong native version", { nativeVersion: "0.145.0-darwin-x64" }],
+  ["wrong native version", { nativeVersion: "0.145.0-linux-x64" }],
   ["missing native alias", { includeNative: false }],
   ["missing executable", { includeBinary: false }],
   ["non-executable file", { executable: false }],

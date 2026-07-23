@@ -11,14 +11,13 @@ const latestActions = [
 ];
 const runners = [
   "macos-15",
-  "macos-15-intel",
   "ubuntu-24.04-arm",
   "ubuntu-24.04",
 ];
 const forbidden =
   /npm publish|id-token:\s*write|NODE_AUTH_TOKEN|NPM_TOKEN|npm-token|registry-token/iu;
 
-test("release workflow is manual-only, exact-commit, four-target, and non-publishing", async () => {
+test("release workflow is manual-only, exact-commit, three-target, and non-publishing", async () => {
   const workflow = await readFile(
     new URL("../../.github/workflows/npm-release.yml", import.meta.url),
     "utf8",
@@ -55,7 +54,7 @@ test("release workflow is manual-only, exact-commit, four-target, and non-publis
   }
 });
 
-test("registry smoke workflow is manual-only, four-target, read-only, and exact-version", async () => {
+test("registry smoke workflow is manual-only, three-target, read-only, and exact-version", async () => {
   const workflow = await readFile(
     new URL(
       "../../.github/workflows/npm-registry-smoke.yml",

@@ -187,7 +187,6 @@ test("rejects a non-executable extracted uv binary", async () => {
 test("build target detection agrees with runtime target detection", () => {
   for (const [platform, arch, report] of [
     ["darwin", "arm64", undefined],
-    ["darwin", "x64", undefined],
     ["linux", "arm64", { header: { glibcVersionRuntime: "2.39" } }],
     ["linux", "x64", { header: { glibcVersionRuntime: "2.39" } }],
   ]) {
@@ -203,7 +202,7 @@ test("rejects a version mismatch across source manifests", () => {
     meta: "0.1.0",
     python: "0.1.0",
     cargo: "0.1.0",
-    platforms: ["0.1.0", "0.1.0", "0.2.0", "0.1.0"],
+    platforms: ["0.1.0", "0.2.0", "0.1.0"],
   };
 
   assert.throws(() => verifySourceVersions(versions), /version mismatch/);

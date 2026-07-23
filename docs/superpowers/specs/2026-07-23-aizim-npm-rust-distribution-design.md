@@ -41,13 +41,12 @@ The following decisions are fixed for this implementation:
 1. The npm scope is `@aiz.im`. The account `frankieew` is already an owner of
    that npm organization.
 2. The user-facing package is `@aiz.im/aizim`.
-3. Platform binaries are distributed as four optional packages:
+3. Platform binaries are distributed as three optional packages:
    - `@aiz.im/aizim-darwin-arm64`
-   - `@aiz.im/aizim-darwin-x64`
    - `@aiz.im/aizim-linux-arm64`
    - `@aiz.im/aizim-linux-x64`
-4. macOS arm64, macOS x64, Linux arm64, and Linux x64 are the initial target
-   matrix.
+4. macOS arm64, Linux arm64, and Linux x64 are the initial target matrix.
+   Intel macOS is unsupported.
 5. Initial Linux support means glibc Linux. Alpine and other musl-only
    distributions are not supported by this release.
 6. End-user installation requires Node.js but does not require Python, uv,
@@ -172,7 +171,6 @@ uv run aizim --version
 ├── dependency: @openai/codex@0.145.0
 └── optionalDependencies
     ├── @aiz.im/aizim-darwin-arm64@0.1.0
-    ├── @aiz.im/aizim-darwin-x64@0.1.0
     ├── @aiz.im/aizim-linux-arm64@0.1.0
     └── @aiz.im/aizim-linux-x64@0.1.0
 ```
@@ -212,7 +210,6 @@ Aizim/
 ├── npm/
 │   └── platforms/
 │       ├── darwin-arm64/
-│       ├── darwin-x64/
 │       ├── linux-arm64/
 │       └── linux-x64/
 └── scripts/
@@ -360,17 +357,15 @@ fallback and no release claim for that target.
 - uv filename, size, and SHA-256;
 - compatible distribution manifest schema version.
 
-The four Rust target triples are:
+The three Rust target triples are:
 
 - `aarch64-apple-darwin`
-- `x86_64-apple-darwin`
 - `aarch64-unknown-linux-gnu`
 - `x86_64-unknown-linux-gnu`
 
 The matching uv release archives are:
 
 - `uv-aarch64-apple-darwin.tar.gz`
-- `uv-x86_64-apple-darwin.tar.gz`
 - `uv-aarch64-unknown-linux-gnu.tar.gz`
 - `uv-x86_64-unknown-linux-gnu.tar.gz`
 
@@ -537,7 +532,7 @@ The initial version is `0.1.0`. These values must be identical:
 
 - `pyproject.toml`
 - root `package.json`
-- all four platform `package.json` files
+- all three platform `package.json` files
 - Rust crate package version
 - exact platform versions in `optionalDependencies`
 - distribution and platform manifests
@@ -656,7 +651,7 @@ Pull requests and main-branch pushes run:
 1. the existing Python, Lean, lint, and type-check workflows;
 2. Node tests and package metadata checks;
 3. Rust formatting, Clippy with warnings denied, and tests;
-4. native build and package integration jobs for all four targets;
+4. native build and package integration jobs for all three targets;
 5. macOS and Linux Gate B jobs on their matching native hosts;
 6. tarball file-allowlist, license, version, and digest verification.
 
@@ -681,11 +676,11 @@ human-readable version comments.
 A version tag matching every package manifest starts a protected release
 workflow:
 
-1. rerun the four native release builds without restoring build caches;
+1. rerun the three native release builds without restoring build caches;
 2. verify all platform evidence and artifact hashes at the tag commit;
 3. assemble and verify the meta package;
-4. publish the four platform packages first;
-5. query npm until all four exact versions and dist-integrity values are
+4. publish the three platform packages first;
+5. query npm until all three exact versions and dist-integrity values are
    visible;
 6. publish `@aiz.im/aizim` last;
 7. install the registry package on each real platform and repeat the version,
@@ -767,7 +762,7 @@ instructions so that one path is never mistaken for the other.
 
 The implementation is complete only when all of the following are observed:
 
-1. A clean source checkout on each of the four targets succeeds with
+1. A clean source checkout on each of the three targets succeeds with
    `npm install && npm run build`.
 2. On each target, `npm test` passes the Node, Rust, Python, packaging, and
    matching host sandbox suites.
@@ -789,7 +784,7 @@ The implementation is complete only when all of the following are observed:
     and unavailable sandbox enforcement fail closed with the specified exit
     categories.
 12. The existing uv-native test and acceptance workflows remain green.
-13. The public registry installation succeeds on all four targets after a
+13. The public registry installation succeeds on all three targets after a
     separately authorized publication.
 
 Until item 13 is authorized and observed, the implementation may be described

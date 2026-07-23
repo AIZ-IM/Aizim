@@ -95,7 +95,7 @@ async function releaseFixture() {
   };
 }
 
-test("verifies a clean four-target release bundle with one common meta tarball", async () => {
+test("verifies a clean three-target release bundle with one common meta tarball", async () => {
   const fixture = await releaseFixture();
   try {
     const aggregate = await verifyReleaseBundle({
@@ -107,7 +107,7 @@ test("verifies a clean four-target release bundle with one common meta tarball",
     });
     assert.deepEqual(aggregate.targets, Object.keys(CI_TARGETS).sort());
     assert.equal(aggregate.meta.integrity, integrity("common-meta"));
-    assert.equal(aggregate.platforms.length, 4);
+    assert.equal(aggregate.platforms.length, Object.keys(CI_TARGETS).length);
     assert.deepEqual(
       JSON.parse(await readFile(fixture.output, "utf8")),
       aggregate,

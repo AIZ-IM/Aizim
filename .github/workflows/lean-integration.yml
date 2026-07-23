@@ -31,9 +31,10 @@ jobs:
           package-manager-cache: false
       - name: Install latest pinned npm
         run: |
-          npm install --global npm@12.0.1
+          npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1
+          echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"
           test "$(node --version)" = "v26.5.0"
-          test "$(npm --version)" = "12.0.1"
+          test "$("$RUNNER_TEMP/npm-12/bin/npm" --version)" = "12.0.1"
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:

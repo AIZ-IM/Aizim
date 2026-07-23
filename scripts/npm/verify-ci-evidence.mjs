@@ -24,11 +24,6 @@ export const CI_TARGETS = Object.freeze({
     arch: "arm64",
     libc: null,
   }),
-  "darwin-x64": Object.freeze({
-    os: "darwin",
-    arch: "x64",
-    libc: null,
-  }),
   "linux-arm64": Object.freeze({
     os: "linux",
     arch: "arm64",
@@ -325,7 +320,10 @@ export async function verifyEvidenceDirectory({
     throw new Error("artifact root is invalid");
   }
   const files = await collectEvidenceFiles(root);
-  if (files.native.length !== 4 || files.minimum.length !== 1) {
+  if (
+    files.native.length !== Object.keys(CI_TARGETS).length ||
+    files.minimum.length !== 1
+  ) {
     throw new Error("evidence target set is incomplete");
   }
 

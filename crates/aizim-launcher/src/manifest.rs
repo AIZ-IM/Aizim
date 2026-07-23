@@ -268,13 +268,6 @@ fn host_target() -> Option<Target> {
             rust_triple: "aarch64-apple-darwin",
             libc: None,
         }),
-        ("macos", "x86_64") => Some(Target {
-            id: "darwin-x64",
-            node_platform: "darwin",
-            node_arch: "x64",
-            rust_triple: "x86_64-apple-darwin",
-            libc: None,
-        }),
         ("linux", "aarch64") => Some(Target {
             id: "linux-arm64",
             node_platform: "linux",

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship Aizim as `@aiz.im/aizim` with four native platform packages, a
+**Goal:** Ship Aizim as `@aiz.im/aizim` with three native platform packages, a
 Rust bootstrap launcher, automatic isolated Python 3.14.6 provisioning, a clean
 `npm install && npm run build` source workflow, and qualified macOS and Linux
 sandbox execution.
@@ -50,9 +50,8 @@ tsserver-compatible JavaScript diagnostics provider.
    native executable and must never fall back to global `PATH`.
 9. Pin uv exactly to `0.11.31`; verify the official archive SHA-256 before
    extracting or executing it.
-10. The four Aizim packages are exactly
+10. The three Aizim packages are exactly
     `@aiz.im/aizim-darwin-arm64`,
-    `@aiz.im/aizim-darwin-x64`,
     `@aiz.im/aizim-linux-arm64`, and
     `@aiz.im/aizim-linux-x64`, all at the same version as
     `@aiz.im/aizim`.
@@ -79,7 +78,8 @@ tsserver-compatible JavaScript diagnostics provider.
     `git diff --check`, and one focused commit. Stage only the paths listed in
     that task. Do not push unless the user separately asks.
 19. GitHub Actions dependencies use immutable full commit SHAs. Native jobs use
-    `macos-15`, `macos-15-intel`, `ubuntu-24.04-arm`, and `ubuntu-24.04`.
+    `macos-15`, `ubuntu-24.04-arm`, and `ubuntu-24.04`. Intel macOS is
+    unsupported.
 20. Build, test, pack, and release-candidate workflows never publish. Creating
     or changing npm packages, access, trusted publishers, or registry versions
     requires a fresh explicit authorization at Tasks 15 and 16.
@@ -102,7 +102,7 @@ tsserver-compatible JavaScript diagnostics provider.
 | B — Native runtime | 4–6 | Rust verifies, locks, provisions, recovers, and execs the Python CLI |
 | C — Build and pack | 7–8 | `npm run build` and `npm run pack` produce verified current-host tarballs |
 | D — Python and sandbox | 9–11 | npm-local Codex injection and real macOS/Linux fail-closed adapters |
-| E — Installation and CI | 12–13 | fresh local/global installs and four native CI jobs pass |
+| E — Installation and CI | 12–13 | fresh local/global installs and three native CI jobs pass |
 | F — Release readiness | 14 | documented, disabled-by-default release candidate is ready |
 | G — Public availability | 15–16 | separately authorized npm publication and OIDC follow-up |
 
@@ -125,8 +125,6 @@ tsserver-compatible JavaScript diagnostics provider.
 - Create: `crates/aizim-launcher/src/main.rs`
 - Create: `npm/platforms/darwin-arm64/package.json`
 - Create: `npm/platforms/darwin-arm64/package.publish.json`
-- Create: `npm/platforms/darwin-x64/package.json`
-- Create: `npm/platforms/darwin-x64/package.publish.json`
 - Create: `npm/platforms/linux-arm64/package.json`
 - Create: `npm/platforms/linux-arm64/package.publish.json`
 - Create: `npm/platforms/linux-x64/package.json`
@@ -160,7 +158,6 @@ const cargo = () => readFileSync(new URL("Cargo.toml", root), "utf8");
 
 const platforms = [
   ["darwin-arm64", ["darwin"], ["arm64"], undefined],
-  ["darwin-x64", ["darwin"], ["x64"], undefined],
   ["linux-arm64", ["linux"], ["arm64"], ["glibc"]],
   ["linux-x64", ["linux"], ["x64"], ["glibc"]],
 ];
@@ -290,7 +287,6 @@ Create `package.json` with this metadata and no lifecycle hook:
   },
   "optionalDependencies": {
     "@aiz.im/aizim-darwin-arm64": "0.1.0",
-    "@aiz.im/aizim-darwin-x64": "0.1.0",
     "@aiz.im/aizim-linux-arm64": "0.1.0",
     "@aiz.im/aizim-linux-x64": "0.1.0"
   }
@@ -326,7 +322,6 @@ Apply these exact target-specific fields:
 | Public manifest | `name` | `os` | `cpu` | `libc` |
 | --- | --- | --- | --- | --- |
 | `npm/platforms/darwin-arm64/package.publish.json` | `@aiz.im/aizim-darwin-arm64` | `["darwin"]` | `["arm64"]` | omit |
-| `npm/platforms/darwin-x64/package.publish.json` | `@aiz.im/aizim-darwin-x64` | `["darwin"]` | `["x64"]` | omit |
 | `npm/platforms/linux-arm64/package.publish.json` | `@aiz.im/aizim-linux-arm64` | `["linux"]` | `["arm64"]` | `["glibc"]` |
 | `npm/platforms/linux-x64/package.publish.json` | `@aiz.im/aizim-linux-x64` | `["linux"]` | `["x64"]` | `["glibc"]` |
 
@@ -496,7 +491,7 @@ fallback.
   `resolveCodexExecutable(target, requireFromMeta) -> string`, and
   `DistributionError.code`.
 
-- [ ] **Step 1: Write target-detection failures and all four success cases.**
+- [ ] **Step 1: Write target-detection failures and all three success cases.**
 
 Use this test table in `tests/npm/platform-resolution.test.mjs`:
 
@@ -511,7 +506,6 @@ const glibc = { header: { glibcVersionRuntime: "2.39" } };
 
 for (const [platform, arch, report, id] of [
   ["darwin", "arm64", undefined, "darwin-arm64"],
-  ["darwin", "x64", undefined, "darwin-x64"],
   ["linux", "arm64", glibc, "linux-arm64"],
   ["linux", "x64", glibc, "linux-x64"],
 ]) {
@@ -522,6 +516,7 @@ for (const [platform, arch, report, id] of [
 
 for (const input of [
   { platform: "win32", arch: "x64" },
+  { platform: "darwin", arch: "x64" },
   { platform: "darwin", arch: "ia32" },
   { platform: "linux", arch: "x64", report: { header: {} } },
 ]) {
@@ -573,14 +568,6 @@ const targets = new Map([
     codexAlias: "@openai/codex-darwin-arm64",
     codexVersion: "0.145.0-darwin-arm64",
     codexTriple: "aarch64-apple-darwin",
-  }],
-  ["darwin:x64", {
-    id: "darwin-x64",
-    packageName: "@aiz.im/aizim-darwin-x64",
-    rustTarget: "x86_64-apple-darwin",
-    codexAlias: "@openai/codex-darwin-x64",
-    codexVersion: "0.145.0-darwin-x64",
-    codexTriple: "x86_64-apple-darwin",
   }],
   ["linux:arm64", {
     id: "linux-arm64",
@@ -644,7 +631,7 @@ assert.equal(executable, realpathSync(nativeBinary));
 ```
 
 Add negative cases for meta version `0.145.0`, alias version
-`0.145.0-darwin-x64`, a missing alias, a missing executable, and a
+`0.145.0-linux-x64`, a missing alias, a missing executable, and a
 non-executable file. Every case must raise `DistributionError` with
 `CODEX_PACKAGE_INVALID`; no case may consult `PATH`.
 
@@ -736,7 +723,6 @@ git commit -m "Resolve native npm distribution targets"
 - Create: `lib/assets.mjs`
 - Create: `lib/launch.mjs`
 - Create: `npm/platforms/darwin-arm64/index.cjs`
-- Create: `npm/platforms/darwin-x64/index.cjs`
 - Create: `npm/platforms/linux-arm64/index.cjs`
 - Create: `npm/platforms/linux-x64/index.cjs`
 - Create: `tests/npm/launch.test.mjs`
@@ -779,7 +765,7 @@ Expected: FAIL with `ERR_MODULE_NOT_FOUND`.
 
 - [ ] **Step 3: Add the same closed export to every platform package.**
 
-Each of the four `index.cjs` files contains exactly:
+Each of the three `index.cjs` files contains exactly:
 
 ```js
 "use strict";
@@ -798,7 +784,7 @@ all paths are absolute regular files, and returns a frozen record. It does not
 search `PATH`. `PLATFORM_PACKAGE_MISSING` uses this fixed safe remediation:
 
 ```text
-compatible Aizim native package is missing; use macOS or glibc Linux on arm64/x64 and reinstall without --omit=optional
+compatible Aizim native package is missing; use Apple-silicon macOS or glibc Linux on arm64/x64 and reinstall without --omit=optional
 ```
 
 Malformed or missing files inside a resolved package use
@@ -1100,7 +1086,7 @@ platform root, and platform artifacts may not resolve below the meta root.
 - Python is `3.14.6`, minimum Node is `22.22.2`, uv is `0.11.31`, and Codex is
   `0.145.0`;
 - package name, target, Node platform/architecture, Rust triple, and libc are
-  one of the four closed combinations;
+  one of the three closed combinations;
 - the supplied Codex executable is absolute, executable, and a regular file;
 - wheel, requirements, and uv artifacts pass size/hash verification.
 
@@ -1518,11 +1504,6 @@ Create `scripts/npm/uv-artifacts.json` with:
       "archive": "uv-aarch64-apple-darwin.tar.gz",
       "sha256": "b2b93e82a6786f9c7cb89fd4ca0e859a147b292ae8f6f95784f9742f0efec39e",
       "directory": "uv-aarch64-apple-darwin"
-    },
-    "darwin-x64": {
-      "archive": "uv-x86_64-apple-darwin.tar.gz",
-      "sha256": "33ee6bd62b57fcd77a499deb54e4432dc1e1a2f3d34930ba987ad8b43f9c7bc7",
-      "directory": "uv-x86_64-apple-darwin"
     },
     "linux-arm64": {
       "archive": "uv-aarch64-unknown-linux-gnu.tar.gz",
@@ -1983,7 +1964,7 @@ DISTRIBUTION_ENVIRONMENT: Final = frozenset(
     }
 )
 _TARGETS: Final = frozenset(
-    {"darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"}
+    {"darwin-arm64", "linux-arm64", "linux-x64"}
 )
 
 
@@ -2696,10 +2677,10 @@ git commit -m "Test fresh npm Aizim installations"
 
 ---
 
-### Task 13: Qualify all four native targets in CI
+### Task 13: Qualify all three native targets in CI
 
 **Acceptance criteria:** Specification section 13 and acceptance criteria
-1–12 on macOS arm64, macOS x64, Linux arm64, and Linux x64.
+1–12 on macOS arm64, Linux arm64, and Linux x64.
 
 **Files:**
 
@@ -2718,7 +2699,7 @@ git commit -m "Test fresh npm Aizim installations"
 
 - [ ] **Step 1: Write strict evidence-contract tests.**
 
-`tests/npm/ci-evidence.test.mjs` builds four temporary artifact directories.
+`tests/npm/ci-evidence.test.mjs` builds three temporary artifact directories.
 For the schema fixture, each tarball file contains the single ASCII byte `x`,
 matching the concrete digests below. Each valid native document has exactly
 this shape:
@@ -2827,9 +2808,9 @@ writes the separate minimum-runtime schema.
 --output <absolute-private-path>
 ```
 
-It validates the four documents and their tarballs, then writes one aggregate
+It validates the three documents and their tarballs, then writes one aggregate
 document containing schema 1, the exact commit, version, sorted target list,
-the common meta digest and integrity, and the four platform digests and
+the common meta digest and integrity, and the three platform digests and
 integrities. It separately verifies the minimum-runtime document against
 `v22.22.2`. It writes no home paths, runner temporary paths, environments,
 credentials, or URLs.
@@ -2842,14 +2823,13 @@ that file, parse it strictly, and reject a stale Git SHA or target. Unit tests
 must prove that a failed Gate B, changed ready marker, global Codex resolution,
 or missing negative test prevents the evidence file from being written.
 
-- [ ] **Step 5: Add the four native CI jobs and aggregate gate.**
+- [ ] **Step 5: Add the three native CI jobs and aggregate gate.**
 
 Extend `.github/workflows/ci.yml` with this exact matrix:
 
 | target | runner | os | arch | libc |
 | --- | --- | --- | --- | --- |
 | `darwin-arm64` | `macos-15` | `darwin` | `arm64` | null |
-| `darwin-x64` | `macos-15-intel` | `darwin` | `x64` | null |
 | `linux-arm64` | `ubuntu-24.04-arm` | `linux` | `arm64` | `glibc` |
 | `linux-x64` | `ubuntu-24.04` | `linux` | `x64` | `glibc` |
 
@@ -2930,13 +2910,13 @@ git diff --check
 Expected: tests PASS, YAML parses, every `uses:` value is a full immutable
 SHA, and the diff check exits 0.
 
-- [ ] **Step 7: Commit four-platform CI.**
+- [ ] **Step 7: Commit three-platform CI.**
 
 ```bash
 git add .github/workflows/ci.yml scripts/npm \
   tests/npm/ci-evidence.test.mjs
 git diff --cached --check
-git commit -m "Qualify npm packages on four native targets"
+git commit -m "Qualify npm packages on three native targets"
 ```
 
 - [ ] **Step 8: Obtain explicit push authorization and observe CI.**
@@ -2961,7 +2941,7 @@ gh run watch --exit-status "$AIZIM_CI_RUN_ID"
 
 Download the successful run's aggregate artifact into a new mode-0700
 temporary directory and rerun `verify-ci-evidence.mjs` against the pushed
-full SHA. Task 13 is complete only after all four native jobs, the
+full SHA. Task 13 is complete only after all three native jobs, the
 minimum-Node job, and the aggregate job are green at that SHA.
 
 ---
@@ -2988,7 +2968,7 @@ registry mutation.
 
 **Interfaces:**
 
-- Consumes: the four-target evidence contract from Task 13.
+- Consumes: the three-target evidence contract from Task 13.
 - Produces: separate source/npm user instructions, a fresh-build release
   bundle verifier, a read-only registry smoke workflow, and a release workflow
   that cannot publish in this task.
@@ -2997,8 +2977,8 @@ registry mutation.
 
 `tests/npm/release-tools.test.mjs` covers:
 
-- a release bundle must contain exactly four platform tarballs, one
-  byte-identical meta tarball, four native evidence documents, and one
+- a release bundle must contain exactly three platform tarballs, one
+  byte-identical meta tarball, three native evidence documents, and one
   aggregate document;
 - version, full Git SHA, target, digest, size, and integrity must agree;
 - a dirty tracked-input flag is rejected;
@@ -3007,7 +2987,7 @@ registry mutation.
   `dist.integrity`;
 - registry 404 is distinguishable from a mismatched existing version;
 - registry polling stops after 12 attempts with five-second intervals;
-- registry smoke evidence accepts only all-four-target `READY`,
+- registry smoke evidence accepts only all-three-target `READY`,
   `SECURITY GATE PASS`, and `AIZIM RUN PASS` results;
 - release-record output is deterministic and contains no filesystem paths,
   authenticated URLs, npm identity token, environment, or credentials.
@@ -3024,14 +3004,14 @@ The Node test requires:
 
 - `.github/workflows/npm-release.yml` has only `workflow_dispatch`;
 - release inputs are exact `version` and `commit_sha` strings;
-- the same four native runners from Task 13 are used;
+- the same three native runners from Task 13 are used;
 - builds restore no cache and upload exact-SHA evidence;
 - the aggregate verifier is mandatory;
 - no step contains `npm publish`;
 - workflow permissions are only `contents: read`;
 - neither `id-token: write`, `NODE_AUTH_TOKEN`, nor an npm secret occurs;
 - `.github/workflows/npm-registry-smoke.yml` is manual-only, accepts one exact
-  version, uses all four runners, and contains no registry write command.
+  version, uses all three runners, and contains no registry write command.
 
 - [ ] **Step 3: Run the tests and observe missing release tools.**
 
@@ -3077,8 +3057,8 @@ doctor, Gate B, deterministic fake run, and foundation acceptance. It writes
 one path-free evidence document and removes only its validated generated
 root.
 
-`write-release-record.mjs` consumes the verified bundle, five registry
-receipts, and four registry-smoke evidence documents and writes a deterministic
+`write-release-record.mjs` consumes the verified bundle, four registry
+receipts, and three registry-smoke evidence documents and writes a deterministic
 Markdown record with exact version, Git SHA, workflow run IDs, package
 integrities, target results, the private-repository provenance limitation, and
 the statement that no credentialed model run was performed.
@@ -3087,7 +3067,7 @@ the statement that no credentialed model run was performed.
 
 `.github/workflows/npm-release.yml` is manual-only in this task. It requires
 the operator to supply `version` and a full `commit_sha`, checks out that exact
-commit, and runs the Task 13 native build/test/pack/evidence path on all four
+commit, and runs the Task 13 native build/test/pack/evidence path on all three
 runners with no restored caches. Its aggregate job calls
 `verify-release-bundle.mjs`. Every action uses the immutable SHAs from Task
 13. It uploads the release bundle for 14 days and has no publish job,
@@ -3096,13 +3076,13 @@ environment, OIDC permission, npm credential, tag trigger, or registry write.
 - [ ] **Step 6: Create the read-only public-registry smoke workflow.**
 
 `.github/workflows/npm-registry-smoke.yml` is manual-only and accepts an exact
-version string. On each of the four native runners it:
+version string. On each of the three native runners it:
 
 1. checks out the exact repository ref used to dispatch the workflow;
 2. installs Node and Lean with the pinned actions;
 3. runs `registry-smoke.mjs --version <version> --output <private-path>`;
 4. uploads the path-free evidence document;
-5. aggregates the exact four target documents and rejects any false or
+5. aggregates the exact three target documents and rejects any false or
    missing result.
 
 It installs only public packages, has `contents: read`, and receives no npm or
@@ -3126,7 +3106,7 @@ Update `README.md` with:
 Update `foundation-runbook.md` so its existing global Codex prerequisite is
 clearly limited to the uv-native path. Add
 `docs/operations/npm-distribution.md` with exact current-host build, pack,
-local/global tarball install, cache, failure-code, four-platform evidence,
+local/global tarball install, cache, failure-code, three-platform evidence,
 first-publication, partial-publication recovery, and Trusted Publishing
 procedures. The runbook states that build/test/pack and both workflows in this
 task never publish.
@@ -3198,7 +3178,6 @@ repository: AIZ-IM/Aizim
 tag: v0.1.0
 packages:
   @aiz.im/aizim-darwin-arm64
-  @aiz.im/aizim-darwin-x64
   @aiz.im/aizim-linux-arm64
   @aiz.im/aizim-linux-x64
   @aiz.im/aizim
@@ -3244,7 +3223,7 @@ git push origin "v${AIZIM_RELEASE_VERSION}"
 If the tag already exists, require it to resolve to the same full SHA; never
 move or replace a published release tag.
 
-- [ ] **Step 3: Build the uncached four-platform release bundle.**
+- [ ] **Step 3: Build the uncached three-platform release bundle.**
 
 Dispatch the manual workflow at the tag:
 
@@ -3286,7 +3265,6 @@ Publish only missing platform versions, in this exact order:
 
 ```text
 @aiz.im/aizim-darwin-arm64
-@aiz.im/aizim-darwin-x64
 @aiz.im/aizim-linux-arm64
 @aiz.im/aizim-linux-x64
 ```
@@ -3314,7 +3292,7 @@ version `0.1.0` with different bytes.
 
 - [ ] **Step 6: Publish the meta package last.**
 
-Only after all four exact platform versions and integrities are visible:
+Only after all three exact platform versions and integrities are visible:
 
 ```bash
 npm publish "<verified-meta-tarball>" --access public
@@ -3326,14 +3304,14 @@ node scripts/npm/registry-verify.mjs \
   --output "<private-receipt-path>"
 ```
 
-Then verify that the registry meta manifest contains the four exact
+Then verify that the registry meta manifest contains the three exact
 `optionalDependencies`, exact `@openai/codex` version `0.145.0`, public
 access, and no lifecycle scripts.
 
-- [ ] **Step 7: Observe public installation on all four targets.**
+- [ ] **Step 7: Observe public installation on all three targets.**
 
 Dispatch `.github/workflows/npm-registry-smoke.yml` at the release tag with
-version `0.1.0`. Watch the run to completion, download the four evidence
+version `0.1.0`. Watch the run to completion, download the three evidence
 documents, and require on every target:
 
 ```text
@@ -3349,8 +3327,8 @@ No workflow receives a model or npm credential.
 
 - [ ] **Step 8: Generate and commit the immutable release record.**
 
-Run `write-release-record.mjs` with the verified bundle summary, five registry
-receipts, four registry-smoke documents, release workflow run ID, and smoke
+Run `write-release-record.mjs` with the verified bundle summary, four registry
+receipts, three registry-smoke documents, release workflow run ID, and smoke
 workflow run ID. Write
 `docs/releases/npm-0.1.0.md`, inspect it for credentials and local paths, then:
 
@@ -3362,14 +3340,14 @@ git push origin main
 ```
 
 Task 15 is complete only when a fresh public registry installation succeeds
-on all four targets. Until then, describe the state as partial publication or
+on all three targets. Until then, describe the state as partial publication or
 release-ready, never publicly available.
 
 ---
 
 ### Task 16: Configure npm Trusted Publishing and enable tag releases
 
-**Acceptance criteria:** Specification sections 14.2–14.3 after the five
+**Acceptance criteria:** Specification sections 14.2–14.3 after the four
 packages exist.
 
 **Files:**
@@ -3408,7 +3386,7 @@ Update `tests/npm/release-workflow.test.mjs` to require:
 - the publish job runs only for a tag;
 - the publish job alone has `contents: read` and `id-token: write`;
 - the publish job uses protected environment `npm-release`;
-- four platform tarballs are published and registry-verified before the meta
+- three platform tarballs are published and registry-verified before the meta
   tarball;
 - the exact release bundle is reused without rebuilding in the publish job;
 - no `NODE_AUTH_TOKEN`, `NPM_TOKEN`, long-lived secret, `--provenance`, or
@@ -3429,14 +3407,14 @@ Modify `.github/workflows/npm-release.yml` so:
 
 1. `workflow_dispatch` supports only `mode=verify-only`, exact version, and
    exact commit SHA;
-2. a tag matching the committed semver package version runs the four uncached
+2. a tag matching the committed semver package version runs the three uncached
    native jobs and aggregate verifier;
 3. one `publish` job on `ubuntu-24.04` downloads the verified bundle;
 4. that job has `environment: npm-release`, `contents: read`, and
    `id-token: write`;
 5. it installs Node from `.node-version` with the pinned setup action;
-6. it publishes or verifies the four platform packages in the fixed Task 15
-   order, waits for all four exact integrities, then publishes or verifies the
+6. it publishes or verifies the three platform packages in the fixed Task 15
+   order, waits for all three exact integrities, then publishes or verifies the
    meta package;
 7. it uses npm 12's Trusted Publishing identity automatically and supplies no
    registry token;
@@ -3492,7 +3470,7 @@ owners, public access, two-factor policy, or existing versions.
 - [ ] **Step 7: Run a non-publishing workflow verification.**
 
 Dispatch the workflow on `main` with `mode=verify-only`, version `0.1.0`, and
-the exact current full SHA. Observe all four native jobs and aggregate
+the exact current full SHA. Observe all three native jobs and aggregate
 verification. Assert from the run graph and logs that the publish job was
 skipped and no registry version changed.
 
@@ -3550,11 +3528,11 @@ created.
 | 6. First-run isolated Python 3.14.6 provisioning | Tasks 6, 12–13 |
 | 7. Completed-cache reuse | Tasks 5, 12–13 |
 | 8. Exact local Codex 0.145.0 | Tasks 2, 9, 12–13 |
-| 9. macOS arm64/x64 READY, Gate B, and run | Tasks 10, 12–13 |
+| 9. macOS arm64 READY, Gate B, and run | Tasks 10, 12–13 |
 | 10. Linux arm64/x64 READY, Gate B, and run | Tasks 11–13 |
 | 11. Closed failure behavior | Tasks 2–6, 10–13 |
 | 12. Existing uv-native workflows green | Tasks 9–13 |
-| 13. Public registry install on four targets | Task 15 |
+| 13. Public registry install on three targets | Task 15 |
 
 The Danus worker reference affects lifecycle structure only: Global Constraint
 21 and Tasks 5, 9, and 12 preserve centralized path ownership, call-time

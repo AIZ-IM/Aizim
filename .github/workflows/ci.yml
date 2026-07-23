@@ -49,8 +49,6 @@ jobs:
         include:
           - target: darwin-arm64
             runner: macos-15
-          - target: darwin-x64
-            runner: macos-15-intel
           - target: linux-arm64
             runner: ubuntu-24.04-arm
           - target: linux-x64
@@ -88,8 +86,9 @@ jobs:
           fi
       - name: Install latest pinned npm
         run: |
-          npm install --global npm@12.0.1
-          test "$(npm --version)" = "12.0.1"
+          npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1
+          echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"
+          test "$("$RUNNER_TEMP/npm-12/bin/npm" --version)" = "12.0.1"
       - name: Install source dependencies without lock drift
         run: |
           npm install
@@ -159,8 +158,9 @@ jobs:
           fi
       - name: Install latest pinned npm
         run: |
-          npm install --global npm@12.0.1
-          test "$(npm --version)" = "12.0.1"
+          npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1
+          echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"
+          test "$("$RUNNER_TEMP/npm-12/bin/npm" --version)" = "12.0.1"
       - name: Install and build from source
         run: |
           npm install
@@ -177,9 +177,10 @@ jobs:
           package-manager-cache: false
       - name: Install current npm on minimum Node.js
         run: |
-          npm install --global npm@12.0.1
+          npm install --global --prefix "$RUNNER_TEMP/npm-12-minimum" npm@12.0.1
+          echo "$RUNNER_TEMP/npm-12-minimum/bin" >> "$GITHUB_PATH"
           test "$(node --version)" = "v22.22.2"
-          test "$(npm --version)" = "12.0.1"
+          test "$("$RUNNER_TEMP/npm-12-minimum/bin/npm" --version)" = "12.0.1"
       - name: Test minimum Node.js consumer
         run: |
           node --test \

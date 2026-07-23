@@ -52,7 +52,6 @@
   },
   "optionalDependencies": {
     "@aiz.im/aizim-darwin-arm64": "0.1.0",
-    "@aiz.im/aizim-darwin-x64": "0.1.0",
     "@aiz.im/aizim-linux-arm64": "0.1.0",
     "@aiz.im/aizim-linux-x64": "0.1.0"
   }

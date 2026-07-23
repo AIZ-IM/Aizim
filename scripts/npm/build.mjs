@@ -48,7 +48,6 @@ const expected = Object.freeze({
 
 const platformIds = [
   "darwin-arm64",
-  "darwin-x64",
   "linux-arm64",
   "linux-x64",
 ];

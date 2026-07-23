@@ -171,7 +171,7 @@ fn cache_path_changes_for_every_identity_input_and_schema() -> TestResult {
             ..base.clone()
         },
         CacheKey {
-            target: "darwin-x64".to_owned(),
+            target: "linux-arm64".to_owned(),
             ..base.clone()
         },
         CacheKey {

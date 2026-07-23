@@ -65,13 +65,6 @@ fn host_target() -> TestResult<(
             "aarch64-apple-darwin",
             Value::Null,
         )),
-        ("macos", "x86_64") => Ok((
-            "darwin-x64",
-            "darwin",
-            "x64",
-            "x86_64-apple-darwin",
-            Value::Null,
-        )),
         ("linux", "aarch64") => Ok((
             "linux-arm64",
             "linux",

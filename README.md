@@ -59,7 +59,7 @@ npm run pack
 
 This source build requires the exact toolchain versions recorded in `.node-version`,
 `rust-toolchain.toml`, `package.json`, `pyproject.toml`, and `lean-toolchain`. See the
-[npm distribution runbook](docs/operations/npm-distribution.md) for the full four-platform
+[npm distribution runbook](docs/operations/npm-distribution.md) for the full three-platform
 qualification and release-readiness procedure.
 
 Slices 1–2 are engineering smoke tests only. They make no open-problem, novelty, or

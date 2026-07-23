@@ -21,7 +21,7 @@ DISTRIBUTION_ENVIRONMENT: Final[frozenset[str]] = frozenset(
     }
 )
 _TARGETS: Final[frozenset[str]] = frozenset(
-    {"darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"}
+    {"darwin-arm64", "linux-arm64", "linux-x64"}
 )
 
 

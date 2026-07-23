@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import sys
 from contextlib import suppress
 from pathlib import Path
 from typing import Final
@@ -34,6 +35,14 @@ class SandboxProbeError(RuntimeError):
     pass
 
 
+def probe_runtime() -> tuple[Path, tuple[Path, ...]]:
+    executable = Path(sys.executable).resolve(strict=True)
+    base_prefix = Path(sys.base_prefix).resolve(strict=True)
+    if not executable.is_relative_to(base_prefix):
+        raise SandboxProbeError("PROBE_RUNTIME_INVALID")
+    return executable, (base_prefix,)
+
+
 async def execute_probe(
     adapter: SandboxAdapter,
     request: ProbeRequest,
@@ -44,7 +53,8 @@ async def execute_probe(
     protected_before = protected_asset_digests(request)
     logical_before = request.event_sink.logical_digest()
     document = probe_document(request)
-    command = ("/usr/bin/python3", "-I", "-B", "-", document)
+    executable, runtime_roots = probe_runtime()
+    command = (str(executable), "-I", "-B", "-", document)
     spec = adapter.compile(
         SandboxRequest(
             request.project_root,
@@ -52,7 +62,7 @@ async def execute_probe(
             request.scratch_root,
             command,
             request.parent_env,
-            request.runtime_read_roots,
+            (*runtime_roots, *request.runtime_read_roots),
         )
     )
     stdout, stderr = await run_probe_process(spec, request.timeout_seconds)

@@ -12,6 +12,7 @@ from aizim.lean import DocumentBroker
 from aizim.lean.mcp_client import EXPECTED_TOOL_NAMES, LeanMcpClient
 from aizim.lean.models import DiagnosticsResult, LeanRuntimeError
 from aizim.lean.project import materialize_smoke_project
+from aizim.lean.promotion_runtime import _complete_diagnostics
 from aizim.lean.runtime import SharedLeanRuntime
 from aizim.lean.verification import BuildResult
 from aizim.state import StateService
@@ -57,6 +58,11 @@ class _RecordingSession:
             '{"success":true,"output":"","errors":[]}'
             if name == "lean_build"
             else (
+                '{"partial":false,"still_elaborating_lines":null,"success":true,'
+                '"timed_out":false,"items":[],"failed_dependencies":[]}'
+            )
+            if name == "lean_diagnostic_messages"
+            else (
                 '{"symbol":"AizimSmoke.base_add_zero",'
                 '"info":"AizimSmoke.base_add_zero : (n : Nat) → n + 0 = n",'
                 '"diagnostics":[]}'
@@ -100,6 +106,60 @@ async def test_client_allows_three_minutes_for_a_bounded_mcp_tool_call(tmp_path:
     await client.build(clean=False, fetch_cache=False)
 
     assert session.read_timeout == timedelta(seconds=180)
+
+
+@pytest.mark.asyncio
+async def test_client_sends_an_explicit_diagnostics_elaboration_timeout(tmp_path: Path) -> None:
+    project = materialize_smoke_project(tmp_path, "run-1", SMOKE_ROOT)
+    client = LeanMcpClient(project)
+    session = _RecordingSession()
+    object.__setattr__(client, "_session", session)
+    source = project / "AizimSmoke" / "Base.lean"
+
+    await client.diagnostics(source, None, None, timeout_seconds=60)
+
+    assert session.calls == [
+        (
+            "lean_diagnostic_messages",
+            {
+                "file_path": str(source.resolve()),
+                "timeout_s": 60,
+            },
+        )
+    ]
+
+
+class _ElaboratingClient:
+    def __init__(self) -> None:
+        self.calls: list[int | None] = []
+        self.results = [
+            DiagnosticsResult(True, (1,), True, True, (), (), "a" * 64),
+            DiagnosticsResult(False, None, True, False, (), (), "b" * 64),
+        ]
+
+    async def diagnostics(
+        self,
+        _path: Path,
+        _start_line: int | None,
+        _end_line: int | None,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> DiagnosticsResult:
+        self.calls.append(timeout_seconds)
+        return self.results.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_promotion_polls_diagnostics_until_elaboration_finishes() -> None:
+    client = _ElaboratingClient()
+
+    result = await _complete_diagnostics(
+        cast(LeanMcpClient, cast(object, client)), SMOKE_ROOT / "AizimSmoke" / "Base.lean"
+    )
+
+    assert not result.partial
+    assert not result.timed_out
+    assert client.calls == [60, 60]
 
 
 class _PreparationClient:

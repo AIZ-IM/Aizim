@@ -12,6 +12,9 @@ from .verification import BuildResult, VerificationResult
 
 type EnsureClient = Callable[[Path], Awaitable[LeanMcpClient]]
 
+_DIAGNOSTICS_TIMEOUT_SECONDS = 60
+_DIAGNOSTICS_ATTEMPTS = 3
+
 
 @dataclass(frozen=True, slots=True)
 class PromotionCheck:
@@ -27,7 +30,7 @@ class PromotionRuntimeMethods:
     ) -> PromotionCheck:
         client = await self._promotion_client(project_root)
         async with self._promotion_lock():
-            diagnostics = await client.diagnostics(module_path, None, None)
+            diagnostics = await _complete_diagnostics(client, module_path)
             build = await client.build(clean=False, fetch_cache=False)
             verification = await client.verify(module_path, theorem_name, scan_source=True)
             type_info = await client.hover(probe_path, 2, 8)
@@ -39,3 +42,16 @@ class PromotionRuntimeMethods:
     async def _promotion_client(self, project_root: Path) -> LeanMcpClient:
         ensure = cast(EnsureClient, object.__getattribute__(self, "_ensure_started"))
         return await ensure(project_root)
+
+
+async def _complete_diagnostics(client: LeanMcpClient, path: Path) -> DiagnosticsResult:
+    result = await client.diagnostics(
+        path, None, None, timeout_seconds=_DIAGNOSTICS_TIMEOUT_SECONDS
+    )
+    for _ in range(_DIAGNOSTICS_ATTEMPTS - 1):
+        if not result.partial and not result.timed_out:
+            return result
+        result = await client.diagnostics(
+            path, None, None, timeout_seconds=_DIAGNOSTICS_TIMEOUT_SECONDS
+        )
+    return result

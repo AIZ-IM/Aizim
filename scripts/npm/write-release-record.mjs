@@ -27,9 +27,9 @@ function validatedInput({ aggregate, receipts, smoke, runIds }) {
     JSON.stringify(aggregate.targets) !==
       JSON.stringify(Object.keys(CI_TARGETS).sort()) ||
     !Array.isArray(aggregate.platforms) ||
-    aggregate.platforms.length !== 4 ||
+    aggregate.platforms.length !== Object.keys(CI_TARGETS).length ||
     !Array.isArray(receipts) ||
-    receipts.length !== 5 ||
+    receipts.length !== packageNames.length ||
     smoke?.schema_version !== 1 ||
     smoke.version !== aggregate.version ||
     JSON.stringify(smoke.targets) !==

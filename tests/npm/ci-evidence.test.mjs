@@ -21,7 +21,6 @@ const commit = "1".repeat(40);
 const version = "0.1.0";
 const targetRecords = {
   "darwin-arm64": { os: "darwin", arch: "arm64", libc: null },
-  "darwin-x64": { os: "darwin", arch: "x64", libc: null },
   "linux-arm64": { os: "linux", arch: "arm64", libc: "glibc" },
   "linux-x64": { os: "linux", arch: "x64", libc: "glibc" },
 };
@@ -268,7 +267,7 @@ test("composes native evidence only from matching build, test, pack, and install
   assert.equal(document.checks.npm_test, true);
 });
 
-test("CI pins current actions and qualifies the exact four native runners without publishing", async () => {
+test("CI pins current actions and qualifies the exact three native runners without publishing", async () => {
   const workflow = await readFile(
     new URL("../../.github/workflows/ci.yml", import.meta.url),
     "utf8",
@@ -279,11 +278,9 @@ test("CI pins current actions and qualifies the exact four native runners withou
   );
   for (const value of [
     "darwin-arm64",
-    "darwin-x64",
     "linux-arm64",
     "linux-x64",
     "macos-15",
-    "macos-15-intel",
     "ubuntu-24.04-arm",
     "ubuntu-24.04",
     "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
@@ -295,6 +292,8 @@ test("CI pins current actions and qualifies the exact four native runners withou
     "timeout-minutes: 45",
     "kernel.unprivileged_userns_clone=1",
     "kernel.apparmor_restrict_unprivileged_userns=0",
+    'npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1',
+    'echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"',
   ]) {
     assert.ok(workflow.includes(value), `missing CI contract: ${value}`);
   }
@@ -340,7 +339,7 @@ test("CI pins current actions and qualifies the exact four native runners withou
   }
 });
 
-test("aggregates exactly four native targets and the minimum Node runtime", async () => {
+test("aggregates exactly three native targets and the minimum Node runtime", async () => {
   const fixture = await evidenceFixture();
   try {
     const aggregate = await verify(fixture);
@@ -349,7 +348,7 @@ test("aggregates exactly four native targets and the minimum Node runtime", asyn
     assert.equal(aggregate.commit_sha, commit);
     assert.equal(aggregate.version, version);
     assert.equal(aggregate.minimum_node_version, "v22.22.2");
-    assert.equal(aggregate.platforms.length, 4);
+    assert.equal(aggregate.platforms.length, 3);
     assert.equal(
       aggregate.meta.sha256,
       digest("sha256", "common-meta"),
@@ -416,7 +415,7 @@ test("rejects stale commits and duplicate or missing targets", async (context) =
   await context.test("duplicate target", async () => {
     const fixture = await evidenceFixture();
     try {
-      const path = fixture.paths.get("darwin-x64");
+      const path = fixture.paths.get("linux-arm64");
       const document = await readDocument(path);
       document.target = "darwin-arm64";
       document.runner = targetRecords["darwin-arm64"];

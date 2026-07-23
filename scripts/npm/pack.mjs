@@ -31,7 +31,6 @@ import {
 
 const targets = Object.freeze({
   "darwin-arm64": { os: ["darwin"], cpu: ["arm64"] },
-  "darwin-x64": { os: ["darwin"], cpu: ["x64"] },
   "linux-arm64": { os: ["linux"], cpu: ["arm64"], libc: ["glibc"] },
   "linux-x64": { os: ["linux"], cpu: ["x64"], libc: ["glibc"] },
 });

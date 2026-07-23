@@ -145,13 +145,22 @@ class LeanMcpClient:
         return parse_attempts(payload, response_hash)
 
     async def diagnostics(
-        self, path: Path, start_line: int | None, end_line: int | None
+        self,
+        path: Path,
+        start_line: int | None,
+        end_line: int | None,
+        *,
+        timeout_seconds: int | None = None,
     ) -> DiagnosticsResult:
         arguments: dict[str, object] = {"file_path": str(self._trusted_path(path))}
         if start_line is not None:
             arguments["start_line"] = start_line
         if end_line is not None:
             arguments["end_line"] = end_line
+        if timeout_seconds is not None:
+            if type(timeout_seconds) is not int or timeout_seconds <= 0:
+                raise LeanRuntimeError("INVALID_LEAN_REQUEST")
+            arguments["timeout_s"] = timeout_seconds
         payload, response_hash = await self._call("lean_diagnostic_messages", arguments)
         return parse_diagnostics(payload, response_hash)
 

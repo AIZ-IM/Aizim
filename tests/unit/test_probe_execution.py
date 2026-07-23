@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,14 @@ def launch_spec(tmp_path: Path, argv: tuple[str, ...]) -> SandboxLaunchSpec:
         profile_id="test",
         policy_hash="0" * 64,
     )
+
+
+def test_probe_runtime_uses_the_canonical_base_python() -> None:
+    executable, roots = probe_execution.probe_runtime()
+
+    assert executable == Path(sys.executable).resolve(strict=True)
+    assert roots == (Path(sys.base_prefix).resolve(strict=True),)
+    assert executable.is_relative_to(roots[0])
 
 
 async def test_probe_output_reader_enforces_limit_while_streaming() -> None:

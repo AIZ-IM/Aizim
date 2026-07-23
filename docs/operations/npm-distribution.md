@@ -11,13 +11,13 @@ The distribution supports:
 | npm target | Host |
 | --- | --- |
 | `darwin-arm64` | macOS arm64 |
-| `darwin-x64` | macOS x64 |
 | `linux-arm64` | Linux arm64 with glibc |
 | `linux-x64` | Linux x64 with glibc |
 
 Consumers need Node.js 22.22.2 or newer and an external Lean toolchain managed by `elan`. The npm
 package supplies Codex CLI 0.145.0, uv 0.11.31, and a managed CPython 3.14.6 runtime. It does not
 consult global Python, uv, or Codex installations. musl Linux and Windows are unsupported.
+Intel macOS is unsupported; macOS packages target Apple silicon only.
 Linux hosts must permit unprivileged user namespaces for Codex's package-local bubblewrap sandbox;
 on Ubuntu 24.04, grant that permission with an AppArmor profile for the installed executable.
 
@@ -114,9 +114,9 @@ Gate B, deterministic run, missing-platform, and corrupt-integrity scenarios.
 An integrity or platform failure is fail-closed. Do not bypass it by putting a global Codex,
 Python, or uv first on `PATH`.
 
-## Four-platform evidence
+## Three-platform evidence
 
-`.github/workflows/ci.yml` builds the exact four targets without restored npm, Cargo, uv, Python,
+`.github/workflows/ci.yml` builds the exact three targets without restored npm, Cargo, uv, Python,
 or build caches. Every target runs source build, full tests, pack, local/global tarball
 installation, managed Python preparation, cache reuse, Gate B, deterministic fake execution, and
 negative integrity/platform checks. A separate Node 22.22.2 job verifies the minimum runtime.
@@ -129,8 +129,8 @@ commit, modified tarball, or false check.
 ## Release candidate workflow
 
 `.github/workflows/npm-release.yml` is manual-only. Supply an exact semantic version and full
-40-character Git SHA. It checks out that commit on all four runners, performs a fresh
-build/test/pack/install qualification, merges exactly four platform tarballs and one common meta
+40-character Git SHA. It checks out that commit on all three runners, performs a fresh
+build/test/pack/install qualification, merges exactly three platform tarballs and one common meta
 tarball, and runs `verify-release-bundle.mjs`.
 
 The workflow has only `contents: read`, uses immutable action SHAs, restores no build caches,
@@ -138,7 +138,7 @@ receives no npm or model credential, and contains no publish job. Its bundle is 
 days.
 
 `.github/workflows/npm-registry-smoke.yml` is also manual-only and read-only. After a separately
-authorized publication, it installs one exact public version on all four targets and requires
+authorized publication, it installs one exact public version on all three targets and requires
 `READY`, `SECURITY GATE PASS`, and `AIZIM RUN PASS`. It never writes to the registry.
 
 ## First-publication procedure
@@ -147,15 +147,14 @@ First publication is a separate external-write operation. Before requesting auth
 
 1. Require green CI at the exact release SHA.
 2. Run the manual release-candidate workflow for the same SHA and version.
-3. Download and independently verify its aggregate and all five tarballs.
+3. Download and independently verify its aggregate and all four tarballs.
 4. Confirm the npm scope owner and package names:
    `@aiz.im/aizim`, `@aiz.im/aizim-darwin-arm64`,
-   `@aiz.im/aizim-darwin-x64`, `@aiz.im/aizim-linux-arm64`, and
-   `@aiz.im/aizim-linux-x64`.
-5. Obtain explicit authorization naming the version, SHA, tag, five packages, and public access.
+   `@aiz.im/aizim-linux-arm64`, and `@aiz.im/aizim-linux-x64`.
+5. Obtain explicit authorization naming the version, SHA, tag, four packages, and public access.
 
 Publish platform packages before the meta package. After each write, query the exact version and
-`dist.integrity` with `registry-verify.mjs`. Publish the meta package only after all four platform
+`dist.integrity` with `registry-verify.mjs`. Publish the meta package only after all three platform
 receipts match the verified bundle. Then run the registry-smoke workflow.
 
 ## Partial-publication recovery
@@ -168,7 +167,7 @@ npm versions are immutable. Never overwrite, unpublish, or reuse a version durin
 - If any existing integrity differs, stop. Do not publish the meta package. Prepare a new patch
   version, rebuild all targets, and obtain new authorization.
 - If all platform packages match but the meta package is absent, publish only the verified meta
-  package after confirming the four receipts again.
+  package after confirming the three receipts again.
 - If the meta package exists but a platform package is missing or mismatched, treat that version
   as failed, document it, and prepare a new patch version.
 

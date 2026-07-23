@@ -214,7 +214,10 @@ export async function verifyReleaseBundle({
   ) {
     throw new Error("release bundle contains an unexpected file");
   }
-  if (bundle.evidence.length !== 4 || bundle.tarballs.length !== 5) {
+  if (
+    bundle.evidence.length !== Object.keys(CI_TARGETS).length ||
+    bundle.tarballs.length !== Object.keys(CI_TARGETS).length + 1
+  ) {
     throw new Error("release bundle file set mismatch");
   }
   const tarballNames = bundle.tarballs.map((path) => basename(path)).sort();
