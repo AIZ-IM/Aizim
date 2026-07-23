@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,7 +9,7 @@ from typing import cast
 import pytest
 from mcp.types import TextContent
 
-from aizim.lean import DocumentBroker
+from aizim.lean import DocumentBroker, promotion_runtime
 from aizim.lean.mcp_client import EXPECTED_TOOL_NAMES, LeanMcpClient
 from aizim.lean.models import DiagnosticsResult, LeanRuntimeError
 from aizim.lean.project import materialize_smoke_project
@@ -160,6 +161,56 @@ async def test_promotion_polls_diagnostics_until_elaboration_finishes() -> None:
     assert not result.partial
     assert not result.timed_out
     assert client.calls == [60, 60]
+
+
+class _ColdElaboratingClient:
+    def __init__(self) -> None:
+        self.calls: list[int | None] = []
+        self.ready = False
+
+    async def diagnostics(
+        self,
+        _path: Path,
+        _start_line: int | None,
+        _end_line: int | None,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> DiagnosticsResult:
+        self.calls.append(timeout_seconds)
+        return DiagnosticsResult(
+            not self.ready,
+            (1,) if not self.ready else None,
+            True,
+            not self.ready,
+            (),
+            (),
+            "a" * 64,
+        )
+
+
+@pytest.mark.asyncio
+async def test_promotion_yields_while_waiting_for_cold_elaboration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _ColdElaboratingClient()
+    monkeypatch.setattr(
+        promotion_runtime, "_DIAGNOSTICS_POLL_SECONDS", 0, raising=False
+    )
+
+    async def finish_elaboration() -> None:
+        await asyncio.sleep(0)
+        client.ready = True
+
+    task = asyncio.create_task(finish_elaboration())
+    result = await _complete_diagnostics(
+        cast(LeanMcpClient, cast(object, client)),
+        SMOKE_ROOT / "AizimSmoke" / "Base.lean",
+    )
+    await task
+
+    assert not result.partial
+    assert not result.timed_out
+    assert client.calls == [60, 60, 60]
 
 
 class _PreparationClient:

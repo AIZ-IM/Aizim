@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import signal
 import sys
 from contextlib import suppress
@@ -65,8 +66,12 @@ async def execute_probe(
             (*runtime_roots, *request.runtime_read_roots),
         )
     )
-    stdout, stderr = await run_probe_process(spec, request.timeout_seconds)
     secret = request.parent_env.get(request.secret_environment_name)
+    stdout, stderr = await run_probe_process(
+        spec,
+        request.timeout_seconds,
+        redactions=(() if secret is None else (secret.encode(),)),
+    )
     if secret and (secret.encode() in stdout or secret.encode() in stderr):
         raise SandboxProbeError("PROBE_OUTPUT_CONTAINED_SECRET")
     try:
@@ -109,6 +114,8 @@ async def execute_probe(
 async def run_probe_process(
     spec: SandboxLaunchSpec,
     timeout_seconds: float,
+    *,
+    redactions: tuple[bytes, ...] = (),
 ) -> tuple[bytes, bytes]:
     source = Path(__file__).with_name("attack_probe.py").read_bytes()
     process = await asyncio.create_subprocess_exec(
@@ -138,5 +145,18 @@ async def run_probe_process(
             raise SandboxProbeError("PROBE_PIPE_FAILED") from error
         raise
     if process.returncode != 0:
-        raise SandboxProbeError("PROBE_PROCESS_FAILED")
+        error = SandboxProbeError("PROBE_PROCESS_FAILED")
+        error.add_note(_redacted_stderr_note(stderr, redactions))
+        raise error
     return stdout, stderr
+
+
+def _redacted_stderr_note(stderr: bytes, redactions: tuple[bytes, ...]) -> str:
+    scrubbed = stderr
+    for value in redactions:
+        if value:
+            scrubbed = scrubbed.replace(value, b"<redacted>")
+    text = scrubbed.decode("utf-8", errors="replace")
+    text = re.sub(r"(?<![\w.])/[^\s:'\"]+", "<path>", text)
+    text = " ".join(text.split())
+    return f"probe stderr: {text[:512] if text else '<empty>'}"

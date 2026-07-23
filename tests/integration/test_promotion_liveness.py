@@ -17,7 +17,13 @@ from aizim.knowledge import (
     PromotionService,
     SnapshotPayload,
 )
-from aizim.state import AppendEventCommand, StateDependencies, StateService, StateServiceConfig
+from aizim.state import (
+    AppendEventCommand,
+    PublicationQueueEntry,
+    StateDependencies,
+    StateService,
+    StateServiceConfig,
+)
 
 _BASE = "a" * 64
 _ENVIRONMENT = "b" * 64
@@ -151,13 +157,26 @@ def _submit(state: StateService, artifacts: ArtifactStore, now: datetime) -> Non
 
 
 @pytest.mark.asyncio
-async def test_verification_heartbeat_prevents_expired_claim_takeover(tmp_path: Path) -> None:
-    def now() -> datetime:
-        return datetime.now(UTC)
+async def test_verification_heartbeat_prevents_expired_claim_takeover(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    current = [datetime(2030, 1, 1, tzinfo=UTC)]
+    heartbeat_observed = asyncio.Event()
+    original_heartbeat = StateService.heartbeat_promotion
 
-    state, artifacts = _service(tmp_path, now), ArtifactStore(tmp_path)
+    def observe_heartbeat(
+        service: StateService, contribution_id: str, owner_id: str
+    ) -> PublicationQueueEntry:
+        entry = original_heartbeat(service, contribution_id, owner_id)
+        heartbeat_observed.set()
+        return entry
+
+    monkeypatch.setattr(StateService, "heartbeat_promotion", observe_heartbeat)
+    state = _service(tmp_path, lambda: current[0])
+    artifacts = ArtifactStore(tmp_path)
     try:
-        _submit(state, artifacts, now())
+        _submit(state, artifacts, current[0])
         blocker = _BlockingVerifier()
         active = PromotionService(
             state,
@@ -169,11 +188,13 @@ async def test_verification_heartbeat_prevents_expired_claim_takeover(tmp_path: 
         )
         task = asyncio.create_task(active.promote_next())
         await blocker.started.wait()
-        await asyncio.sleep(0.03)
+        current[0] += timedelta(minutes=2)
+        heartbeat_observed.clear()
+        await asyncio.wait_for(heartbeat_observed.wait(), timeout=1.0)
 
         contender = PromotionService(state, artifacts, _Verifier(), "owner-b", _Verifier())
 
-        assert await contender.recover_next(timedelta(milliseconds=10)) is None
+        assert await contender.recover_next(timedelta(minutes=1)) is None
         blocker.release.set()
         assert (await task) is not None
     finally:

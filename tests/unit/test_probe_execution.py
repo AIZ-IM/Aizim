@@ -88,3 +88,24 @@ async def test_execute_reads_probe_source_before_spawning(
         )
 
     assert not spawned
+
+
+async def test_failed_probe_attaches_only_redacted_stderr(tmp_path: Path) -> None:
+    secret = b"probe-secret-value"
+    script = (
+        "import sys;"
+        "sys.stderr.write('/private/project/.aizim: probe-secret-value: Read-only file system');"
+        "raise SystemExit(9)"
+    )
+
+    with pytest.raises(SandboxProbeError, match="PROBE_PROCESS_FAILED") as captured:
+        await probe_execution.run_probe_process(
+            launch_spec(tmp_path, ("/usr/bin/python3", "-c", script)),
+            1.0,
+            redactions=(secret,),
+        )
+
+    notes = getattr(captured.value, "__notes__", ())
+    assert tuple(notes) == ("probe stderr: <path>: <redacted>: Read-only file system",)
+    assert secret.decode() not in repr(captured.value)
+    assert "/private/project" not in repr(captured.value)

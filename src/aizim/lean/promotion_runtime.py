@@ -14,6 +14,7 @@ type EnsureClient = Callable[[Path], Awaitable[LeanMcpClient]]
 
 _DIAGNOSTICS_TIMEOUT_SECONDS = 60
 _DIAGNOSTICS_ATTEMPTS = 3
+_DIAGNOSTICS_POLL_SECONDS = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,7 @@ async def _complete_diagnostics(client: LeanMcpClient, path: Path) -> Diagnostic
     for _ in range(_DIAGNOSTICS_ATTEMPTS - 1):
         if not result.partial and not result.timed_out:
             return result
+        await asyncio.sleep(_DIAGNOSTICS_POLL_SECONDS)
         result = await client.diagnostics(
             path, None, None, timeout_seconds=_DIAGNOSTICS_TIMEOUT_SECONDS
         )
