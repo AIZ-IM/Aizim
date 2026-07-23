@@ -81,10 +81,10 @@ export function uvToolPath(target) {
   return assertGeneratedPath(join(npmBuildRoot, "tools", target, "uv"));
 }
 
-async function collectFiles(path, output) {
+async function collectFiles(root, path, output) {
   const metadata = await stat(path);
   if (metadata.isFile()) {
-    output.push(relative(repositoryRoot, path));
+    output.push(relative(root, path));
     return;
   }
   if (!metadata.isDirectory()) {
@@ -97,16 +97,23 @@ async function collectFiles(path, output) {
     if (entry.isSymbolicLink()) {
       throw new Error("declared source input contains a symlink");
     }
-    await collectFiles(join(path, entry.name), output);
+    if (entry.isDirectory() && entry.name === "__pycache__") {
+      continue;
+    }
+    await collectFiles(root, join(path, entry.name), output);
   }
 }
 
-export async function sourceInputPaths() {
+export async function sourceInputPaths(
+  root = repositoryRoot,
+  sources = declaredSourceRoots,
+) {
+  const rootPath = resolve(root);
   const output = [];
-  for (const source of declaredSourceRoots) {
-    const path = join(repositoryRoot, source);
+  for (const source of sources) {
+    const path = join(rootPath, source);
     try {
-      await collectFiles(path, output);
+      await collectFiles(rootPath, path, output);
     } catch (error) {
       if (error?.code !== "ENOENT") {
         throw error;

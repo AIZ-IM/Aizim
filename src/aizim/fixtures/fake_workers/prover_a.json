@@ -1,0 +1,42 @@
+{
+  "rounds": [
+    [
+      {
+        "operation": "lean.goal",
+        "payload": {"document_id": {"$cursor": "document_id"}, "line": 4}
+      },
+      {
+        "operation": "lean.multi_attempt",
+        "payload": {
+          "document_id": {"$cursor": "document_id"},
+          "line": 4,
+          "snippets": ["rfl", "exact Nat.add_zero n", "exact False.elim (by contradiction)"]
+        }
+      },
+      {
+        "operation": "document.apply",
+        "payload": {
+          "document_id": {"$cursor": "document_id"},
+          "accepted": "exact Nat.add_zero n"
+        }
+      },
+      {
+        "operation": "contribution.submit",
+        "payload": {
+          "document_id": {"$cursor": "document_id"},
+          "contribution_id": {"$cursor": "contribution_id"},
+          "candidate_name": {"$cursor": "candidate_name"},
+          "complete_type": "(n : Nat) : n + 0 = n",
+          "imports": ["Std"],
+          "dependencies": [],
+          "assumptions": [],
+          "evidence_links": []
+        }
+      },
+      {
+        "operation": "knowledge.read",
+        "payload": {"after_knowledge_epoch": {"$cursor": "knowledge_epoch"}, "wait": true}
+      }
+    ]
+  ]
+}

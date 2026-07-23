@@ -4,12 +4,14 @@ use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 
 use crate::cache::{
     CACHE_SCHEMA_VERSION, CacheKey, CacheLayout, ReadyMarker, ReadyRuntime, RuntimeLock,
 };
 use crate::error::LauncherError;
+use crate::integrity::verify_executable;
 use crate::process::{CommandRunner, CommandSpec};
 
 /// Verified artifacts and process context required to provision one runtime.
@@ -109,6 +111,11 @@ pub fn build_exec_spec(
     ] {
         environment.insert(OsString::from(key), value);
     }
+    let inherited_path = environment.get(OsStr::new("PATH")).map(OsString::as_os_str);
+    environment.insert(
+        OsString::from("PATH"),
+        runtime_path(request, inherited_path)?,
+    );
     if !request.cwd.is_absolute() {
         return Err(LauncherError::internal("WORKING_DIRECTORY_INVALID"));
     }
@@ -120,6 +127,28 @@ pub fn build_exec_spec(
         cwd: request.cwd.clone(),
         expected_stdout: None,
     })
+}
+
+fn runtime_path(
+    request: &ProvisionRequest,
+    inherited_path: Option<&OsStr>,
+) -> Result<OsString, LauncherError> {
+    let codex_root = request
+        .codex_executable
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| LauncherError::integrity("CODEX_INTEGRITY_FAILED"))?;
+    let ripgrep = verify_executable(&codex_root.join("codex-path").join("rg"))?;
+    let codex_path = ripgrep
+        .parent()
+        .filter(|directory| directory.parent() == Some(codex_root))
+        .ok_or_else(|| LauncherError::integrity("CODEX_INTEGRITY_FAILED"))?;
+    let mut paths = vec![codex_path.to_path_buf()];
+    if let Some(value) = inherited_path {
+        paths.extend(std::env::split_paths(value));
+    }
+    std::env::join_paths(paths)
+        .map_err(|source| LauncherError::integrity("CODEX_INTEGRITY_FAILED").with_source(source))
 }
 
 fn provision_staging(
@@ -213,8 +242,18 @@ fn provision_staging(
                 .context("cache_key", &fingerprint));
         }
     }
-    verify_staging_executable(staging, &aizim)?;
-    verify_staging_executable(staging, &sidecar)?;
+    finalize_staging(request, staging, &aizim, &sidecar)
+}
+
+fn finalize_staging(
+    request: &ProvisionRequest,
+    staging: &Path,
+    aizim: &Path,
+    sidecar: &Path,
+) -> Result<(), LauncherError> {
+    relocate_venv_scripts(staging, &request.layout.runtime_root)?;
+    verify_staging_executable(staging, aizim)?;
+    verify_staging_executable(staging, sidecar)?;
     request.layout.write_ready(
         staging,
         &ReadyMarker {
@@ -227,6 +266,44 @@ fn provision_staging(
             sidecar_entrypoint: "venv/bin/aizim-gateway-sidecar".to_owned(),
         },
     )
+}
+
+fn relocate_venv_scripts(staging: &Path, runtime_root: &Path) -> Result<(), LauncherError> {
+    let source = staging.as_os_str().as_bytes();
+    let destination = runtime_root.as_os_str().as_bytes();
+    let binaries = staging.join("venv").join("bin");
+    for entry in fs::read_dir(&binaries).map_err(staging_error)? {
+        let path = entry.map_err(staging_error)?.path();
+        let metadata = fs::symlink_metadata(&path).map_err(staging_error)?;
+        if !metadata.file_type().is_file() {
+            continue;
+        }
+        let content = fs::read(&path).map_err(staging_error)?;
+        if !content.windows(source.len()).any(|window| window == source) {
+            continue;
+        }
+        let relocated = replace_bytes(&content, source, destination);
+        fs::write(&path, relocated).map_err(staging_error)?;
+    }
+    Ok(())
+}
+
+fn replace_bytes(content: &[u8], source: &[u8], destination: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(content.len());
+    let mut offset = 0;
+    while offset < content.len() {
+        let Some(remaining) = content.get(offset..) else {
+            break;
+        };
+        if remaining.starts_with(source) {
+            output.extend_from_slice(destination);
+            offset += source.len();
+        } else if let Some(byte) = remaining.first() {
+            output.push(*byte);
+            offset += 1;
+        }
+    }
+    output
 }
 
 fn bootstrap_environment(

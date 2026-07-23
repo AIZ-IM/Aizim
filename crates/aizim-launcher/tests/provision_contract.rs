@@ -47,9 +47,17 @@ impl CommandRunner for FakeRunner {
                 .ok_or_else(|| LauncherError::internal("TEST_VENV_MISSING"))?;
             let binaries = venv.join("bin");
             fs::create_dir_all(&binaries).map_err(test_launcher_error)?;
-            make_executable(&binaries.join("aizim")).map_err(test_launcher_error)?;
-            make_executable(&binaries.join("aizim-gateway-sidecar"))
+            let script = format!(
+                "#!/bin/sh\nexec '{}' \"$@\"\n",
+                binaries.join("python").display()
+            );
+            make_executable_with_content(&binaries.join("aizim"), script.as_bytes())
                 .map_err(test_launcher_error)?;
+            make_executable_with_content(
+                &binaries.join("aizim-gateway-sidecar"),
+                script.as_bytes(),
+            )
+            .map_err(test_launcher_error)?;
         }
         if index == 4 && self.wrong_version {
             return Err(LauncherError::unavailable("RUNTIME_VERSION_MISMATCH"));
@@ -67,9 +75,13 @@ fn test_launcher_error(source: io::Error) -> LauncherError {
 }
 
 fn make_executable(path: &Path) -> io::Result<()> {
+    make_executable_with_content(path, b"test")
+}
+
+fn make_executable_with_content(path: &Path, content: &[u8]) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
-    fs::write(path, b"test")?;
+    fs::write(path, content)?;
     let mut permissions = fs::metadata(path)?.permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(path, permissions)
@@ -83,11 +95,24 @@ fn fixture() -> TestResult<RequestFixture> {
     let uv = artifact_root.join("uv");
     let wheel = artifact_root.join("aizim.whl");
     let requirements = artifact_root.join("runtime-requirements.txt");
-    let codex = artifact_root.join("codex");
+    let codex_root = artifact_root.join("codex-vendor");
+    let codex = codex_root.join("bin/codex");
+    let ripgrep = codex_root.join("codex-path/rg");
+    fs::create_dir_all(
+        codex
+            .parent()
+            .ok_or_else(|| test_error("missing Codex binary directory"))?,
+    )?;
+    fs::create_dir_all(
+        ripgrep
+            .parent()
+            .ok_or_else(|| test_error("missing Codex path directory"))?,
+    )?;
     make_executable(&uv)?;
     fs::write(&wheel, b"wheel")?;
     fs::write(&requirements, b"requirements")?;
     make_executable(&codex)?;
+    make_executable(&ripgrep)?;
 
     let key = CacheKey {
         aizim_version: "0.1.0".to_owned(),
@@ -303,6 +328,51 @@ fn warm_runtime_runs_no_commands_and_emits_no_bootstrap_status() -> TestResult {
 }
 
 #[test]
+fn promoted_console_scripts_reference_the_final_runtime() -> TestResult {
+    let fixture = fixture()?;
+    let mut runner = FakeRunner::default();
+    ensure_runtime(&fixture.request, &mut runner, &mut Vec::new())?;
+
+    let staging = runner
+        .specs
+        .get(1)
+        .and_then(|spec| spec.args.last())
+        .map(PathBuf::from)
+        .and_then(|venv| venv.parent().map(Path::to_path_buf))
+        .ok_or_else(|| test_error("venv command has no staging path"))?;
+    for name in ["aizim", "aizim-gateway-sidecar"] {
+        let script = fs::read(
+            fixture
+                .request
+                .layout
+                .runtime_root
+                .join("venv/bin")
+                .join(name),
+        )?;
+        assert!(
+            !script
+                .windows(staging.as_os_str().len())
+                .any(|window| { window == staging.as_os_str().to_string_lossy().as_bytes() })
+        );
+        assert!(
+            script
+                .windows(fixture.request.layout.runtime_root.as_os_str().len())
+                .any(|window| {
+                    window
+                        == fixture
+                            .request
+                            .layout
+                            .runtime_root
+                            .as_os_str()
+                            .to_string_lossy()
+                            .as_bytes()
+                })
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn every_command_failure_leaves_no_final_or_staging_runtime() -> TestResult {
     for fail_at in 0..5 {
         let fixture = fixture()?;
@@ -403,9 +473,40 @@ fn final_exec_preserves_opaque_args_and_sets_the_closed_distribution_context() -
     ] {
         assert!(environment_value(&spec, forbidden).is_none());
     }
+    let codex_path = fixture
+        .request
+        .codex_executable
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| test_error("missing Codex vendor root"))?
+        .join("codex-path");
+    let expected_path = std::env::join_paths([codex_path.as_os_str(), OsStr::new("/usr/bin")])?;
     assert_eq!(
         environment_value(&spec, "PATH"),
-        Some(OsStr::new("/usr/bin"))
+        Some(expected_path.as_os_str())
     );
+    Ok(())
+}
+
+#[test]
+fn final_exec_rejects_a_missing_bundled_ripgrep() -> TestResult {
+    let fixture = fixture()?;
+    let mut runner = FakeRunner::default();
+    let ready = ensure_runtime(&fixture.request, &mut runner, &mut Vec::new())?;
+    let ripgrep = fixture
+        .request
+        .codex_executable
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| test_error("missing Codex vendor root"))?
+        .join("codex-path/rg");
+    fs::remove_file(ripgrep)?;
+
+    let error = build_exec_spec(&fixture.request, &ready, &[])
+        .err()
+        .ok_or_else(|| test_error("missing ripgrep must fail closed"))?;
+
+    assert_eq!(error.kind, ErrorKind::Integrity);
+    assert_eq!(error.exit_code(), 74);
     Ok(())
 }

@@ -51,7 +51,7 @@ def parse_verification(value: object, response_hash: str) -> VerificationResult:
         raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
     return VerificationResult(
         tuple(_string(item) for item in axioms),
-        tuple(_string(item) for item in warnings),
+        tuple(_source_warning(item) for item in warnings),
         response_hash,
     )
 
@@ -60,3 +60,11 @@ def _string(value: object) -> str:
     if type(value) is not str:
         raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
     return value
+
+
+def _source_warning(value: object) -> str:
+    warning = _object(value, frozenset({"line", "pattern"}))
+    line, pattern = warning["line"], warning["pattern"]
+    if type(line) is not int or line < 0 or type(pattern) is not str or not pattern:
+        raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+    return f"line {line}: {pattern}"

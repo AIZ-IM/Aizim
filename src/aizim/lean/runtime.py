@@ -43,6 +43,7 @@ class SharedLeanRuntime(PromotionRuntimeMethods):
         self._project_root: Path | None = None
         self._runtime_id: str | None = None
         self._lifecycle_lock = asyncio.Lock()
+        self._prepared = False
         self._opened: dict[tuple[str, str, str, str], WorkerSession] = {}
 
     @property
@@ -102,6 +103,26 @@ class SharedLeanRuntime(PromotionRuntimeMethods):
     def processes(self) -> tuple[LeanProcess, ...]:
         return self._client_or_raise().processes()
 
+    async def prepare(self, project_root: Path) -> None:
+        client = await self._ensure_started(project_root)
+        async with self._lifecycle_lock:
+            if self._prepared:
+                return
+            build = await client.build(clean=False, fetch_cache=False)
+            if not build.success:
+                raise LeanRuntimeError("LEAN_PREPARATION_FAILED")
+            diagnostics = await client.diagnostics(
+                project_root / "AizimSmoke" / "Base.lean", None, None
+            )
+            if (
+                not diagnostics.success
+                or diagnostics.partial
+                or diagnostics.timed_out
+                or any(item.severity == "error" for item in diagnostics.items)
+            ):
+                raise LeanRuntimeError("LEAN_PREPARATION_FAILED")
+            self._prepared = True
+
     async def _build(self) -> BuildResult:
         async with self._lifecycle_lock:
             return await self._client_or_raise().build(clean=False, fetch_cache=False)
@@ -120,6 +141,7 @@ class SharedLeanRuntime(PromotionRuntimeMethods):
     async def aclose(self) -> None:
         client, runtime_id = self._client, self._runtime_id
         self._client, self._project_root, self._runtime_id = None, None, None
+        self._prepared = False
         if runtime_id is not None:
             _ = self._state.append_event(
                 AppendEventCommand(

@@ -22,6 +22,7 @@ from aizim.config import (
 from aizim.runtime.distribution import (
     DISTRIBUTION_ENVIRONMENT,
     DistributionError,
+    load_distribution_context,
     resolve_codex_executable,
 )
 from aizim.runtime.layout import LayoutError, ProjectLayout
@@ -43,6 +44,7 @@ _CHECK_IDS = (
     "state_service",
 )
 _SECRET_MARKERS = ("KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL")
+_BUNDLED_UV_VERSION = "0.11.31"
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +125,16 @@ def _codex(layout: ProjectLayout) -> DoctorCheck:
     )
 
 
+def _uv(layout: ProjectLayout) -> DoctorCheck:
+    try:
+        context = load_distribution_context(os.environ)
+    except DistributionError:
+        return DoctorCheck("uv", "FAIL", "uv distribution is invalid")
+    if context.mode == "npm":
+        return DoctorCheck("uv", "PASS", f"bundled uv {_BUNDLED_UV_VERSION}")
+    return _command("uv", ["uv", "--version"], "uv ", layout.root)
+
+
 def _sandbox_check(
     executable: Path,
     platform: str | None = None,
@@ -173,7 +185,7 @@ def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
         state = DoctorCheck("state_service", "FAIL", "state service is unavailable")
     return (
         _check("python", python_ready, sys.version.split()[0], "Python 3.12-3.14 is required"),
-        _command("uv", ["uv", "--version"], "uv ", layout.root),
+        _uv(layout),
         _command("lean", ["lake", "env", "lean", "--version"], "4.32.0", layout.root),
         _command("lake", ["lake", "--version"], "Lake version", layout.root),
         DoctorCheck("lean_project", "PASS", str(layout.root)),

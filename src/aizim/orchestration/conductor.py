@@ -87,7 +87,11 @@ class ResearchConductor:
             return self._backend(fixture, round_index, delta)
 
         return await self.run_two_worker(
-            factory, run_id, record_completion=record_completion, start_epoch=start_epoch
+            factory,
+            run_id,
+            record_completion=record_completion,
+            start_epoch=start_epoch,
+            prewarm_runtime=True,
         )
 
     async def run_two_worker(
@@ -97,6 +101,7 @@ class ResearchConductor:
         *,
         record_completion: bool = True,
         start_epoch: EpochPair | None = None,
+        prewarm_runtime: bool = False,
     ) -> SharedRunResult:
         self._governor.validate(self._project_root, LeanRuntimeMode.SHARED)
         created = run_id is None
@@ -137,29 +142,39 @@ class ResearchConductor:
         authority = BrokerWorkerAuthority(
             CapabilityIssuer(self._state), sessions, sha256_bytes(Path(sys.executable).read_bytes())
         )
+
         runner = WorkerRunner(
-            self._state, broker, self._governor, authority, self._project_root, run_id
+            self._state,
+            broker,
+            self._governor,
+            authority,
+            self._project_root,
+            run_id,
         )
         verifier = RuntimePromotionVerifier(runtime, broker, run_id)
         consumer = PromotionConsumer(self._state, artifacts, verifier, knowledge)
         consumer_task: asyncio.Task[None] | None = None
         failure_task: asyncio.Task[None] | None = None
+
+        async def run_initial_workers() -> None:
+            if prewarm_runtime:
+                await runtime.prepare(await broker._trusted_promotion_project(run_id))
+            await _run_workers(
+                runner.run(
+                    _directive(run_id, "prover-a", 0),
+                    backend_factory("prover-a", 0, None),
+                ),
+                runner.run(
+                    _directive(run_id, "prover-b", 0),
+                    backend_factory("prover-b", 0, None),
+                ),
+            )
+
         try:
             await sessions.start()
             consumer_task = asyncio.create_task(consumer.run(stop))
             failure_task = asyncio.create_task(consumer.wait_for_failure())
-            first = asyncio.create_task(
-                _run_workers(
-                    runner.run(
-                        _directive(run_id, "prover-a", 0),
-                        backend_factory("prover-a", 0, None),
-                    ),
-                    runner.run(
-                        _directive(run_id, "prover-b", 0),
-                        backend_factory("prover-b", 0, None),
-                    ),
-                )
-            )
+            first = asyncio.create_task(run_initial_workers())
             completed, _ = await asyncio.wait(
                 (first, failure_task), return_when=asyncio.FIRST_COMPLETED
             )

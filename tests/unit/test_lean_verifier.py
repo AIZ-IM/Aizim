@@ -4,7 +4,7 @@ from aizim.knowledge.lean_verifier import _complete_type, _promotion_evidence
 from aizim.knowledge.promotion_types import accepted
 from aizim.lean.models import DiagnosticsResult
 from aizim.lean.promotion_runtime import PromotionCheck
-from aizim.lean.verification import BuildResult, VerificationResult
+from aizim.lean.verification import BuildResult, VerificationResult, parse_verification
 
 
 def test_trusted_hover_type_preserves_parameterized_theorem_signature() -> None:
@@ -28,3 +28,11 @@ def test_trusted_source_scan_warnings_fail_promotion_evidence() -> None:
 
     assert evidence.source_scan_warnings == ("declaration uses a disallowed source form",)
     assert not accepted(evidence)
+
+
+def test_verification_parser_preserves_structured_source_warnings() -> None:
+    result = parse_verification(
+        {"axioms": [], "warnings": [{"line": 7, "pattern": "unsafe"}]}, "c" * 64
+    )
+
+    assert result.warnings == ("line 7: unsafe",)

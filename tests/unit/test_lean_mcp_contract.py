@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -9,9 +10,10 @@ from mcp.types import TextContent
 
 from aizim.lean import DocumentBroker
 from aizim.lean.mcp_client import EXPECTED_TOOL_NAMES, LeanMcpClient
-from aizim.lean.models import LeanRuntimeError
+from aizim.lean.models import DiagnosticsResult, LeanRuntimeError
 from aizim.lean.project import materialize_smoke_project
 from aizim.lean.runtime import SharedLeanRuntime
+from aizim.lean.verification import BuildResult
 from aizim.state import StateService
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
@@ -62,6 +64,78 @@ class _RecordingSession:
             else '{"axioms":[],"warnings":[]}'
         )
         return SimpleNamespace(isError=False, content=[TextContent(type="text", text=payload)])
+
+
+class _TimeoutRecordingSession:
+    def __init__(self) -> None:
+        self.read_timeout: timedelta | None = None
+
+    async def call_tool(
+        self,
+        _name: str,
+        _arguments: dict[str, object],
+        *,
+        read_timeout_seconds: timedelta,
+    ) -> object:
+        self.read_timeout = read_timeout_seconds
+        return SimpleNamespace(
+            isError=False,
+            content=[
+                TextContent(
+                    type="text",
+                    text='{"success":true,"output":"","errors":[]}',
+                )
+            ],
+        )
+
+
+@pytest.mark.asyncio
+async def test_client_allows_three_minutes_for_a_bounded_mcp_tool_call(tmp_path: Path) -> None:
+    project = materialize_smoke_project(tmp_path, "run-1", SMOKE_ROOT)
+    client = LeanMcpClient(project)
+    session = _TimeoutRecordingSession()
+    object.__setattr__(client, "_session", session)
+
+    await client.build(clean=False, fetch_cache=False)
+
+    assert session.read_timeout == timedelta(seconds=180)
+
+
+class _PreparationClient:
+    def __init__(self) -> None:
+        self.calls: list[object] = []
+
+    async def build(self, *, clean: bool, fetch_cache: bool) -> BuildResult:
+        self.calls.append(("build", clean, fetch_cache))
+        return BuildResult(True, "", (), "a" * 64)
+
+    async def diagnostics(
+        self, path: Path, start_line: int | None, end_line: int | None
+    ) -> DiagnosticsResult:
+        self.calls.append(("diagnostics", path, start_line, end_line))
+        return DiagnosticsResult(False, None, True, False, (), (), "b" * 64)
+
+
+@pytest.mark.asyncio
+async def test_runtime_prepares_the_base_project_before_worker_deadlines() -> None:
+    runtime = SharedLeanRuntime(
+        cast(StateService, cast(object, _RecordingState())), cast(DocumentBroker, object()), "run-1"
+    )
+    client = _PreparationClient()
+
+    async def ensure_started(project_root: Path) -> LeanMcpClient:
+        assert project_root == SMOKE_ROOT
+        return cast(LeanMcpClient, cast(object, client))
+
+    object.__setattr__(runtime, "_ensure_started", ensure_started)
+
+    await runtime.prepare(SMOKE_ROOT)
+    await runtime.prepare(SMOKE_ROOT)
+
+    assert client.calls == [
+        ("build", False, False),
+        ("diagnostics", SMOKE_ROOT / "AizimSmoke" / "Base.lean", None, None),
+    ]
 
 
 @pytest.mark.asyncio

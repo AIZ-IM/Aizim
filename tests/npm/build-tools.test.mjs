@@ -24,6 +24,7 @@ import {
   verifySourceVersions,
 } from "../../scripts/npm/build.mjs";
 import { fetchUv } from "../../scripts/npm/fetch-uv.mjs";
+import { sourceInputPaths } from "../../scripts/npm/lib/paths.mjs";
 
 async function temporaryDirectory() {
   return await mkdtemp(join(tmpdir(), "aizim-build-tools-"));
@@ -254,6 +255,31 @@ test("source digest covers every declared input and ignores generated output", a
       await writeFile(path, path === first ? "one" : "two");
     }
     assert.equal(await readFile(first, "utf8"), "one");
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+});
+
+test("source input discovery ignores Python bytecode caches", async () => {
+  const root = await temporaryDirectory();
+  const source = join(root, "src", "aizim", "worker.py");
+  const bytecode = join(
+    root,
+    "src",
+    "aizim",
+    "__pycache__",
+    "worker.cpython-312.pyc",
+  );
+  await mkdir(join(root, "src", "aizim", "__pycache__"), {
+    recursive: true,
+  });
+  await writeFile(source, "def run(): ...\n");
+  await writeFile(bytecode, "generated");
+
+  try {
+    assert.deepEqual(await sourceInputPaths(root, ["src"]), [
+      "src/aizim/worker.py",
+    ]);
   } finally {
     await rm(root, { force: true, recursive: true });
   }

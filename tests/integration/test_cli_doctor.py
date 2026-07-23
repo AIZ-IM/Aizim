@@ -153,8 +153,14 @@ def test_doctor_npm_mode_uses_the_injected_codex_instead_of_path(tmp_path: Path)
     result = run_cli("doctor", "--project", str(root), "--json", environ=environment)
     document = json.loads(result.stdout)
     codex = next(check for check in document["checks"] if check["id"] == "codex")
+    uv = next(check for check in document["checks"] if check["id"] == "uv")
 
     assert codex["status"] == "PASS"
+    assert uv == {
+        "id": "uv",
+        "status": "PASS",
+        "detail": "bundled uv 0.11.31",
+    }
     assert "0.145.0" in codex["detail"]
     assert "0.0.0" not in result.stdout
     assert str(injected) not in result.stdout + result.stderr

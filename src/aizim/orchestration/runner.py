@@ -123,6 +123,7 @@ async def _run(project: Path, backend: str) -> tuple[AizimConfig, SharedRunResul
                 run_id,
                 record_completion=False,
                 start_epoch=start_epoch,
+                prewarm_runtime=True,
             )
             try:
                 verdict = await audit_alignment(
@@ -164,7 +165,7 @@ def _initialize(state: StateService, project_root: Path) -> None:
 
 
 def _fixture_root() -> Path:
-    return Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "fake_workers"
+    return Path(__file__).resolve().parents[1] / "fixtures" / "fake_workers"
 
 
 def _manifest_input(

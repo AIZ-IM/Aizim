@@ -42,6 +42,7 @@ _DISABLED_TOOLS: Final = (
     "lean_state_search,lean_term_goal"
 )
 _MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
+_MCP_TOOL_TIMEOUT: Final = timedelta(seconds=180)
 
 
 class LeanMcpClient:
@@ -202,7 +203,7 @@ class LeanMcpClient:
             raise LeanRuntimeError("MCP_CLIENT_NOT_STARTED")
         try:
             result = await self._session.call_tool(
-                name, arguments, read_timeout_seconds=timedelta(seconds=10)
+                name, arguments, read_timeout_seconds=_MCP_TOOL_TIMEOUT
             )
         except Exception:
             raise LeanRuntimeError("MCP_TRANSPORT_FAILED") from None
