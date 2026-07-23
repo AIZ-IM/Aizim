@@ -1,7 +1,9 @@
 .aizim/
 .lake/
+.omc/
 .venv/
 .superpowers/
+node_modules/
 
 __pycache__/
 *.py[cod]
@@ -17,3 +19,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+/docs/future-native-language-boundary.md
+/docs/superpowers/
