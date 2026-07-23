@@ -10,6 +10,10 @@ pub mod error;
 pub mod integrity;
 /// Strict package manifests and verified artifact paths.
 pub mod manifest;
+/// Shell-free command and final Unix process specifications.
+pub mod process;
+/// Bundled-uv runtime provisioning.
+pub mod provision;
 
 /// Version shared by the launcher binary and distribution manifests.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
