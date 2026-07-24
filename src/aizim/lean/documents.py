@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio
+import asyncio  # noqa: ANYIO_OK -- existing broker locks require asyncio compatibility
 from pathlib import Path, PurePosixPath
 
 from aizim.domain import EpochPair, FileLease, sha256_bytes
@@ -33,6 +33,9 @@ class DocumentBroker:
         self._locks: dict[str, asyncio.Lock] = {}
         self._recovery_lock = asyncio.Lock()
         self._recovered = False
+
+    async def recover(self) -> None:
+        await self._ensure_recovered()
 
     async def create_document(
         self,
@@ -69,7 +72,7 @@ class DocumentBroker:
             if created:
                 self._discard_or_raise(run_id, canonical)
             raise DocumentBrokerError(str(error)) from None
-        except Exception:
+        except Exception:  # noqa: BROAD_EXCEPT_OK -- transactional storage boundary
             if created:
                 self._discard_or_raise(run_id, canonical)
             raise DocumentBrokerError("DOCUMENT_CREATION_FAILED") from None
@@ -83,7 +86,7 @@ class DocumentBroker:
             body = self._storage.read(document)
         except (DocumentIoError, LeanPathError, DocumentStateError) as error:
             raise DocumentBrokerError(str(error)) from None
-        except Exception:
+        except Exception:  # noqa: BROAD_EXCEPT_OK -- transactional storage boundary
             raise DocumentBrokerError("DOCUMENT_READ_FAILED") from None
         if sha256_bytes(body) != document.content_hash:
             raise DocumentBrokerError("DOCUMENT_CONTENT_MISMATCH")
@@ -137,7 +140,7 @@ class DocumentBroker:
             except DocumentBrokerError:
                 self._compensate_or_raise(preparation, replaced)
                 raise
-            except Exception:
+            except Exception:  # noqa: BROAD_EXCEPT_OK -- transactional recovery boundary
                 self._compensate_or_raise(preparation, replaced)
                 raise DocumentBrokerError("DOCUMENT_STATE_COMMIT_FAILED") from None
 
@@ -147,7 +150,7 @@ class DocumentBroker:
             self._state.release_document_lease(run_id, worker_id, lease_id)
         except DocumentStateError as error:
             raise DocumentBrokerError(str(error)) from None
-        except Exception:
+        except Exception:  # noqa: BROAD_EXCEPT_OK -- state facade boundary
             raise DocumentBrokerError("DOCUMENT_RELEASE_FAILED") from None
 
     async def _trusted_runtime_document(
@@ -185,7 +188,7 @@ class DocumentBroker:
                     self._state.recover_document_lease(lease)
             except (DocumentIoError, LeanPathError, DocumentStateError) as error:
                 raise DocumentBrokerError(str(error)) from None
-            except Exception:
+            except Exception:  # noqa: BROAD_EXCEPT_OK -- transactional recovery boundary
                 raise DocumentBrokerError("DOCUMENT_RECOVERY_FAILED") from None
             self._recovered = True
 
@@ -222,13 +225,13 @@ class DocumentBroker:
     def _compensate_or_raise(self, preparation: DocumentPreparation | None, replaced: bool) -> None:
         try:
             self._compensate(preparation, replaced)
-        except Exception:
+        except Exception:  # noqa: BROAD_EXCEPT_OK -- compensation boundary
             raise DocumentBrokerError("DOCUMENT_RECOVERY_FAILED") from None
 
     def _discard_or_raise(self, run_id: str, relative: PurePosixPath) -> None:
         try:
             self._storage.discard(run_id, relative)
-        except Exception:
+        except Exception:  # noqa: BROAD_EXCEPT_OK -- compensation boundary
             raise DocumentBrokerError("DOCUMENT_RECOVERY_FAILED") from None
 
     @staticmethod

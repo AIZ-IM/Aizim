@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
+from typing import Final
 
-from aizim.domain import sha256_bytes
+from aizim.domain import AgentRole, sha256_bytes
 from aizim.domain.serialization import JsonValue
-from aizim.gateway import AuthorizedCall, GatewayTool
+from aizim.gateway import AuthorizedCall, GatewayTool, advertised_tools
 from aizim.knowledge import (
     ArtifactStore,
     ContributionDraft,
@@ -20,6 +21,26 @@ from aizim.state import StateService
 from .knowledge_stream import KnowledgeStream
 
 type GatewayTarget = Callable[[AuthorizedCall], Awaitable[JsonValue]]
+
+CONTROLLER_WORKER_TOOLS: Final = (
+    GatewayTool.PROJECT_READ,
+    GatewayTool.LEAN_GOAL,
+    GatewayTool.LEAN_MULTI_ATTEMPT,
+    GatewayTool.LEAN_DIAGNOSTICS,
+    GatewayTool.DOCUMENT_APPLY,
+    GatewayTool.CONTRIBUTION_SUBMIT,
+    GatewayTool.KNOWLEDGE_READ,
+)
+_WORKER_GATEWAY_TARGETS: Final = frozenset(
+    {
+        GatewayTool.LEAN_GOAL,
+        GatewayTool.LEAN_MULTI_ATTEMPT,
+        GatewayTool.LEAN_DIAGNOSTICS,
+        GatewayTool.DOCUMENT_APPLY,
+        GatewayTool.CONTRIBUTION_SUBMIT,
+        GatewayTool.KNOWLEDGE_READ,
+    }
+)
 
 
 class WorkerGatewayError(RuntimeError):
@@ -164,16 +185,25 @@ class WorkerGatewayActions:
         )
 
 
+def controller_worker_tools(role: AgentRole) -> tuple[GatewayTool, ...]:
+    return tuple(
+        tool
+        for tool in advertised_tools(role)
+        if tool in CONTROLLER_WORKER_TOOLS and tool in _WORKER_GATEWAY_TARGETS
+    )
+
+
 def _accepted_snippet(value: JsonValue) -> str | None:
     if type(value) is not dict:
         return None
     snippet = value.get("snippet")
     diagnostics = value.get("diagnostics")
     timed_out = value.get("timed_out")
-    valid = type(snippet) is str and type(diagnostics) is list and not diagnostics
-    if valid and timed_out is False:
-        return snippet
-    return None
+    if type(snippet) is not str:
+        return None
+    if type(diagnostics) is not list or diagnostics or timed_out is not False:
+        return None
+    return snippet
 
 
 def _replace_sorry(source: bytes, accepted: str, import_module: str | None) -> bytes:
