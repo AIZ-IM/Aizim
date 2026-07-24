@@ -15,6 +15,7 @@ class StateProcessError(RuntimeError):
 class FileIdentity:
     device: int
     inode: int
+    change_time_ns: int
 
 
 def _identity(path: Path) -> FileIdentity | None:
@@ -22,7 +23,7 @@ def _identity(path: Path) -> FileIdentity | None:
         status = path.lstat()
     except FileNotFoundError:
         return None
-    return FileIdentity(status.st_dev, status.st_ino)
+    return FileIdentity(status.st_dev, status.st_ino, status.st_ctime_ns)
 
 
 def _read_pid(path: Path) -> tuple[int, FileIdentity]:
@@ -49,7 +50,7 @@ def _read_pid(path: Path) -> tuple[int, FileIdentity]:
         raise StateProcessError("state PID record is invalid") from error
     if pid <= 0:
         raise StateProcessError("state PID record is invalid")
-    return pid, FileIdentity(status.st_dev, status.st_ino)
+    return pid, FileIdentity(status.st_dev, status.st_ino, status.st_ctime_ns)
 
 
 def _alive(pid: int) -> bool:
@@ -131,6 +132,6 @@ def acquire_state_process(pid_path: Path, socket_path: Path) -> StateProcessOwne
         raise
     return StateProcessOwnership(
         pid_path,
-        FileIdentity(status.st_dev, status.st_ino),
+        FileIdentity(status.st_dev, status.st_ino, status.st_ctime_ns),
         descriptor,
     )

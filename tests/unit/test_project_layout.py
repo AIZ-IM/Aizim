@@ -164,3 +164,18 @@ def test_state_process_reclaims_dead_pid_and_preserves_replacement() -> None:
         pid_path.write_text("42\n")
         ownership.close()
         assert pid_path.read_text() == "42\n"
+
+
+def test_state_process_preserves_owned_pid_changed_in_place(tmp_path: Path) -> None:
+    # Given
+    pid_path = tmp_path / "state.pid"
+    ownership = acquire_state_process(pid_path, tmp_path / "state.sock")
+    original_change_time = pid_path.stat().st_ctime_ns
+    pid_path.write_text("42\n")
+    assert pid_path.stat().st_ctime_ns != original_change_time
+
+    # When
+    ownership.close()
+
+    # Then
+    assert pid_path.read_text() == "42\n"

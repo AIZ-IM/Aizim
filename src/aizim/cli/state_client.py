@@ -40,7 +40,7 @@ type ControlOperationName = Literal[
     "control.register_worker",
     "control.assign_task",
 ]
-type FileIdentity = tuple[int, int]
+type FileIdentity = tuple[int, int, int]
 
 
 def _record_document(record: ProjectionRecord) -> ProjectionDocument:
@@ -96,7 +96,7 @@ def _identity(path: Path) -> FileIdentity | None:
         status = path.lstat()
     except FileNotFoundError:
         return None
-    return status.st_dev, status.st_ino
+    return status.st_dev, status.st_ino, status.st_ctime_ns
 
 
 def _control_version(response: RpcResponse) -> int:
