@@ -15,6 +15,7 @@ import test from "node:test";
 
 import { resolveClaudeExecutable } from "../../lib/claude.mjs";
 import { DistributionError } from "../../lib/errors.mjs";
+import { reportDistributionError } from "../../lib/launch.mjs";
 import { detectTarget } from "../../lib/platform.mjs";
 
 const target = detectTarget({ platform: "darwin", arch: "arm64" });
@@ -25,6 +26,7 @@ function fixture({
   includeNative = true,
   includeBinary = true,
   executable = true,
+  binaryDirectory = false,
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "aizim-claude-"));
   const metaRoot = join(root, "node_modules", "@anthropic-ai", "claude-code");
@@ -61,7 +63,11 @@ function fixture({
     );
     if (includeBinary) {
       binary = join(nativeRoot, "claude");
-      writeFileSync(binary, "#!/bin/sh\necho '2.1.218 (Claude Code)'\n");
+      if (binaryDirectory) {
+        mkdirSync(binary);
+      } else {
+        writeFileSync(binary, "#!/bin/sh\necho '2.1.218 (Claude Code)'\n");
+      }
       chmodSync(binary, executable ? 0o755 : 0o644);
     }
   }
@@ -117,3 +123,33 @@ for (const [name, options] of [
     }
   });
 }
+
+test("rejects an executable directory as a typed configuration error", () => {
+  // Given
+  const tree = fixture({ binaryDirectory: true });
+  const stderrLines = [];
+
+  try {
+    // When / Then
+    assert.throws(
+      () => resolveClaudeExecutable(target, tree.requireFromMeta),
+      (error) => {
+        assert.equal(
+          reportDistributionError(error, {
+            stderr: { write: (line) => stderrLines.push(line) },
+          }),
+          78,
+        );
+        assert.deepEqual(stderrLines, [
+          "aizim: CLAUDE_PACKAGE_INVALID: local Claude Code 2.1.218 native package is unavailable\n",
+        ]);
+        return (
+          error instanceof DistributionError &&
+          error.code === "CLAUDE_PACKAGE_INVALID"
+        );
+      },
+    );
+  } finally {
+    tree.cleanup();
+  }
+});

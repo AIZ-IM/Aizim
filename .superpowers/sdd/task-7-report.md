@@ -1,5 +1,60 @@
 # Task 7 verification report
 
+## 2026-07-24 — Exact-SHA review fix: reject executable directories
+
+Reviewed commit: `20e386ee7310b84c4a7f4b984c72faa44be4b4ff`
+
+### Finding and fix
+
+Exact-SHA review found that `realpathSync()` plus `accessSync(X_OK)` accepted a
+mode-755 directory named `claude` on POSIX. The resolver then returned that
+directory, and `resolveAssets()` rejected it later through an untyped
+regular-file error rather than the stable package boundary.
+
+The narrow fix requires `statSync(executable).isFile()` after canonicalization
+and before the execute-access check, inside `resolveClaudeExecutable()`'s
+existing `try` block. A directory, device, missing path, or access failure is
+therefore normalized to `CLAUDE_PACKAGE_INVALID`; launch error reporting maps
+that code to configuration exit `78`. The pre-existing Codex resolver and all
+other distribution behavior remain unchanged.
+
+### TDD evidence
+
+| Scenario | Invocation | Binary observable | Captured artifact |
+|---|---|---|---|
+| Executable-directory RED | `node --test tests/npm/claude-resolution.test.mjs` after adding a mode-755 directory fixture and before the fix | exit `1`; `6` passed, `1` failed with `Missing expected exception` | `.superpowers/sdd/task-7-report.md` |
+| Typed-boundary GREEN | the same focused invocation after adding the regular-file check | exit `0`; `7` passed, including `CLAUDE_PACKAGE_INVALID`, safe diagnostic text, and exit `78` for the directory | `.superpowers/sdd/task-7-report.md` |
+
+### Verification
+
+| Scenario | Invocation | Binary observable | Captured artifact |
+|---|---|---|---|
+| Full Node suite | `npm run test:node` | exit `0`; `89` passed, `0` failed | `.superpowers/sdd/task-7-report.md` |
+| Build | `npm run build` | exit `0`; `Built @aiz.im/aizim 0.1.0 for darwin-arm64` | `.superpowers/sdd/task-7-report.md` |
+| Freshness | `npm run check` | exit `0`; `All checks passed!`; checked `darwin-arm64` | `.superpowers/sdd/task-7-report.md` |
+| Package | `npm run pack` | exit `0`; both platform and meta tarballs emitted | `.superpowers/sdd/task-7-report.md` |
+| Packed-source boundary | `tar -xOf dist/npm/aiz.im-aizim-0.1.0.tgz package/lib/claude.mjs` and exact regular-file assertion | exit `0`; packed line `if (!statSync(executable).isFile()) {` observed | `.superpowers/sdd/task-7-report.md` |
+| Native manual QA | `env -i PATH=/usr/bin:/bin node_modules/@anthropic-ai/claude-code-darwin-arm64/claude --version` | exit `0`; exact output `2.1.218 (Claude Code)` | `.superpowers/sdd/task-7-report.md` |
+| Patch hygiene | `git diff --check` plus forbidden escape-hatch scan of both touched code/test files | exit `0`; no whitespace errors or escape hatches | `.superpowers/sdd/task-7-report.md` |
+
+The closest affected installed-package gate was used instead of another full
+local/global provisioning smoke: repeated stop-hook verification had already
+driven available disk close to the real smoke's peak `disk_floor` boundary.
+The previously committed full local/global smoke passed at the reviewed SHA,
+and this review fix changes only the packaged resolver validation. The fresh
+build/check/pack, packed-source inspection, full Node suite, and real native
+binary invocation directly cover the changed surface without weakening the
+product threshold or touching user caches.
+
+### Scope
+
+- Modified only `lib/claude.mjs`,
+  `tests/npm/claude-resolution.test.mjs`, and this durable report.
+- Exact commit subject: `Reject invalid Claude executable paths`.
+- This commit requires a fresh exact-SHA rereview before Task 7 approval.
+
+---
+
 ## 2026-07-24 — Carry the exact Claude executable through npm and Rust
 
 Base HEAD: `0c32bf56225146d89f54b97003f30489891b9ab6`
