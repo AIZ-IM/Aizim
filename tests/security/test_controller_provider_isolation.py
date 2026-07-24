@@ -241,13 +241,13 @@ async def test_claude_timeout_reaps_process(
 @pytest.mark.macos_sandbox
 async def test_real_outer_sandbox_runs_secret_safe_fake_claude(tmp_path: Path) -> None:
     codex = Path(value) if (value := shutil.which("codex")) else pytest.fail("codex missing")
-    project = tmp_path / "manual-project"
+    node = Path(value) if (value := shutil.which("node")) else pytest.fail("node missing")
+    project, home = tmp_path / "manual-project", tmp_path / "approved-home"
     state = project / ".aizim/run"
     state.mkdir(parents=True)
     for path in (project / "secret.txt", state / "state.sock"):
         path.write_text("project-authority-secret")
     binary = executable(tmp_path, ControllerProvider.CLAUDE)
-    home = tmp_path / "approved-home"
     script = (
         "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '2.1.218 (Claude Code)'; exit; fi\n"
         '[ "$ANTHROPIC_API_KEY" = approved-anthropic-auth ] || exit 41; '
@@ -262,7 +262,7 @@ async def test_real_outer_sandbox_runs_secret_safe_fake_claude(tmp_path: Path) -
     binary.chmod(0o700)
     secrets = ("approved-anthropic-auth", "approved-claude-oauth", "unrelated-secret")
     environment = {
-        "PATH": f"{codex.parent}:/usr/bin:/bin",
+        "PATH": f"{codex.parent}:{node.parent}:/usr/bin:/bin",
         "HOME": str(home),
         "ANTHROPIC_API_KEY": secrets[0],
         "CLAUDE_CODE_OAUTH_TOKEN": secrets[1],
