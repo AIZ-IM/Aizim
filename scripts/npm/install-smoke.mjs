@@ -24,7 +24,7 @@ import {
   relative,
   resolve,
 } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { capture } from "./lib/command.mjs";
 import { sha256File } from "./lib/hash.mjs";
@@ -197,6 +197,24 @@ function requireCodexDoctor(document, label) {
   }
 }
 
+function requireClaudeDoctor(document, label) {
+  const claude = document.checks?.find?.((check) => check.id === "claude");
+  if (
+    claude?.status !== "PASS" ||
+    !claude.detail.includes("2.1.218 (Claude Code)")
+  ) {
+    throw new Error(`${label} did not resolve Claude Code 2.1.218`);
+  }
+}
+
+async function installedClaudeExecutable(metaRoot) {
+  const [{ resolveClaudeExecutable }, { detectTarget }] = await Promise.all([
+    import(pathToFileURL(join(metaRoot, "lib", "claude.mjs"))),
+    import(pathToFileURL(join(metaRoot, "lib", "platform.mjs"))),
+  ]);
+  return resolveClaudeExecutable(detectTarget());
+}
+
 async function writeConsumer(path) {
   await mkdir(path, { mode: 0o700, recursive: true });
   await writeFile(
@@ -355,6 +373,17 @@ export async function installSmoke() {
       cwd: layout.local,
       env: environment,
     }, "local install");
+    const localClaude = await requireSuccess(
+      await installedClaudeExecutable(
+        join(layout.local, "node_modules", "@aiz.im", "aizim"),
+      ),
+      ["--version"],
+      { cwd: layout.local, env: environment },
+      "local Claude version",
+    );
+    if (localClaude.stdout.trim() !== "2.1.218 (Claude Code)") {
+      throw new Error("local Claude version mismatch");
+    }
 
     const version = await requireSuccess(
       layout.localBinary,
@@ -414,10 +443,9 @@ export async function installSmoke() {
       ["doctor", "--project", layout.project, "--json"],
       { cwd: layout.local, env: environment },
     );
-    requireCodexDoctor(
-      doctorDocument(localDoctorResult, "npm doctor"),
-      "npm doctor",
-    );
+    const localDoctor = doctorDocument(localDoctorResult, "npm doctor");
+    requireCodexDoctor(localDoctor, "npm doctor");
+    requireClaudeDoctor(localDoctor, "npm doctor");
     const gate = await requireSuccess(
       layout.localBinary,
       [
@@ -515,15 +543,34 @@ export async function installSmoke() {
     if (globalVersion.stdout.trim() !== "aizim 0.1.0") {
       throw new Error("global version mismatch");
     }
+    const globalClaude = await requireSuccess(
+      await installedClaudeExecutable(
+        join(
+          layout.npmPrefix,
+          "lib",
+          "node_modules",
+          "@aiz.im",
+          "aizim",
+        ),
+      ),
+      ["--version"],
+      { cwd: layout.global, env: environment },
+      "global Claude version",
+    );
+    if (globalClaude.stdout.trim() !== "2.1.218 (Claude Code)") {
+      throw new Error("global Claude version mismatch");
+    }
     const globalDoctorResult = await execute(
       layout.globalBinary,
       ["doctor", "--project", layout.project, "--json"],
       { cwd: layout.global, env: environment },
     );
-    requireCodexDoctor(
-      doctorDocument(globalDoctorResult, "global npm doctor"),
+    const globalDoctor = doctorDocument(
+      globalDoctorResult,
       "global npm doctor",
     );
+    requireCodexDoctor(globalDoctor, "global npm doctor");
+    requireClaudeDoctor(globalDoctor, "global npm doctor");
 
     command = npm(
       "install",
@@ -601,6 +648,8 @@ export async function installSmoke() {
         uninstall_preserved_cache: true,
         local_codex_01450: true,
         global_codex_01450: true,
+        local_claude_21218: true,
+        global_claude_21218: true,
         ready: true,
         security_gate: true,
         aizim_run: true,

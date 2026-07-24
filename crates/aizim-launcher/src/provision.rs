@@ -23,6 +23,8 @@ pub struct ProvisionRequest {
     pub wheel: PathBuf,
     /// Canonical hash-locked runtime requirements.
     pub runtime_requirements: PathBuf,
+    /// Canonical package-local Claude executable.
+    pub claude_executable: PathBuf,
     /// Canonical package-local Codex executable.
     pub codex_executable: PathBuf,
     /// Versioned cache layout.
@@ -95,6 +97,10 @@ pub fn build_exec_spec(
         (
             "AIZIM_DISTRIBUTION_TARGET",
             OsString::from(&request.key.target),
+        ),
+        (
+            "AIZIM_CLAUDE_EXECUTABLE",
+            request.claude_executable.clone().into_os_string(),
         ),
         (
             "AIZIM_CODEX_EXECUTABLE",
@@ -354,6 +360,7 @@ fn is_injection_variable(key: &OsStr) -> bool {
         || key.starts_with("PIP_")
         || matches!(key, "PYTHONPATH" | "PYTHONHOME" | "VIRTUAL_ENV")
         || key.starts_with("AIZIM_DISTRIBUTION_")
+        || key == "AIZIM_CLAUDE_EXECUTABLE"
         || key == "AIZIM_CODEX_EXECUTABLE"
 }
 

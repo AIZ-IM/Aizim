@@ -45,6 +45,8 @@ export const INSTALL_CHECK_NAMES = Object.freeze([
   "uninstall_preserved_cache",
   "local_codex_01450",
   "global_codex_01450",
+  "local_claude_21218",
+  "global_claude_21218",
   "ready",
   "security_gate",
   "aizim_run",

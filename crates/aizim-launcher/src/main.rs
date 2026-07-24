@@ -47,6 +47,7 @@ fn run() -> Result<(), LauncherError> {
         uv: distribution.uv,
         wheel: distribution.wheel,
         runtime_requirements: distribution.runtime_requirements,
+        claude_executable: distribution.claude_executable,
         codex_executable: distribution.codex_executable,
         layout,
         key,

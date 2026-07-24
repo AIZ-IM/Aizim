@@ -55,18 +55,19 @@ def _request(project: Path) -> AgentRequest:
     )
 
 
-def _executable(path: Path) -> Path:
-    path.write_text("#!/bin/sh\nprintf 'codex-cli 0.145.0\\n'\n")
+def _executable(path: Path, output: str = "codex-cli 0.145.0") -> Path:
+    path.write_text(f"#!/bin/sh\nprintf '%s\\n' '{output}'\n")
     path.chmod(0o755)
     return path
 
 
-def _npm_environment(executable: Path, path: str) -> dict[str, str]:
+def _npm_environment(codex: Path, claude: Path, path: str) -> dict[str, str]:
     return {
         "AIZIM_DISTRIBUTION_MODE": "npm",
         "AIZIM_DISTRIBUTION_VERSION": "0.1.0",
         "AIZIM_DISTRIBUTION_TARGET": "darwin-arm64",
-        "AIZIM_CODEX_EXECUTABLE": str(executable),
+        "AIZIM_CLAUDE_EXECUTABLE": str(claude),
+        "AIZIM_CODEX_EXECUTABLE": str(codex),
         "AIZIM_DISTRIBUTION_MANIFEST_SHA256": "1" * 64,
         "AIZIM_PLATFORM_MANIFEST_SHA256": "2" * 64,
         "PATH": path,
@@ -121,11 +122,11 @@ async def test_codex_workspace_backend_cleans_materialization_when_instruction_f
     monkeypatch.setattr(WorkspaceViewBuilder, "materialize", capture)
 
     def fail(_request: AgentRequest) -> str:
-        raise RuntimeError("instruction failed")
+        raise OSError("instruction failed")
 
     wrapper = CodexWorkspaceBackend(RecordingBackend(), project, "model-fixture", fail)
 
-    with pytest.raises(RuntimeError, match="instruction failed"):
+    with pytest.raises(OSError, match="instruction failed"):
         await wrapper.run(_request(project))
 
     assert materialized
@@ -152,6 +153,7 @@ def test_backend_identity_uses_injected_codex_despite_global_path_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     injected = _executable(tmp_path / "injected-codex")
+    claude = _executable(tmp_path / "packaged-claude", "2.1.218 (Claude Code)")
     wrong_bin = tmp_path / "wrong-bin"
     wrong_bin.mkdir()
     _executable(wrong_bin / "codex").write_text("#!/bin/sh\nprintf 'wrong\\n'\n")
@@ -167,8 +169,10 @@ def test_backend_identity_uses_injected_codex_despite_global_path_drift(
         else "codex-cli 0.145.0",
     )
 
-    first = create_codex_backend(_npm_environment(injected, str(wrong_bin)))
-    second = create_codex_backend(_npm_environment(injected, "/different/global/path"))
+    first = create_codex_backend(_npm_environment(injected, claude, str(wrong_bin)))
+    second = create_codex_backend(
+        _npm_environment(injected, claude, "/different/global/path")
+    )
 
     assert first.identity.executable_sha256 == sha256_file(injected)
     assert second.identity == first.identity

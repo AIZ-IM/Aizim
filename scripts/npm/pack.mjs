@@ -89,6 +89,7 @@ export async function validateStagedPackage(root, kind, target) {
       );
       if (
         manifest.name !== "@aiz.im/aizim" ||
+        manifest.dependencies?.["@anthropic-ai/claude-code"] !== "2.1.218" ||
         manifest.dependencies?.["@openai/codex"] !== "0.145.0" ||
         !exactObject(manifest.optionalDependencies, optionalDependencies) ||
         manifest.os !== undefined ||

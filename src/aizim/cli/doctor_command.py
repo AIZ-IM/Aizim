@@ -23,6 +23,7 @@ from aizim.runtime.distribution import (
     DISTRIBUTION_ENVIRONMENT,
     DistributionError,
     load_distribution_context,
+    resolve_claude_executable,
     resolve_codex_executable,
 )
 from aizim.runtime.layout import LayoutError, ProjectLayout
@@ -37,6 +38,7 @@ _CHECK_IDS = (
     "lean_project",
     "disk_floor",
     "runtime_mode",
+    "claude",
     "codex",
     "sandbox_exec",
     "lean_lsp_mcp",
@@ -125,6 +127,31 @@ def _codex(layout: ProjectLayout) -> DoctorCheck:
     )
 
 
+def _claude(layout: ProjectLayout) -> DoctorCheck:
+    expected = "2.1.218 (Claude Code)"
+    try:
+        executable = resolve_claude_executable(os.environ)
+    except DistributionError:
+        return DoctorCheck("claude", "FAIL", "Claude distribution is invalid")
+    try:
+        result = run_host_command(
+            HostCommandSpec(
+                argv=(str(executable), "--version"),
+                cwd=layout.root,
+                environment=scrubbed_command_environment(),
+            )
+        )
+    except (AgentLaunchError, OSError, ValueError):
+        return DoctorCheck("claude", "FAIL", "version check failed")
+    output = (result.stdout + result.stderr).decode(errors="replace").strip()
+    return _check(
+        "claude",
+        result.returncode == 0 and output == expected,
+        expected,
+        "required version is unavailable",
+    )
+
+
 def _uv(layout: ProjectLayout) -> DoctorCheck:
     try:
         context = load_distribution_context(os.environ)
@@ -191,6 +218,7 @@ def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
         DoctorCheck("lean_project", "PASS", str(layout.root)),
         _check("disk_floor", free >= floor, f"{free} bytes free", "free-space floor not met"),
         runtime,
+        _claude(layout),
         _codex(layout),
         _sandbox(layout),
         _package("lean_lsp_mcp", "lean-lsp-mcp", LEAN_LSP_MCP_VERSION),

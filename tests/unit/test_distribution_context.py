@@ -10,6 +10,7 @@ from aizim.runtime.distribution import (
     DISTRIBUTION_ENVIRONMENT,
     DistributionError,
     load_distribution_context,
+    resolve_claude_executable,
     resolve_codex_executable,
     resolve_ripgrep_executable,
     without_distribution_environment,
@@ -22,12 +23,13 @@ def _executable(path: Path, version: str = "codex-cli 0.145.0") -> Path:
     return path
 
 
-def _npm_environment(executable: Path) -> dict[str, str]:
+def _npm_environment(codex: Path, claude: Path) -> dict[str, str]:
     return {
         "AIZIM_DISTRIBUTION_MODE": "npm",
         "AIZIM_DISTRIBUTION_VERSION": "0.1.0",
         "AIZIM_DISTRIBUTION_TARGET": "darwin-arm64",
-        "AIZIM_CODEX_EXECUTABLE": str(executable),
+        "AIZIM_CLAUDE_EXECUTABLE": str(claude),
+        "AIZIM_CODEX_EXECUTABLE": str(codex),
         "AIZIM_DISTRIBUTION_MANIFEST_SHA256": "1" * 64,
         "AIZIM_PLATFORM_MANIFEST_SHA256": "2" * 64,
     }
@@ -39,15 +41,18 @@ def test_no_distribution_keys_selects_source_mode() -> None:
     assert context.mode == "source"
     assert context.version == "0.1.0"
     assert context.target is None
+    assert context.claude_executable is None
     assert context.codex_executable is None
 
 
 def test_all_exact_keys_produce_an_immutable_path_safe_npm_context(tmp_path: Path) -> None:
     codex = _executable(tmp_path / "codex")
-    context = load_distribution_context(_npm_environment(codex))
+    claude = _executable(tmp_path / "claude", "2.1.218 (Claude Code)")
+    context = load_distribution_context(_npm_environment(codex, claude))
 
     assert context.mode == "npm"
     assert context.target == "darwin-arm64"
+    assert context.claude_executable == claude
     assert context.codex_executable == codex
     assert context.distribution_manifest_sha256 == "1" * 64
     assert context.platform_manifest_sha256 == "2" * 64
@@ -57,7 +62,10 @@ def test_all_exact_keys_produce_an_immutable_path_safe_npm_context(tmp_path: Pat
 
 
 def test_every_partial_distribution_environment_fails_closed(tmp_path: Path) -> None:
-    environment = _npm_environment(_executable(tmp_path / "codex"))
+    environment = _npm_environment(
+        _executable(tmp_path / "codex"),
+        _executable(tmp_path / "claude", "2.1.218 (Claude Code)"),
+    )
 
     for missing in DISTRIBUTION_ENVIRONMENT:
         partial = dict(environment)
@@ -91,7 +99,10 @@ def test_invalid_closed_values_have_stable_safe_codes(
     value: str,
     code: str,
 ) -> None:
-    environment = _npm_environment(_executable(tmp_path / "codex"))
+    environment = _npm_environment(
+        _executable(tmp_path / "codex"),
+        _executable(tmp_path / "claude", "2.1.218 (Claude Code)"),
+    )
     environment[name] = value
 
     with pytest.raises(DistributionError) as failure:
@@ -113,31 +124,39 @@ def test_rejects_relative_missing_directory_symlink_and_non_executable_paths(
     non_executable = tmp_path / "non-executable"
     non_executable.write_text("not executable\n")
 
-    for candidate in [
-        Path("relative-codex"),
-        missing,
-        directory,
-        symlink,
-        non_executable,
+    for name, code in [
+        ("AIZIM_CODEX_EXECUTABLE", "CODEX_EXECUTABLE_INVALID"),
+        ("AIZIM_CLAUDE_EXECUTABLE", "CLAUDE_EXECUTABLE_INVALID"),
     ]:
-        environment = _npm_environment(regular)
-        environment["AIZIM_CODEX_EXECUTABLE"] = str(candidate)
-        with pytest.raises(DistributionError) as failure:
-            load_distribution_context(environment)
-        assert failure.value.code == "CODEX_EXECUTABLE_INVALID"
-        assert str(candidate) not in str(failure.value)
+        for candidate in [
+            Path("relative-provider"),
+            missing,
+            directory,
+            symlink,
+            non_executable,
+        ]:
+            environment = _npm_environment(regular, regular)
+            environment[name] = str(candidate)
+            with pytest.raises(DistributionError) as failure:
+                load_distribution_context(environment)
+            assert failure.value.code == code
+            assert str(candidate) not in str(failure.value)
 
 
 def test_npm_resolution_ignores_path_and_source_resolution_uses_it(tmp_path: Path) -> None:
     npm_codex = _executable(tmp_path / "npm-codex")
+    npm_claude = _executable(tmp_path / "npm-claude", "2.1.218 (Claude Code)")
     path_root = tmp_path / "bin"
     path_root.mkdir()
     path_codex = _executable(path_root / "codex")
-    npm_environment = _npm_environment(npm_codex)
+    path_claude = _executable(path_root / "claude", "2.1.218 (Claude Code)")
+    npm_environment = _npm_environment(npm_codex, npm_claude)
     npm_environment["PATH"] = str(path_root)
 
     assert resolve_codex_executable(npm_environment) == npm_codex
+    assert resolve_claude_executable(npm_environment) == npm_claude
     assert resolve_codex_executable({"PATH": str(path_root)}) == path_codex
+    assert resolve_claude_executable({"PATH": str(path_root)}) == path_claude
 
 
 def test_npm_resolution_uses_ripgrep_from_the_verified_codex_bundle(tmp_path: Path) -> None:
@@ -146,7 +165,10 @@ def test_npm_resolution_uses_ripgrep_from_the_verified_codex_bundle(tmp_path: Pa
     (triple / "codex-path").mkdir()
     codex = _executable(triple / "bin" / "codex")
     ripgrep = _executable(triple / "codex-path" / "rg")
-    environment = _npm_environment(codex)
+    environment = _npm_environment(
+        codex,
+        _executable(tmp_path / "claude", "2.1.218 (Claude Code)"),
+    )
     environment["PATH"] = ""
 
     assert resolve_ripgrep_executable(environment) == ripgrep
@@ -183,11 +205,19 @@ def test_source_resolution_rejects_an_unavailable_codex() -> None:
 
     assert failure.value.code == "CODEX_EXECUTABLE_UNAVAILABLE"
 
+    with pytest.raises(DistributionError) as claude_failure:
+        resolve_claude_executable({"PATH": ""})
 
-def test_without_distribution_environment_removes_only_the_six_internal_keys(
+    assert claude_failure.value.code == "CLAUDE_EXECUTABLE_UNAVAILABLE"
+
+
+def test_without_distribution_environment_removes_only_internal_keys(
     tmp_path: Path,
 ) -> None:
-    environment = _npm_environment(_executable(tmp_path / "codex"))
+    environment = _npm_environment(
+        _executable(tmp_path / "codex"),
+        _executable(tmp_path / "claude", "2.1.218 (Claude Code)"),
+    )
     environment.update(PATH="/usr/bin", LANG="C.UTF-8")
 
     scrubbed = without_distribution_environment(environment)

@@ -12,6 +12,7 @@ const assets = Object.freeze({
   launcher: "/distribution/bin/aizim-launcher",
   distributionManifest: "/distribution/manifest/distribution.json",
   platformManifest: "/platform/manifest/platform.json",
+  claudeExecutable: "/claude/bin/claude",
   codexExecutable: "/codex/bin/codex",
 });
 
@@ -74,6 +75,8 @@ test("launches with internal flags, one separator, and inherited stdio", async (
         assets.distributionManifest,
         "--platform-manifest",
         assets.platformManifest,
+        "--claude-executable",
+        assets.claudeExecutable,
         "--codex-executable",
         assets.codexExecutable,
         "--",
@@ -184,5 +187,24 @@ test("prints one safe configuration error line and returns 78", () => {
   assert.equal(code, 78);
   assert.deepEqual(processLike.stderrLines, [
     "aizim: PLATFORM_PACKAGE_MISSING: compatible Aizim native package is missing\n",
+  ]);
+});
+
+test("classifies an invalid package-local Claude executable as configuration", () => {
+  // Given
+  const processLike = new FakeProcess();
+  const error = new DistributionError(
+    "CLAUDE_PACKAGE_INVALID",
+    "local Claude Code 2.1.218 native package is unavailable",
+    { cause: new Error("PATH=/secret/bin") },
+  );
+
+  // When
+  const code = reportDistributionError(error, processLike);
+
+  // Then
+  assert.equal(code, 78);
+  assert.deepEqual(processLike.stderrLines, [
+    "aizim: CLAUDE_PACKAGE_INVALID: local Claude Code 2.1.218 native package is unavailable\n",
   ]);
 });

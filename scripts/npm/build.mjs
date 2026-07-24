@@ -36,6 +36,7 @@ import { writeNotices } from "./write-notices.mjs";
 
 const expected = Object.freeze({
   aizim: "0.1.0",
+  claude: "2.1.218",
   codex: "0.145.0",
   node: "26.5.0",
   npm: "12.0.1",
@@ -118,6 +119,7 @@ async function sourceVersions() {
   });
   if (
     meta.packageManager !== `npm@${expected.npm}` ||
+    meta.dependencies?.["@anthropic-ai/claude-code"] !== expected.claude ||
     meta.dependencies?.["@openai/codex"] !== expected.codex ||
     !python.includes(`requires-python = "${expected.pythonRange}"`) ||
     !python.includes(`uv_build==${expected.uv}`) ||
@@ -203,7 +205,7 @@ async function assembleArtifacts(target, uv) {
   ]);
 
   const distribution = {
-    schema_version: 1,
+    schema_version: 2,
     aizim_version: expected.aizim,
     python_version: expected.python,
     wheel: await artifactRecord(wheel, `vendor/${wheelName}`),
@@ -212,6 +214,7 @@ async function assembleArtifacts(target, uv) {
       "vendor/runtime-requirements.txt",
     ),
     codex_version: expected.codex,
+    claude_version: expected.claude,
     minimum_node_version: expected.minimumNode,
     platform_schema_version: 1,
   };
@@ -227,7 +230,7 @@ async function assembleArtifacts(target, uv) {
     launcher_version: expected.aizim,
     uv_version: expected.uv,
     uv: await artifactRecord(packagedUv, "vendor/uv"),
-    distribution_schema_version: 1,
+    distribution_schema_version: 2,
   };
   const distributionPath = join(metaManifest, "distribution.json");
   const platformPath = join(platformManifest, "platform.json");

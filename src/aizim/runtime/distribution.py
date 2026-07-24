@@ -17,6 +17,7 @@ DISTRIBUTION_ENVIRONMENT: Final[frozenset[str]] = frozenset(
         "AIZIM_DISTRIBUTION_MODE",
         "AIZIM_DISTRIBUTION_VERSION",
         "AIZIM_DISTRIBUTION_TARGET",
+        "AIZIM_CLAUDE_EXECUTABLE",
         "AIZIM_CODEX_EXECUTABLE",
         "AIZIM_DISTRIBUTION_MANIFEST_SHA256",
         "AIZIM_PLATFORM_MANIFEST_SHA256",
@@ -41,6 +42,7 @@ class DistributionContext:
     version: str
     target: str | None
     codex_executable: Path | None = field(default=None, repr=False)
+    claude_executable: Path | None = field(default=None, repr=False)
     distribution_manifest_sha256: str | None = field(default=None, repr=False)
     platform_manifest_sha256: str | None = field(default=None, repr=False)
 
@@ -58,7 +60,11 @@ def load_distribution_context(environ: Mapping[str, str]) -> DistributionContext
     target = environ["AIZIM_DISTRIBUTION_TARGET"]
     if target not in _TARGETS:
         raise DistributionError("DISTRIBUTION_TARGET_INVALID")
-    executable = _executable(
+    claude_executable = _executable(
+        environ["AIZIM_CLAUDE_EXECUTABLE"],
+        "CLAUDE_EXECUTABLE_INVALID",
+    )
+    codex_executable = _executable(
         environ["AIZIM_CODEX_EXECUTABLE"],
         "CODEX_EXECUTABLE_INVALID",
     )
@@ -66,10 +72,29 @@ def load_distribution_context(environ: Mapping[str, str]) -> DistributionContext
         "npm",
         __version__,
         target,
-        executable,
+        codex_executable,
+        claude_executable,
         _digest(environ["AIZIM_DISTRIBUTION_MANIFEST_SHA256"]),
         _digest(environ["AIZIM_PLATFORM_MANIFEST_SHA256"]),
     )
+
+
+def resolve_claude_executable(environ: Mapping[str, str]) -> Path:
+    context = load_distribution_context(environ)
+    if context.mode == "npm":
+        if context.claude_executable is None:
+            raise DistributionError("CLAUDE_EXECUTABLE_INVALID")
+        return context.claude_executable
+    value = shutil.which("claude", path=environ.get("PATH"))
+    if value is None:
+        raise DistributionError("CLAUDE_EXECUTABLE_UNAVAILABLE")
+    try:
+        executable = Path(value).resolve(strict=True)
+    except OSError as error:
+        raise DistributionError("CLAUDE_EXECUTABLE_UNAVAILABLE") from error
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        raise DistributionError("CLAUDE_EXECUTABLE_UNAVAILABLE")
+    return executable
 
 
 def resolve_codex_executable(environ: Mapping[str, str]) -> Path:

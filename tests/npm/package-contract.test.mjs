@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
+import { detectTarget } from "../../lib/platform.mjs";
+
 const root = new URL("../../", import.meta.url);
 
 function readJson(path) {
@@ -36,6 +38,10 @@ test("uses one version and exact dependencies when manifests are loaded", () => 
   assert.equal(meta.version, "0.1.0");
   assert.equal(meta.packageManager, "npm@12.0.1");
   assert.equal(meta.engines.node, ">=22.22.2");
+  assert.equal(
+    meta.dependencies["@anthropic-ai/claude-code"],
+    "2.1.218",
+  );
   assert.equal(meta.dependencies["@openai/codex"], "0.145.0");
   assert.equal(meta.devDependencies.typescript, "6.0.2");
   assert.equal(pythonVersion, "3.14.6");
@@ -77,6 +83,31 @@ test("retains platform selectors when public package manifests are inspected", (
     assert.deepEqual(pkg.libc, libc);
     assert.equal(pkg.publishConfig.access, "public");
   }
+});
+
+test("maps exactly three native Claude packages without darwin x64", () => {
+  const targets = [
+    ["darwin", "arm64", "@anthropic-ai/claude-code-darwin-arm64"],
+    ["linux", "arm64", "@anthropic-ai/claude-code-linux-arm64"],
+    ["linux", "x64", "@anthropic-ai/claude-code-linux-x64"],
+  ];
+
+  for (const [platform, arch, claudeAlias] of targets) {
+    const target = detectTarget({
+      platform,
+      arch,
+      report:
+        platform === "linux"
+          ? { header: { glibcVersionRuntime: "2.39" } }
+          : undefined,
+    });
+    assert.equal(target.claudeAlias, claudeAlias);
+    assert.equal(target.claudeVersion, "2.1.218");
+  }
+  assert.throws(
+    () => detectTarget({ platform: "darwin", arch: "x64" }),
+    /unsupported platform/u,
+  );
 });
 
 test("declares no package lifecycle hook when installation metadata is inspected", () => {

@@ -99,8 +99,29 @@ function fixture({ missingPlatform = false, missingFile } = {}) {
   writeFileSync(codexExecutable, "#!/bin/sh\nexit 0\n");
   chmodSync(codexExecutable, 0o755);
 
+  const claudeRoot = join(root, "node_modules", "@anthropic-ai", "claude-code");
+  const claudeNativeRoot = join(
+    claudeRoot,
+    "node_modules",
+    "@anthropic-ai",
+    "claude-code-darwin-arm64",
+  );
+  const claudeExecutable = join(claudeNativeRoot, "claude");
+  mkdirSync(claudeNativeRoot, { recursive: true });
+  writeFileSync(
+    join(claudeRoot, "package.json"),
+    '{"name":"@anthropic-ai/claude-code","version":"2.1.218"}\n',
+  );
+  writeFileSync(
+    join(claudeNativeRoot, "package.json"),
+    '{"name":"@anthropic-ai/claude-code-darwin-arm64","version":"2.1.218"}\n',
+  );
+  writeFileSync(claudeExecutable, "#!/bin/sh\necho '2.1.218 (Claude Code)'\n");
+  chmodSync(claudeExecutable, 0o755);
+
   return {
     cleanup: () => rmSync(root, { force: true, recursive: true }),
+    claudeExecutable,
     codexExecutable,
     distributionManifest,
     launcher,
@@ -137,6 +158,10 @@ test("resolves the complete installed distribution from absolute paths", () => {
     assert.equal(
       assets.codexExecutable,
       realpathSync(tree.codexExecutable),
+    );
+    assert.equal(
+      assets.claudeExecutable,
+      realpathSync(tree.claudeExecutable),
     );
     assert.equal(Object.isFrozen(assets), true);
   } finally {

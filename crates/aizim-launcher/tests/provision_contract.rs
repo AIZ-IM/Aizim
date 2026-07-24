@@ -95,6 +95,7 @@ fn fixture() -> TestResult<RequestFixture> {
     let uv = artifact_root.join("uv");
     let wheel = artifact_root.join("aizim.whl");
     let requirements = artifact_root.join("runtime-requirements.txt");
+    let claude = artifact_root.join("claude");
     let codex_root = artifact_root.join("codex-vendor");
     let codex = codex_root.join("bin/codex");
     let ripgrep = codex_root.join("codex-path/rg");
@@ -111,6 +112,7 @@ fn fixture() -> TestResult<RequestFixture> {
     make_executable(&uv)?;
     fs::write(&wheel, b"wheel")?;
     fs::write(&requirements, b"requirements")?;
+    make_executable(&claude)?;
     make_executable(&codex)?;
     make_executable(&ripgrep)?;
 
@@ -133,6 +135,7 @@ fn fixture() -> TestResult<RequestFixture> {
         uv,
         wheel,
         runtime_requirements: requirements,
+        claude_executable: claude,
         codex_executable: codex,
         layout,
         key,
@@ -152,6 +155,10 @@ fn fixture() -> TestResult<RequestFixture> {
             (
                 OsString::from("AIZIM_DISTRIBUTION_VERSION"),
                 OsString::from("wrong"),
+            ),
+            (
+                OsString::from("AIZIM_CLAUDE_EXECUTABLE"),
+                OsString::from("/inherited/claude"),
             ),
         ],
         temporary_variable: "TMPDIR",
@@ -451,6 +458,10 @@ fn final_exec_preserves_opaque_args_and_sets_the_closed_distribution_context() -
     assert_eq!(
         environment_value(&spec, "AIZIM_DISTRIBUTION_TARGET"),
         Some(OsStr::new("darwin-arm64"))
+    );
+    assert_eq!(
+        environment_value(&spec, "AIZIM_CLAUDE_EXECUTABLE"),
+        Some(fixture.request.claude_executable.as_os_str())
     );
     assert_eq!(
         environment_value(&spec, "AIZIM_CODEX_EXECUTABLE"),

@@ -39,6 +39,8 @@ pub struct DistributionManifest {
     pub runtime_requirements: Artifact,
     /// Exact local Codex package version.
     pub codex_version: String,
+    /// Exact local Claude Code package version.
+    pub claude_version: String,
     /// Minimum supported Node.js version.
     pub minimum_node_version: String,
     /// Required platform-manifest schema version.
@@ -90,6 +92,8 @@ pub struct VerifiedDistribution {
     pub uv: PathBuf,
     /// Canonical package-local Codex executable path.
     pub codex_executable: PathBuf,
+    /// Canonical package-local Claude executable path.
+    pub claude_executable: PathBuf,
     /// SHA-256 of the distribution manifest.
     pub distribution_manifest_sha256: String,
     /// SHA-256 of the platform manifest.
@@ -125,6 +129,7 @@ impl VerifiedDistribution {
         )?;
         let uv = verify_artifact(&platform_root, &distribution_root, &platform.uv)?;
         verify_executable(&uv)?;
+        let claude_executable = verify_executable(&arguments.claude_executable)?;
         let codex_executable = verify_executable(&arguments.codex_executable)?;
 
         Ok(Self {
@@ -133,6 +138,7 @@ impl VerifiedDistribution {
             wheel,
             runtime_requirements,
             uv,
+            claude_executable,
             codex_executable,
             distribution_manifest_sha256: sha256_file(&distribution_path)?,
             platform_manifest_sha256: sha256_file(&platform_path)?,
@@ -187,7 +193,7 @@ where
 }
 
 fn validate_distribution(manifest: &DistributionManifest) -> Result<(), LauncherError> {
-    require_number("MANIFEST_INVALID", manifest.schema_version, 1)?;
+    require_number("MANIFEST_INVALID", manifest.schema_version, 2)?;
     require_equal(
         "DISTRIBUTION_VERSION_MISMATCH",
         &manifest.aizim_version,
@@ -205,6 +211,11 @@ fn validate_distribution(manifest: &DistributionManifest) -> Result<(), Launcher
     )?;
     require_equal(
         "DISTRIBUTION_VERSION_MISMATCH",
+        &manifest.claude_version,
+        "2.1.218",
+    )?;
+    require_equal(
+        "DISTRIBUTION_VERSION_MISMATCH",
         &manifest.minimum_node_version,
         "22.22.2",
     )?;
@@ -213,7 +224,7 @@ fn validate_distribution(manifest: &DistributionManifest) -> Result<(), Launcher
 
 fn validate_platform(manifest: &PlatformManifest) -> Result<(), LauncherError> {
     require_number("MANIFEST_INVALID", manifest.schema_version, 1)?;
-    require_number("MANIFEST_INVALID", manifest.distribution_schema_version, 1)?;
+    require_number("MANIFEST_INVALID", manifest.distribution_schema_version, 2)?;
     require_equal(
         "PLATFORM_VERSION_MISMATCH",
         &manifest.aizim_version,

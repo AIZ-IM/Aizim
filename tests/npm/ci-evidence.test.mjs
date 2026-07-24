@@ -33,6 +33,8 @@ const installChecks = {
   uninstall_preserved_cache: true,
   local_codex_01450: true,
   global_codex_01450: true,
+  local_claude_21218: true,
+  global_claude_21218: true,
   ready: true,
   security_gate: true,
   aizim_run: true,

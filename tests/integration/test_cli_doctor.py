@@ -21,6 +21,7 @@ CHECK_IDS = {
     "lean_project",
     "disk_floor",
     "runtime_mode",
+    "claude",
     "codex",
     "sandbox_exec",
     "lean_lsp_mcp",
@@ -51,11 +52,12 @@ def executable(path: Path, output: str) -> Path:
     return path
 
 
-def npm_environment(codex: Path) -> dict[str, str]:
+def npm_environment(codex: Path, claude: Path) -> dict[str, str]:
     return {
         "AIZIM_DISTRIBUTION_MODE": "npm",
         "AIZIM_DISTRIBUTION_VERSION": "0.1.0",
         "AIZIM_DISTRIBUTION_TARGET": "darwin-arm64",
+        "AIZIM_CLAUDE_EXECUTABLE": str(claude),
         "AIZIM_CODEX_EXECUTABLE": str(codex),
         "AIZIM_DISTRIBUTION_MANIFEST_SHA256": "1" * 64,
         "AIZIM_PLATFORM_MANIFEST_SHA256": "2" * 64,
@@ -147,17 +149,32 @@ def test_doctor_npm_mode_uses_the_injected_codex_instead_of_path(tmp_path: Path)
     wrong_bin = tmp_path / "wrong-bin"
     wrong_bin.mkdir()
     executable(wrong_bin / "codex", "codex-cli 0.0.0")
+    executable(wrong_bin / "claude", "0.0.0 (Claude Code)")
     injected = executable(tmp_path / "packaged-codex", "codex-cli 0.145.0")
+    claude_arguments = tmp_path / "claude-arguments"
+    injected_claude = tmp_path / "packaged-claude"
+    injected_claude.write_text(
+        "#!/bin/sh\n"
+        f"printf '%s\\n' \"$@\" > '{claude_arguments}'\n"
+        "printf '%s\\n' '2.1.218 (Claude Code)'\n",
+    )
+    injected_claude.chmod(0o755)
     environment = dict(os.environ)
-    environment.update(npm_environment(injected))
+    environment.update(npm_environment(injected, injected_claude))
     environment["PATH"] = f"{wrong_bin}:{environment['PATH']}"
 
     result = run_cli("doctor", "--project", str(root), "--json", environ=environment)
     document = json.loads(result.stdout)
     codex = next(check for check in document["checks"] if check["id"] == "codex")
+    claude = next(check for check in document["checks"] if check["id"] == "claude")
     uv = next(check for check in document["checks"] if check["id"] == "uv")
 
     assert codex["status"] == "PASS"
+    assert claude == {
+        "id": "claude",
+        "status": "PASS",
+        "detail": "2.1.218 (Claude Code)",
+    }
     assert uv == {
         "id": "uv",
         "status": "PASS",
@@ -165,7 +182,9 @@ def test_doctor_npm_mode_uses_the_injected_codex_instead_of_path(tmp_path: Path)
     }
     assert "0.145.0" in codex["detail"]
     assert "0.0.0" not in result.stdout
+    assert claude_arguments.read_text() == "--version\n"
     assert str(injected) not in result.stdout + result.stderr
+    assert str(injected_claude) not in result.stdout + result.stderr
 
 
 def test_doctor_source_mode_still_resolves_codex_from_path(tmp_path: Path) -> None:
@@ -173,10 +192,12 @@ def test_doctor_source_mode_still_resolves_codex_from_path(tmp_path: Path) -> No
     source_bin = tmp_path / "source-bin"
     source_bin.mkdir()
     executable(source_bin / "codex", "codex-cli 0.145.0")
+    executable(source_bin / "claude", "2.1.218 (Claude Code)")
     environment = {
         name: value
         for name, value in os.environ.items()
         if not name.startswith("AIZIM_DISTRIBUTION_")
+        and name != "AIZIM_CLAUDE_EXECUTABLE"
         and name != "AIZIM_CODEX_EXECUTABLE"
     }
     environment["PATH"] = f"{source_bin}:{environment['PATH']}"
@@ -184,8 +205,11 @@ def test_doctor_source_mode_still_resolves_codex_from_path(tmp_path: Path) -> No
     result = run_cli("doctor", "--project", str(root), "--json", environ=environment)
     document = json.loads(result.stdout)
     codex = next(check for check in document["checks"] if check["id"] == "codex")
+    claude = next(check for check in document["checks"] if check["id"] == "claude")
 
     assert codex["status"] == "PASS"
+    assert claude["status"] == "PASS"
+    assert claude["detail"] == "2.1.218 (Claude Code)"
     assert "0.145.0" in codex["detail"]
 
 
@@ -223,7 +247,7 @@ def test_doctor_fails_closed_when_linux_sandbox_validation_fails(
     codex = executable(tmp_path / "packaged-codex", "codex-cli 0.145.0")
 
     def fail_host(_adapter: LinuxSandboxAdapter) -> Path:
-        raise RuntimeError("bwrap unavailable")
+        raise OSError("bwrap unavailable")
 
     monkeypatch.setattr(
         doctor_command.LinuxSandboxAdapter,

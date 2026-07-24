@@ -62,7 +62,10 @@ async function packageFixture(kind) {
           "THIRD_PARTY_NOTICES.md",
         ],
         publishConfig: { access: "public" },
-        dependencies: { "@openai/codex": "0.145.0" },
+        dependencies: {
+          "@anthropic-ai/claude-code": "2.1.218",
+          "@openai/codex": "0.145.0",
+        },
         optionalDependencies,
       }
     : {
