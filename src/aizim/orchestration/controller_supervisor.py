@@ -103,15 +103,6 @@ class ControllerSupervisor:
                 raise ControllerExecutionError("WORKER_MODEL_REQUIRED")
             if controller.identity.executable_sha256 is None:
                 raise ControllerExecutionError("CONTROLLER_BACKEND_INVALID")
-            start_controller(
-                state,
-                session_id=session_id,
-                controller_version=configured.version,
-                provider=provider,
-                backend_version=controller.identity.version,
-                executable_hash=controller.identity.executable_sha256,
-            )
-            started = True
             governor = ResourceGovernor(
                 config.resources,
                 disk_free=lambda path: shutil.disk_usage(path).free,
@@ -123,6 +114,15 @@ class ControllerSupervisor:
             except Exception:  # noqa: BROAD_EXCEPT_OK - readiness boundary
                 stop_reason = "PREFLIGHT_FAILED"
                 raise
+            start_controller(
+                state,
+                session_id=session_id,
+                controller_version=configured.version,
+                provider=provider,
+                backend_version=controller.identity.version,
+                executable_hash=controller.identity.executable_sha256,
+            )
+            started = True
             dispatcher = ControllerDispatcher(
                 ControllerDispatcherDependencies(
                     state,

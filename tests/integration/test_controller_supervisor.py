@@ -248,11 +248,7 @@ async def test_non_dispatch_decisions_never_launch_worker(
 
 
 @pytest.mark.parametrize(
-    ("guard", "expected"),
-    [
-        ("provider", ControllerBackendError),
-        ("stale", ControllerExecutionError),
-    ],
+    "guard,expected", [("provider", ControllerBackendError), ("stale", ControllerExecutionError)]
 )
 async def test_startup_guard_happens_before_claim(
     short_tmp: Path,
@@ -297,3 +293,7 @@ async def test_startup_guard_happens_before_claim(
         await ControllerSupervisor(root, injected).run()
     with StateService(StateServiceConfig(root, "inspect")) as state:
         assert state.query_projection("worker_executions", assignment_id) is None
+        assert state.query_projection("controller_runtime", "primary") is None
+        assert "ControllerStarted" not in {
+            record.envelope.event_type for record in state.query_events()
+        }

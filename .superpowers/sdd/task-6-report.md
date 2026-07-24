@@ -1,3 +1,12 @@
+# Task 6 fix/review cycle: preflight before controller claim
+
+Date: 2026-07-24
+Review finding: `start_controller` persisted `ControllerStarted` before controller or worker preflight completed.
+
+- RED: strengthened `tests/integration/test_controller_supervisor.py::test_startup_guard_happens_before_claim` to require absent `controller_runtime/primary` and no `ControllerStarted`; the provider and stale worker-preflight cases both failed with the prior ordering (`2 failed in 0.39s`). Captured at `.omo/evidence/task-6-preflight-fix-red.txt` (its wrapper footer is not used as the pytest result).
+- GREEN: moved controller preflight, worker preflight, and governor validation before `start_controller`, while retaining stale-config validation inside `start_controller` and existing cleanup/stop semantics. Focused startup guards: `19 passed in 0.54s`; Task 6 gate: `86 passed in 37.62s`; Task 5 regressions: `54 passed in 22.54s`.
+- Gates: architecture `12 passed in 0.82s`; no-excuse checker clean with pure LOC `controller_supervisor.py=249`, `test_controller_supervisor.py=250`; Ruff format/check and `ty` passed; `git diff --check` passed; full suite `783 passed, 3 skipped in 181.05s`. Artifacts are under `.omo/evidence/task-6-preflight-fix-*.txt`.
+
 # Task 6: Codex controller backend
 
 Date: 2026-07-24
