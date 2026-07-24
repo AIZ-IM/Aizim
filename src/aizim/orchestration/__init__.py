@@ -1,3 +1,4 @@
+from .codex_controller import CodexControllerBackend
 from .controller_backend import (
     CONTROLLER_PLAN_TIMEOUT_SECONDS,
     MAX_CONTROLLER_INSTRUCTION_BYTES,
@@ -12,6 +13,7 @@ from .controller_backend import (
     controller_context_bytes,
     parse_controller_decision,
 )
+from .controller_process import ControllerLaunchOutcome, ControllerLaunchSpec
 from .fake_controller_backend import FakeControllerBackend
 from .knowledge_stream import KnowledgeStream
 from .resources import ResourceGovernor, ResourcePolicyError
@@ -23,9 +25,12 @@ __all__ = [
     "MAX_WORKER_BUDGET",
     "MAX_WORKER_TIMEOUT_SECONDS",
     "BlockedDecision",
+    "CodexControllerBackend",
     "ControllerBackend",
     "ControllerBackendError",
     "ControllerContext",
+    "ControllerLaunchOutcome",
+    "ControllerLaunchSpec",
     "DispatchDecision",
     "FakeControllerBackend",
     "GatewaySession",

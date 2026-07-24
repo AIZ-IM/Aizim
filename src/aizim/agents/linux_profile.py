@@ -7,7 +7,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 
-from .sandbox import SandboxLaunchSpec, SandboxRequest
+from .sandbox import SandboxContractError, SandboxLaunchSpec, SandboxRequest
 
 _PROFILE_ID: Final = "aizim-worker"
 _BASE_PATH: Final = "/usr/local/bin:/usr/bin:/bin"
@@ -24,19 +24,13 @@ def compile_linux_profile(
     codex_executable: Path,
     request: SandboxRequest,
 ) -> SandboxLaunchSpec:
-    shell_env = MappingProxyType(
-        {
-            "PATH": _BASE_PATH,
-            "LANG": "C.UTF-8",
-            "LC_ALL": "C.UTF-8",
-            "TMPDIR": str(request.scratch_root),
-        }
-    )
+    filtered = request.provider_environment.value == "filtered_parent"
+    shell_env = _shell_environment(request)
     overrides = (
         f"default_permissions={_toml_string(_PROFILE_ID)}",
         'approval_policy="never"',
         _permission_override(request),
-        _environment_override(shell_env),
+        _environment_override(filtered, shell_env),
     )
     return SandboxLaunchSpec(
         platform_id="linux",
@@ -53,7 +47,7 @@ def compile_linux_profile(
         view_root=request.view_root,
         scratch_root=request.scratch_root,
         profile_id=_PROFILE_ID,
-        policy_hash=_policy_contract_hash(),
+        policy_hash=_policy_contract_hash(filtered),
     )
 
 
@@ -64,7 +58,7 @@ def validate_linux_profile(
 ) -> None:
     expected = compile_linux_profile(codex_executable, request)
     if spec != expected:
-        raise ValueError("invalid Linux sandbox profile")
+        raise SandboxContractError("invalid Linux sandbox profile")
 
 
 def _permission_override(request: SandboxRequest) -> str:
@@ -76,16 +70,12 @@ def _permission_override(request: SandboxRequest) -> str:
         (str(request.project_root), "deny"),
     )
     entries = ",".join(
-        f"{_toml_string(path)}={_toml_string(permission)}"
-        for path, permission in filesystem
+        f"{_toml_string(path)}={_toml_string(permission)}" for path, permission in filesystem
     )
-    return (
-        f"permissions.{_PROFILE_ID}="
-        f"{{filesystem={{{entries}}},network={{enabled=false}}}}"
-    )
+    return f"permissions.{_PROFILE_ID}={{filesystem={{{entries}}},network={{enabled=false}}}}"
 
 
-def _policy_contract_hash() -> str:
+def _policy_contract_hash(filtered: bool = False) -> str:
     scratch = Path("/__aizim_contract__/scratch")
     request = SandboxRequest(
         Path("/__aizim_contract__/project"),
@@ -108,17 +98,28 @@ def _policy_contract_hash() -> str:
         f"default_permissions={_toml_string(_PROFILE_ID)}",
         'approval_policy="never"',
         _permission_override(request),
-        _environment_override(environment),
+        _environment_override(filtered, environment),
         *_FIXED_LAUNCH_POLICY,
     )
     body = json.dumps(contract, ensure_ascii=False, separators=(",", ":")).encode()
     return hashlib.sha256(body).hexdigest()
 
 
-def _environment_override(environment: Mapping[str, str]) -> str:
-    values = ",".join(
-        f"{key}={_toml_string(value)}" for key, value in environment.items()
+def _shell_environment(request: SandboxRequest) -> Mapping[str, str]:
+    return MappingProxyType(
+        {
+            "PATH": _BASE_PATH,
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "TMPDIR": str(request.scratch_root),
+        }
     )
+
+
+def _environment_override(filtered: bool, environment: Mapping[str, str]) -> str:
+    if filtered:
+        return 'shell_environment_policy={inherit="all",ignore_default_excludes=true}'
+    values = ",".join(f"{key}={_toml_string(value)}" for key, value in environment.items())
     return (
         "shell_environment_policy="
         f'{{inherit="none",ignore_default_excludes=false,set={{{values}}}}}'

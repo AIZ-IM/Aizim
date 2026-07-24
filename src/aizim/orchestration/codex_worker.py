@@ -27,6 +27,7 @@ from aizim.runtime.distribution import (
     without_distribution_environment,
 )
 
+from .controller_process import codex_runtime_root, private_workspace
 from .run_identity import candidate_name, contribution_id
 
 
@@ -60,10 +61,8 @@ class CodexWorkspaceBackend:
             self._project_root, project_view_sources(self._project_root)
         )
         try:
-            if isinstance(self._instruction, str):
-                instruction = self._instruction
-            else:
-                instruction = self._instruction(request)
+            source = self._instruction
+            instruction = source if isinstance(source, str) else source(request)
             if type(instruction) is not str or not instruction:
                 raise CodexWorkerError("INVALID_CODEX_WORKER_INSTRUCTION")
             isolated = replace(
@@ -87,14 +86,7 @@ def create_codex_backend(parent_environment: Mapping[str, str] | None = None) ->
     sidecar = _sidecar_executable()
     environment = without_distribution_environment(source_environment)
     sandbox = sandbox_adapter(executable)
-    runtime_read_roots = tuple(
-        dict.fromkeys(
-            (
-                Path(sys.prefix).resolve(strict=True),
-                executable.parents[2].resolve(strict=True),
-            )
-        )
-    )
+    runtime_read_roots = _runtime_read_roots(executable)
 
     def compile_sandbox(request: AgentRequest):
         return sandbox.compile(
@@ -119,6 +111,39 @@ def create_codex_backend(parent_environment: Mapping[str, str] | None = None) ->
             _noop,
         )
     )
+
+
+async def preflight_codex_worker(
+    project_root: Path,
+    parent_environment: Mapping[str, str] | None = None,
+) -> None:
+    source = dict(os.environ if parent_environment is None else parent_environment)
+    try:
+        executable = resolve_codex_executable(source)
+    except DistributionError as error:
+        raise CodexWorkerError("CODEX_EXECUTABLE_UNAVAILABLE") from error
+    image_hash = sha256_file(executable)
+    if _codex_version(executable) != "codex-cli 0.145.0":
+        raise CodexWorkerError("UNSUPPORTED_CODEX_VERSION")
+    with private_workspace("aizim-worker-") as (_private, view, scratch):
+        request = SandboxRequest(
+            project_root,
+            view,
+            scratch,
+            (str(executable),),
+            without_distribution_environment(source),
+            _runtime_read_roots(executable),
+        )
+        try:
+            sandbox_adapter(executable).compile(request)
+        except (SandboxHostError, ValueError) as error:
+            raise CodexWorkerError("WORKER_SANDBOX_UNAVAILABLE") from error
+        if sha256_file(executable) != image_hash:
+            raise CodexWorkerError("CODEX_IMAGE_CHANGED")
+
+
+def _runtime_read_roots(executable: Path) -> tuple[Path, ...]:
+    return (codex_runtime_root(executable),)
 
 
 def project_view_sources(project_root: Path) -> tuple[ViewSource, ...]:
@@ -210,9 +235,7 @@ def _waiting_worker_instruction(document_id: str, knowledge_epoch: int) -> str:
     )
 
 
-def _second_worker_instruction(
-    document_id: str, delta: Mapping[str, str], run_id: str
-) -> str:
+def _second_worker_instruction(document_id: str, delta: Mapping[str, str], run_id: str) -> str:
     name, module = _delta_text(delta, "fully_qualified_name"), _delta_text(delta, "module")
     contribution = contribution_id(run_id, "prover-b")
     candidate = candidate_name(run_id, "prover-b")

@@ -9,7 +9,8 @@ from aizim.agents.linux_profile import (
     compile_linux_profile,
     validate_linux_profile,
 )
-from aizim.agents.sandbox import SandboxRequest
+from aizim.agents.permission_profile import normalize_sandbox_request
+from aizim.agents.sandbox import ProviderEnvironmentPolicy, SandboxRequest
 
 
 def request(tmp_path: Path, name: str) -> SandboxRequest:
@@ -61,6 +62,38 @@ def test_linux_profile_is_exact_closed_and_root_independent(tmp_path: Path) -> N
     assert str(first_request.project_root / ".aizim") not in permission
     assert f"{first_request.project_root}/**" not in permission
     assert "hidden" not in repr(first)
+
+
+def test_linux_provider_environment_uses_value_free_selector(tmp_path: Path) -> None:
+    sandbox_request = request(tmp_path, "provider")
+    secret = "linux-provider-secret"
+    environment = {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "TMPDIR": str(sandbox_request.scratch_root),
+        "HOME": "/provider-home",
+        "OPENAI_API_KEY": secret,
+    }
+    filtered = normalize_sandbox_request(
+        replace(
+            sandbox_request,
+            parent_env=environment,
+            provider_environment=ProviderEnvironmentPolicy.FILTERED_PARENT,
+        )
+    )
+
+    spec = compile_linux_profile(Path("/opt/aizim/bin/codex"), filtered)
+
+    assert spec.parent_env == environment
+    assert secret not in repr(spec.shell_env)
+    assert 'shell_environment_policy={inherit="all",ignore_default_excludes=true}' in spec.argv
+    assert secret not in repr(spec)
+    assert all(secret not in value for value in spec.argv)
+    with pytest.raises(ValueError, match="invalid provider environment"):
+        normalize_sandbox_request(
+            replace(filtered, parent_env={**environment, "DATABASE_URL": secret})
+        )
 
 
 @pytest.mark.parametrize(

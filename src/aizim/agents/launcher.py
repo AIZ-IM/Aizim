@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-import math
+import asyncio  # noqa: ANYIO_OK - subprocess lifecycle uses asyncio primitives
 import os
 import signal
+import subprocess
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -20,19 +20,20 @@ from .process_io import (
     communicate_bounded,
     drain_process,
 )
+from .sync_process_io import exchange_bounded, kill_and_reap
 
 _JSONL_LINE_LIMIT: Final = 4 * 1024 * 1024
-_STDERR_LIMIT: Final = 256 * 1024
-_HOST_OUTPUT_LIMIT: Final = 64 * 1024
 _TERMINATE_GRACE_SECONDS = 5.0
 
 
-@dataclass(slots=True)
 class AgentLaunchError(RuntimeError):
-    reason: str
+    @property
+    def reason(self) -> str:
+        return str(self)
 
-    def __str__(self) -> str:
-        return self.reason
+
+class HostCommandSpecError(ValueError):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,16 +62,17 @@ class HostCommandSpec:
     argv: tuple[str, ...]
     cwd: Path
     environment: Mapping[str, str] = field(repr=False)
+    stdin: bytes = field(default=b"", repr=False)
     timeout_seconds: float = 10.0
-    output_limit: int = _HOST_OUTPUT_LIMIT
+    output_limit: int = 64 * 1024
 
     def __post_init__(self) -> None:
         if not self.argv or not Path(self.argv[0]).is_absolute():
-            raise ValueError("host command requires an absolute executable")
-        if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
-            raise ValueError("host command timeout must be finite and positive")
+            raise HostCommandSpecError("host command requires an absolute executable")
+        if not 0 < self.timeout_seconds < float("inf"):
+            raise HostCommandSpecError("host command timeout must be finite and positive")
         if type(self.output_limit) is not int or self.output_limit <= 0:
-            raise ValueError("host command output limit must be positive")
+            raise HostCommandSpecError("host command output limit must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,10 +83,29 @@ class HostCommandOutcome:
 
 
 def run_host_command(spec: HostCommandSpec) -> HostCommandOutcome:
-    return asyncio.run(_run_host_command(spec))
+    process = subprocess.Popen(
+        spec.argv,
+        cwd=spec.cwd,
+        env=dict(spec.environment),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        returncode, stdout, stderr = exchange_bounded(
+            process, spec.stdin, spec.timeout_seconds, spec.output_limit
+        )
+    except (TimeoutError, ProcessOutputLimitError, ProcessPipeError) as error:
+        raise AgentLaunchError("HOST_COMMAND_FAILED") from error
+    except OSError:
+        raise AgentLaunchError("HOST_COMMAND_FAILED") from ProcessPipeError()
+    finally:
+        kill_and_reap(process)
+    return HostCommandOutcome(returncode, stdout, stderr)
 
 
-async def _run_host_command(spec: HostCommandSpec) -> HostCommandOutcome:
+async def launch_host_command(spec: HostCommandSpec) -> HostCommandOutcome:
     process = await asyncio.create_subprocess_exec(
         *spec.argv,
         cwd=spec.cwd,
@@ -97,21 +118,20 @@ async def _run_host_command(spec: HostCommandSpec) -> HostCommandOutcome:
     )
     try:
         stdout, stderr = await asyncio.wait_for(
-            communicate_bounded(process, b"", spec.output_limit),
+            communicate_bounded(process, spec.stdin, spec.output_limit),
             timeout=spec.timeout_seconds,
         )
     except (TimeoutError, ProcessOutputLimitError, ProcessPipeError) as error:
         await _finish_reaping(process, graceful=False)
         raise AgentLaunchError("HOST_COMMAND_FAILED") from error
-    except BaseException:
+    except BaseException:  # noqa: BROAD_EXCEPT_OK - subprocess resource boundary
         await _finish_reaping(process, graceful=False)
         raise
-    outcome = HostCommandOutcome(process.returncode or 0, stdout, stderr)
-    cleanup = asyncio.create_task(_kill_and_reap(process))
-    interruption = await await_cleanup(cleanup)
-    if interruption is not None:
-        raise interruption
-    return outcome
+    if len(stdout) + len(stderr) > spec.output_limit:
+        await _finish_reaping(process, graceful=False)
+        raise AgentLaunchError("HOST_COMMAND_FAILED") from ProcessOutputLimitError()
+    await _finish_reaping(process, graceful=False)
+    return HostCommandOutcome(process.returncode or 0, stdout, stderr)
 
 
 async def launch_codex(spec: CodexLaunchSpec) -> CodexLaunchOutcome:
@@ -141,7 +161,7 @@ async def launch_codex(spec: CodexLaunchSpec) -> CodexLaunchOutcome:
     except AgentLaunchError:
         await _finish_reaping(process, graceful=False)
         raise
-    except BaseException:
+    except BaseException:  # noqa: BROAD_EXCEPT_OK - subprocess resource boundary
         await _finish_reaping(process, graceful=False)
         raise
     if process.returncode != 0:
@@ -212,7 +232,7 @@ async def _read_stderr(reader: asyncio.StreamReader) -> None:
     length = 0
     while chunk := await reader.read(READ_CHUNK_SIZE):
         length += len(chunk)
-        if length > _STDERR_LIMIT:
+        if length > 256 * 1024:
             raise AgentLaunchError("CODEX_STDERR_LIMIT")
 
 

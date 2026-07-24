@@ -14,11 +14,12 @@ from aizim.config import load_config
 from aizim.lean import DocumentBroker
 from aizim.lean.broker_knowledge import current_epoch
 from aizim.lean.models import DocumentBrokerError
-from aizim.orchestration.codex_worker import create_codex_backend
+from aizim.orchestration.codex_worker import create_codex_backend, preflight_codex_worker
 from aizim.runtime.layout import ProjectLayout
 from aizim.runtime.state_process import StateProcessOwnership, acquire_state_process
 from aizim.state import StateDependencies, StateService, StateServiceConfig
 
+from .codex_controller import production_codex
 from .control_plane import ControllerProvider
 from .controller_backend import ControllerBackend
 from .controller_dispatcher import (
@@ -59,7 +60,7 @@ class ControllerSupervisor:
         dependencies: ControllerSupervisorDependencies | None = None,
     ) -> None:
         self._project = project
-        self._dependencies = _default_dependencies() if dependencies is None else dependencies
+        self._dependencies = dependencies or _default_dependencies(project)
         self._stop, self._wake = asyncio.Event(), asyncio.Event()
         self._idle = asyncio.Event()
         self._active: asyncio.Task[None] | None = None
@@ -89,30 +90,26 @@ class ControllerSupervisor:
             configured = state.query_projection("controller", "primary")
             if configured is None:
                 raise ControllerExecutionError("CONTROLLER_NOT_CONFIGURED")
-            payload = _payload(configured)
             try:
-                provider = ControllerProvider(_text(payload, "provider"))
+                provider = ControllerProvider(_text(_payload(configured), "provider"))
             except ValueError:
                 raise ControllerExecutionError("CONTROLLER_PROVIDER_INVALID") from None
-            controller_model = payload.get("model")
+            controller_model = _payload(configured).get("model")
             if controller_model is not None and type(controller_model) is not str:
                 raise ControllerExecutionError("CONTROLLER_MODEL_INVALID")
             controller = self._dependencies.controller_backend(provider, controller_model)
             initial_run = self._snapshot(state, configured.version, session_id)
-            worker_model = config.model
-            if worker_model is None:
+            if config.model is None:
                 raise ControllerExecutionError("WORKER_MODEL_REQUIRED")
-            worker = self._dependencies.worker_backend()
-            identity = controller.identity
-            if identity.executable_sha256 is None:
+            if controller.identity.executable_sha256 is None:
                 raise ControllerExecutionError("CONTROLLER_BACKEND_INVALID")
             start_controller(
                 state,
                 session_id=session_id,
                 controller_version=configured.version,
                 provider=provider,
-                backend_version=identity.version,
-                executable_hash=identity.executable_sha256,
+                backend_version=controller.identity.version,
+                executable_hash=controller.identity.executable_sha256,
             )
             started = True
             governor = ResourceGovernor(
@@ -130,9 +127,9 @@ class ControllerSupervisor:
                 ControllerDispatcherDependencies(
                     state,
                     layout.root,
-                    worker_model,
+                    config.model,
                     governor,
-                    worker,
+                    self._dependencies.worker_backend(),
                     controller,
                 )
             )
@@ -233,10 +230,6 @@ class ControllerSupervisor:
         return value
 
 
-def _unavailable_controller(_provider: ControllerProvider, _model: str | None) -> ControllerBackend:
-    raise ControllerExecutionError("CONTROLLER_BACKEND_UNAVAILABLE")
-
-
 async def _finalize(
     state: StateService | None,
     ownership: StateProcessOwnership,
@@ -257,11 +250,15 @@ async def _finalize(
         ownership.close()
 
 
-def _default_dependencies() -> ControllerSupervisorDependencies:
+def _default_dependencies(project: Path | None = None) -> ControllerSupervisorDependencies:
     return ControllerSupervisorDependencies(
-        controller_backend=_unavailable_controller,
+        controller_backend=lambda provider, model: production_codex(project, provider, model),
         worker_backend=create_codex_backend,
-        worker_preflight=unavailable_worker_preflight,
+        worker_preflight=(
+            unavailable_worker_preflight
+            if project is None
+            else lambda: preflight_codex_worker(project)
+        ),
         session_ids=lambda: f"controller-{secrets.token_hex(16)}",
         execution_ids=lambda: f"execution-{secrets.token_hex(16)}",
         directive_ids=lambda: f"directive-{secrets.token_hex(16)}",

@@ -8,7 +8,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 
-from .sandbox import SandboxLaunchSpec, SandboxRequest
+from .sandbox import SandboxContractError, SandboxLaunchSpec, SandboxRequest
 
 _PROFILE_ID: Final = "aizim-worker"
 _BASE_PATH: Final = "/usr/bin:/bin:/usr/sbin:/sbin"
@@ -27,16 +27,10 @@ def compile_macos_profile(
     request: SandboxRequest,
     developer_root: Path,
 ) -> SandboxLaunchSpec:
-    shell_env = MappingProxyType(
-        {
-            "PATH": _BASE_PATH,
-            "LANG": "C.UTF-8",
-            "LC_ALL": "C.UTF-8",
-            "TMPDIR": str(request.scratch_root),
-        }
-    )
+    filtered = request.provider_environment.value == "filtered_parent"
+    shell_env = _shell_environment(request)
     permission = _permission_override(request, developer_root)
-    environment = _environment_override(shell_env)
+    environment = _environment_override(filtered, shell_env)
     overrides = (
         f"default_permissions={_toml_string(_PROFILE_ID)}",
         'approval_policy="never"',
@@ -59,7 +53,7 @@ def compile_macos_profile(
         view_root=request.view_root,
         scratch_root=request.scratch_root,
         profile_id=_PROFILE_ID,
-        policy_hash=_policy_contract_hash(),
+        policy_hash=_policy_contract_hash(filtered),
     )
 
 
@@ -70,6 +64,8 @@ def validate_macos_profile(
     runtime_read_roots: tuple[Path, ...] = (),
 ) -> None:
     argv = spec.argv
+    overrides = argv[2:9:2]
+    filtered = len(overrides) == 4 and overrides[3] == _environment_override(True, {})
     expected_environment = {
         "PATH": _BASE_PATH,
         "LANG": "C.UTF-8",
@@ -89,13 +85,12 @@ def validate_macos_profile(
         or not Path(argv[16]).is_absolute()
         or argv[1:9:2] != ("-c",) * 4
     ):
-        raise ValueError("invalid macOS sandbox profile")
-    overrides = argv[2:9:2]
+        raise SandboxContractError("invalid macOS sandbox profile")
     if (
         overrides[0] != f"default_permissions={_toml_string(_PROFILE_ID)}"
         or overrides[1] != 'approval_policy="never"'
-        or overrides[3] != _environment_override(spec.shell_env)
-        or spec.policy_hash != _policy_contract_hash()
+        or overrides[3] != _environment_override(filtered, spec.shell_env)
+        or spec.policy_hash != _policy_contract_hash(filtered)
         or not _permission_is_strict(
             overrides[2],
             spec,
@@ -104,7 +99,7 @@ def validate_macos_profile(
             runtime_read_roots,
         )
     ):
-        raise ValueError("invalid macOS sandbox profile")
+        raise SandboxContractError("invalid macOS sandbox profile")
 
 
 def _permission_is_strict(
@@ -162,7 +157,7 @@ def _permission_override(request: SandboxRequest, developer_root: Path) -> str:
     return f"permissions.{_PROFILE_ID}={{filesystem={{{entries}}},network={{enabled=false}}}}"
 
 
-def _policy_contract_hash() -> str:
+def _policy_contract_hash(filtered: bool = False) -> str:
     scratch = Path("/__aizim_contract__/scratch")
     request = SandboxRequest(
         Path("/__aizim_contract__/project"),
@@ -185,14 +180,27 @@ def _policy_contract_hash() -> str:
         f"default_permissions={_toml_string(_PROFILE_ID)}",
         'approval_policy="never"',
         _permission_override(request, Path("/__aizim_contract__/developer")),
-        _environment_override(environment),
+        _environment_override(filtered, environment),
         *_FIXED_LAUNCH_POLICY,
     )
     body = json.dumps(contract, ensure_ascii=False, separators=(",", ":")).encode()
     return hashlib.sha256(body).hexdigest()
 
 
-def _environment_override(environment: Mapping[str, str]) -> str:
+def _shell_environment(request: SandboxRequest) -> Mapping[str, str]:
+    return MappingProxyType(
+        {
+            "PATH": _BASE_PATH,
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "TMPDIR": str(request.scratch_root),
+        }
+    )
+
+
+def _environment_override(filtered: bool, environment: Mapping[str, str]) -> str:
+    if filtered:
+        return 'shell_environment_policy={inherit="all",ignore_default_excludes=true}'
     values = ",".join(f"{key}={_toml_string(value)}" for key, value in environment.items())
     return (
         "shell_environment_policy="

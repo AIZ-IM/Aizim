@@ -33,6 +33,15 @@ type ProbeVerdict = Literal["denied", "allowed"]
 type SandboxPlatform = Literal["darwin", "linux"]
 
 
+class ProviderEnvironmentPolicy(StrEnum):
+    NONE = "none"
+    FILTERED_PARENT = "filtered_parent"
+
+
+class SandboxContractError(ValueError):
+    pass
+
+
 class ProbeEventSink(Protocol):
     def append_event(self, command: AppendEventCommand) -> EventRecord: ...
 
@@ -47,6 +56,7 @@ class SandboxRequest:
     command: tuple[str, ...]
     parent_env: Mapping[str, str] = field(repr=False)
     runtime_read_roots: tuple[Path, ...] = ()
+    provider_environment: ProviderEnvironmentPolicy = ProviderEnvironmentPolicy.NONE
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +65,7 @@ class SandboxLaunchSpec:
     argv: tuple[str, ...]
     cwd: Path
     parent_env: Mapping[str, str] = field(repr=False)
-    shell_env: Mapping[str, str]
+    shell_env: Mapping[str, str] = field(repr=False)
     view_root: Path
     scratch_root: Path
     profile_id: str
@@ -144,7 +154,7 @@ def validate_launch_spec(request: LaunchRequest, spec: SandboxLaunchSpec) -> Non
             )
         )
     ):
-        raise ValueError("invalid sandbox launch specification")
+        raise SandboxContractError("invalid sandbox launch specification")
 
 
 def probe_document(request: ProbeRequest) -> str:
@@ -228,9 +238,9 @@ def parse_probe_attempts(stdout: bytes) -> tuple[ProbeAttempt, ...]:
             raise TypeError
         attempts = tuple(_parse_probe_attempt(raw) for raw in raw_attempts)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-        raise ValueError("invalid probe output") from error
+        raise SandboxContractError("invalid probe output") from error
     if tuple(attempt.operation for attempt in attempts) != tuple(ProbeOperation):
-        raise ValueError("invalid probe operation sequence")
+        raise SandboxContractError("invalid probe operation sequence")
     return attempts
 
 

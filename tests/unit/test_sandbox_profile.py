@@ -13,7 +13,7 @@ from aizim.agents.macos_sandbox import (
     MacOSSandboxDependencies,
     SandboxHostError,
 )
-from aizim.agents.sandbox import SandboxRequest
+from aizim.agents.sandbox import ProviderEnvironmentPolicy, SandboxRequest
 
 _EPHEMERAL_ROOTS: set[Path] = set()
 pytestmark = pytest.mark.macos_sandbox
@@ -103,6 +103,37 @@ def test_profile_compiles_one_deterministic_inline_permission_table(
     assert "do-not-render" not in repr(sandbox_request)
 
 
+def test_provider_environment_is_allowlisted_and_repr_safe(tmp_path: Path) -> None:
+    adapter = MacOSSandboxAdapter(dependencies())
+    sandbox_request = request(tmp_path)
+    secret = "provider-secret-value"
+    environment = {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "TMPDIR": str(sandbox_request.scratch_root),
+        "HOME": "/private/provider-home",
+        "CODEX_HOME": "/private/provider-codex",
+        "OPENAI_API_KEY": secret,
+    }
+    filtered = replace(
+        sandbox_request,
+        parent_env=environment,
+        provider_environment=ProviderEnvironmentPolicy.FILTERED_PARENT,
+    )
+
+    spec = adapter.compile(filtered)
+
+    assert spec.parent_env == environment
+    assert secret not in repr(spec.shell_env)
+    assert 'shell_environment_policy={inherit="all",ignore_default_excludes=true}' in spec.argv
+    assert secret not in repr(spec)
+    assert all(secret not in value for value in spec.argv)
+    with pytest.raises(SandboxHostError, match="invalid provider environment") as caught:
+        adapter.compile(replace(filtered, parent_env={**environment, "NPM_TOKEN": secret}))
+    assert secret not in str(caught.value)
+
+
 def test_policy_contract_hash_is_stable_across_concrete_roots(tmp_path: Path) -> None:
     adapter = MacOSSandboxAdapter(dependencies())
     first = adapter.compile(request(tmp_path / "one"))
@@ -122,9 +153,7 @@ def test_runtime_roots_are_exact_read_only_profile_entries(tmp_path: Path) -> No
     )
 
     spec = adapter.compile(sandbox_request)
-    permission = next(
-        value for value in spec.argv if value.startswith("permissions.aizim-worker=")
-    )
+    permission = next(value for value in spec.argv if value.startswith("permissions.aizim-worker="))
 
     assert f'"{runtime.resolve()}"="read"' in permission
     assert f'"{runtime.resolve()}"="write"' not in permission
@@ -244,6 +273,7 @@ def test_adapter_rejects_globally_writable_temporary_roots(tmp_path: Path) -> No
         MacOSSandboxAdapter(dependencies()).compile(
             SandboxRequest(project, view, scratch, ("/usr/bin/python3",), {})
         )
+
 
 def test_adapter_rejects_canonical_project_inside_private_var_tmp(tmp_path: Path) -> None:
     project = Path("/private/var/tmp") / f"aizim-project-{tmp_path.name}"
