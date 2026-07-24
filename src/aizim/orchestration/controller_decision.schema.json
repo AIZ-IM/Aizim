@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "worker_id", "instruction", "budget", "timeout_seconds"],
+      "properties": {
+        "action": {"const": "dispatch"},
+        "worker_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "instruction": {"type": "string", "minLength": 1},
+        "budget": {"type": "integer", "minimum": 1, "maximum": 12},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 60}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "reason_code"],
+      "properties": {
+        "action": {"const": "blocked"},
+        "reason_code": {"enum": ["DEPENDENCY_UNAVAILABLE", "NO_SAFE_ACTION"]}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "reason_code"],
+      "properties": {
+        "action": {"const": "reject"},
+        "reason_code": {"enum": ["TASK_UNSAFE", "TASK_UNSUPPORTED"]}
+      }
+    }
+  ]
+}
