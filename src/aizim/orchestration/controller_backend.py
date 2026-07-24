@@ -84,7 +84,7 @@ class ControllerBackend(Protocol):
 
 
 def controller_context_bytes(context: ControllerContext) -> bytes:
-    """Serialize only the model-visible controller context fields."""
+    """Serialize only model-visible data and descriptive operation labels."""
     return canonical_json(
         {
             "assignment_id": context.assignment_id,
@@ -95,7 +95,7 @@ def controller_context_bytes(context: ControllerContext) -> bytes:
             "project_id": context.project_id,
             "base_epoch": context.base_epoch,
             "knowledge_epoch": context.knowledge_epoch,
-            "allowed_operations": tuple(str(operation) for operation in context.allowed_operations),
+            "allowed_operations": context.allowed_operations,
             "max_budget": context.max_budget,
             "max_timeout_seconds": context.max_timeout_seconds,
         }
@@ -105,7 +105,7 @@ def controller_context_bytes(context: ControllerContext) -> bytes:
 def parse_controller_decision(raw: bytes, context: ControllerContext) -> ControllerDecision:
     """Parse a schema-valid, bounded controller decision without exposing raw output."""
     try:
-        value = json.loads(raw)
+        value: JsonValue = json.loads(raw, object_pairs_hook=_unique_json_object)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ControllerBackendError("CONTROLLER_DECISION_INVALID") from error
     try:
@@ -113,6 +113,15 @@ def parse_controller_decision(raw: bytes, context: ControllerContext) -> Control
     except ValidationError as error:
         raise ControllerBackendError("CONTROLLER_DECISION_INVALID") from error
     return _parse_valid_decision(value, context)
+
+
+def _unique_json_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
+    value: dict[str, JsonValue] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
+        value[key] = item
+    return value
 
 
 def _parse_valid_decision(value: JsonValue, context: ControllerContext) -> ControllerDecision:

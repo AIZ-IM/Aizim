@@ -41,7 +41,7 @@ def _raw(value: JsonValue) -> bytes:
     return json.dumps(value, allow_nan=True).encode()
 
 
-def test_context_bytes_are_canonical_and_exclude_controller_metadata() -> None:
+def test_context_bytes_expose_only_safe_operation_labels() -> None:
     # Given
     context = _context()
 
@@ -65,6 +65,11 @@ def test_context_bytes_are_canonical_and_exclude_controller_metadata() -> None:
         }
     )
     assert b"controller_version" not in result
+    assert b'"allowed_operations":["lean.document.open","lean.document.write"]' in result
+    assert b"socket" not in result
+    assert b"session" not in result
+    assert b"token" not in result
+    assert b"credential" not in result
 
 
 @pytest.mark.parametrize(
@@ -167,6 +172,29 @@ def test_parser_fails_closed_for_unsafe_or_malformed_values(payload: JsonValue) 
 def test_parser_rejects_malformed_json() -> None:
     with pytest.raises(ControllerBackendError):
         parse_controller_decision(b'{"action":', _context())
+
+
+@pytest.mark.parametrize(
+    "raw",
+    (
+        b'{"action":"blocked","action":"reject","reason_code":"TASK_UNSAFE"}',
+        b'{"action":"blocked","reason_code":"DEPENDENCY_UNAVAILABLE","reason_code":"NO_SAFE_ACTION"}',
+        (
+            b'{"action":"dispatch","worker_id":"other-worker","worker_id":"formalizer-1",'
+            b'"instruction":"Use the supplied document.","budget":1,"timeout_seconds":1.0}'
+        ),
+    ),
+)
+def test_parser_rejects_duplicate_decision_keys(raw: bytes) -> None:
+    # Given
+    context = _context()
+
+    # When
+    with pytest.raises(ControllerBackendError) as error:
+        parse_controller_decision(raw, context)
+
+    # Then
+    assert str(error.value) == "CONTROLLER_DECISION_INVALID"
 
 
 async def test_fake_backend_records_exact_canonical_context_bytes() -> None:
