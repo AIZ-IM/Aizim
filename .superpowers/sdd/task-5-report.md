@@ -1,3 +1,88 @@
+# Task 5 controller supervisor review hardening
+
+Date: 2026-07-24
+Commit subject: `Harden controller supervisor ordering`
+Review base: `33de7198ca195e6b1369c3b328316fd512dc3302`
+
+## Result
+
+- The production default worker preflight now fails closed with the fixed
+  `WORKER_PREFLIGHT_UNAVAILABLE` code before any assignment claim.
+- Every scan validates exactly one durable project identity, snapshots the
+  durable base/knowledge epochs, and validates both trusted execution and
+  directive IDs before claim. The carried snapshot and IDs are the values used
+  for planning and dispatch.
+- Direct `DispatchDecision` values are checked against instruction, budget, and
+  timeout ceilings before artifact creation or worker launch.
+- The supervisor acknowledges entry into the cancellable dispatch task before
+  publishing it as active, closing cancel-before-first-task-step handoff.
+- Nested, cancellation-resistant finalization attempts stop recording,
+  checkpoint, state close, and PID/socket ownership close. Cleanup failure
+  cannot replace an already active primary failure.
+- Tests now force a genuine idle wake from a post-start public assignment,
+  observe directive-artifact/planned-event ordering, verify the worker-model
+  source, cancel a genuinely active worker, and cover identity/epoch/ID,
+  direct-ceiling, and finalization failures.
+
+## Review-fix scope amendment
+
+The parent explicitly authorized one narrow, non-duplicative regression module,
+`tests/integration/test_controller_supervisor_guards.py`, after the complete
+guard matrix could not remain within the 250-pure-line contract in the original
+CLI test. The original module retains CLI wiring, active-worker cancellation,
+and restart recovery; the new module owns only startup identity/epoch/ID,
+default-preflight, and finalization guard coverage. No other scope expanded.
+
+## TDD evidence
+
+- Initial guard RED:
+  `uv run pytest -q tests/integration/test_cli_controller_start.py -k fail_closed_startup_guards_precede_claim`
+  reported `2 failed`; missing project identity and the production-default
+  worker preflight both failed with `DID NOT RAISE`.
+- Finalization RED:
+  `uv run pytest -q tests/integration/test_cli_controller_start.py -k 'fail_closed or finalization or stop_interrupts'`
+  reported `1 failed, 9 passed, 5 deselected`; annotating a frozen
+  `ControllerExecutionError` with `add_note()` raised `FrozenInstanceError` and
+  replaced the primary failure.
+- Focused GREEN:
+  `uv run pytest -q tests/integration/test_controller_supervisor.py tests/integration/test_controller_supervisor_guards.py tests/integration/test_cli_controller_start.py`
+  reported `24 passed in 0.53s`.
+- Task 2 execution/lifecycle plus Task 4 host/failure GREEN:
+  `uv run pytest -q tests/integration/test_cli_control.py tests/unit/test_controller_execution_transitions.py tests/unit/test_controller_execution_replay.py tests/integration/test_worker_host.py tests/integration/test_failure_events.py`
+  reported `54 passed in 18.98s`.
+
+## Static and regression evidence
+
+- Ruff check passed and Ruff format reported all five changed Python files
+  formatted.
+- `uv run ty check` reported `All checks passed!`.
+- Authority/trusted-boundary tests reported `12 passed in 0.72s`.
+- The Python no-excuse checker reported `no violations in 5 file(s)`.
+- Pure LOC:
+  `controller_dispatcher.py=244`,
+  `controller_supervisor.py=248`,
+  `test_controller_supervisor.py=250`,
+  `test_controller_supervisor_guards.py=142`, and
+  `test_cli_controller_start.py=202`.
+- `git diff --check` passed.
+- `uv run pytest -q` reported `764 passed, 3 skipped in 148.41s`.
+
+## Manual CLI composition evidence
+
+A temporary Lean fixture was initialized and configured without an assignment.
+The foreground CLI controller was then started, a deliberate live assignment
+was submitted through the public worker CLI, and `SIGTERM` was delivered only
+after the worker backend entered. The same foreground CLI boundary was
+restarted, and durable state/artifact ordering plus residue were inspected:
+
+```text
+MANUAL CONTROLLER HARDENING PASS
+live_assignment=1 planned_before_worker=1 worker_model=worker-model
+active_signal=interrupted restart_duplicates=0 leases=0 sockets=0 pid=0
+```
+
+---
+
 # Task 5 controller supervisor verification report
 
 Date: 2026-07-24

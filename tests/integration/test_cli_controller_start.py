@@ -15,6 +15,7 @@ import aizim.cli.main as cli_main
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
 from aizim.cli.init_command import run_init
 from aizim.domain import AgentRole, sha256_bytes, sha256_json
+from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.control_plane import (
     ControllerProvider,
     assign_task,
@@ -22,24 +23,35 @@ from aizim.orchestration.control_plane import (
     register_worker,
 )
 from aizim.orchestration.controller_backend import (
-    BlockedDecision,
-    ControllerContext,
-    DispatchDecision,
+    DispatchDecision as Dispatch,
 )
 from aizim.orchestration.controller_execution import (
-    ControllerExecutionError,
+    ControllerExecutionError as ExecutionError,
+)
+from aizim.orchestration.controller_execution import (
     claim_assignment,
     record_dispatch_planned,
 )
 from aizim.orchestration.controller_lifecycle import start_controller
 from aizim.orchestration.controller_supervisor import (
-    ControllerSupervisor,
-    ControllerSupervisorDependencies,
+    ControllerSupervisor as Supervisor,
 )
-from aizim.orchestration.fake_controller_backend import FakeControllerBackend
-from aizim.state import StateService, StateServiceConfig
+from aizim.orchestration.controller_supervisor import (
+    ControllerSupervisorDependencies as SupervisorDeps,
+)
+from aizim.orchestration.fake_controller_backend import FakeControllerBackend as Controller
+from aizim.state import (
+    AppendEventCommand as Event,
+)
+from aizim.state import (
+    StateService,
+)
+from aizim.state import (
+    StateServiceConfig as StateConfig,
+)
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
+IGNORE = shutil.ignore_patterns(".aizim")
 
 
 @pytest.fixture
@@ -49,25 +61,38 @@ def short_tmp(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
         yield Path(directory)
 
 
-class RecordingSubmittedBackend:
+class WorkerBackend:
+    def __init__(self, entered: asyncio.Event | None = None) -> None:
+        self.entered = entered
+
     @property
     def identity(self) -> BackendIdentity:
         return BackendIdentity("fake", "deterministic-v1", None)
 
     async def run(self, request: AgentRequest) -> AgentResult:
+        if self.entered is not None:
+            self.entered.set()
+            return await asyncio.Future()
         return AgentResult(request.worker_id, "submitted", "done", "a" * 64, "b" * 64, 0)
 
 
-def initialized_assignment(tmp_path: Path) -> tuple[Path, str]:
-    root = Path(
-        shutil.copytree(
-            SMOKE_ROOT,
-            tmp_path / "lean-project",
-            ignore=shutil.ignore_patterns(".aizim"),
-        )
-    )
+def initialized(tmp_path: Path) -> tuple[Path, str]:
+    root = Path(shutil.copytree(SMOKE_ROOT, tmp_path / "lean-project", ignore=IGNORE))
     assert run_init(root) == 0
-    with StateService(StateServiceConfig(root, "setup-session")) as state:
+    with StateService(StateConfig(root, "setup-session")) as state:
+        state.append_event(
+            Event(
+                "ProjectInitialized",
+                "supervisor",
+                None,
+                None,
+                {
+                    "project_id": root.name,
+                    "base_epoch": smoke_base_epoch(root),
+                    "knowledge_epoch": 0,
+                },
+            )
+        )
         configure_controller(state, ControllerProvider.CODEX, "controller-model")
         register_worker(state, "proof-a", AgentRole.FORMALIZER)
         assign_task(state, "proof-a", "prove True")
@@ -83,10 +108,10 @@ def initialized_assignment(tmp_path: Path) -> tuple[Path, str]:
 
 
 def dependencies(
-    controller: FakeControllerBackend,
-    worker: RecordingSubmittedBackend,
-) -> ControllerSupervisorDependencies:
-    return ControllerSupervisorDependencies(
+    controller: Controller,
+    worker: WorkerBackend,
+) -> SupervisorDeps:
+    return SupervisorDeps(
         controller_backend=lambda _provider, _model: controller,
         worker_backend=lambda: worker,
         worker_preflight=lambda: asyncio.sleep(0),
@@ -104,17 +129,14 @@ class ImmediateSupervisor:
         self.projects.append(project)
 
     async def run(self) -> None:
-        failure = self.failure
-        if failure is not None:
-            raise failure
+        if self.failure is not None:
+            raise self.failure
 
     def request_stop(self) -> None:
         return None
 
 
-def test_controller_start_requires_foreground(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_foreground_required(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # When
     result = cli_main.main(["controller", "start", "--project", str(tmp_path)])
 
@@ -123,9 +145,7 @@ def test_controller_start_requires_foreground(
     assert capsys.readouterr().err == ("aizim controller start: --foreground is required\n")
 
 
-def test_controller_start_runs_supervisor_in_foreground(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_controller_start_foreground(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given
     ImmediateSupervisor.failure = None
     ImmediateSupervisor.projects.clear()
@@ -142,7 +162,7 @@ def test_controller_start_runs_supervisor_in_foreground(
 @pytest.mark.parametrize(
     ("failure", "exit_code"),
     [
-        (ControllerExecutionError("CONTROLLER_NOT_CONFIGURED"), 4),
+        (ExecutionError("CONTROLLER_NOT_CONFIGURED"), 4),
         (RuntimeError("secret provider output"), 6),
     ],
 )
@@ -165,20 +185,12 @@ def test_controller_start_scrubs_failures(
     assert capsys.readouterr().err == "aizim controller start: controller failed\n"
 
 
-async def test_stop_interrupts_active_plan_and_releases_runtime(
-    short_tmp: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_stop_interrupts_active_worker(short_tmp: Path) -> None:
     # Given
-    root, assignment_id = initialized_assignment(short_tmp)
-    controller = FakeControllerBackend(BlockedDecision("blocked", "NO_SAFE_ACTION"))
+    root, assignment_id = initialized(short_tmp)
+    controller = Controller(Dispatch("dispatch", "proof-a", "Use the document.", 1, 10.0))
     entered = asyncio.Event()
-
-    async def block_plan(_context: ControllerContext) -> BlockedDecision:
-        entered.set()
-        return await asyncio.Future()
-
-    monkeypatch.setattr(controller, "plan", block_plan)
-    supervisor = ControllerSupervisor(root, dependencies(controller, RecordingSubmittedBackend()))
+    supervisor = Supervisor(root, dependencies(controller, WorkerBackend(entered)))
 
     # When
     task = asyncio.create_task(supervisor.run())
@@ -187,22 +199,21 @@ async def test_stop_interrupts_active_plan_and_releases_runtime(
     await task
 
     # Then
-    with StateService(StateServiceConfig(root, "inspect")) as state:
+    with StateService(StateConfig(root, "inspect")) as state:
         execution = state.query_projection("worker_executions", assignment_id)
         assert execution is not None
         assert b'"status":"interrupted"' in execution.state_json
         assert b'"reason_code":"OPERATOR_SIGNAL"' in execution.state_json
+        assert state.active_document_leases() == ()
     assert not (root / ".aizim/run/state.pid").exists()
-    assert not (root / ".aizim/run/state.sock").exists()
+    assert not tuple((root / ".aizim/run").rglob("*.sock"))
 
 
-async def test_startup_recovers_unclean_controller_and_planned_execution(
-    short_tmp: Path,
-) -> None:
+async def test_recovers_unclean_planned_execution(short_tmp: Path) -> None:
     # Given
-    root, assignment_id = initialized_assignment(short_tmp)
+    root, assignment_id = initialized(short_tmp)
     old_session = f"controller-{'0' * 32}"
-    with StateService(StateServiceConfig(root, "unclean-setup")) as state:
+    with StateService(StateConfig(root, "unclean-setup")) as state:
         start_controller(
             state,
             session_id=old_session,
@@ -227,36 +238,17 @@ async def test_startup_recovers_unclean_controller_and_planned_execution(
             budget=1,
             timeout_milliseconds=1_000,
         )
-    controller = FakeControllerBackend(
-        DispatchDecision("dispatch", "proof-a", "unreachable", 1, 1.0)
-    )
-    supervisor = ControllerSupervisor(root, dependencies(controller, RecordingSubmittedBackend()))
+    controller = Controller(Dispatch("dispatch", "proof-a", "unreachable", 1, 1.0))
+    supervisor = Supervisor(root, dependencies(controller, WorkerBackend()))
 
     # When
     supervisor.request_stop()
     await supervisor.run()
 
     # Then
-    with StateService(StateServiceConfig(root, "inspect")) as state:
+    with StateService(StateConfig(root, "inspect")) as state:
         execution = state.query_projection("worker_executions", assignment_id)
         assert execution is not None
         assert b'"reason_code":"CONTROLLER_RESTART"' in execution.state_json
         event_types = tuple(item.envelope.event_type for item in state.query_events())
         assert "ControllerCrashed" in event_types
-
-
-async def test_missing_worker_model_fails_before_claim(
-    short_tmp: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Given
-    root, assignment_id = initialized_assignment(short_tmp)
-    monkeypatch.delenv("AIZIM_MODEL")
-    controller = FakeControllerBackend(BlockedDecision("blocked", "NO_SAFE_ACTION"))
-
-    # When / Then
-    with pytest.raises(ControllerExecutionError, match="WORKER_MODEL_REQUIRED"):
-        await ControllerSupervisor(
-            root, dependencies(controller, RecordingSubmittedBackend())
-        ).run()
-    with StateService(StateServiceConfig(root, "inspect")) as state:
-        assert state.query_projection("worker_executions", assignment_id) is None

@@ -11,6 +11,8 @@ import pytest
 
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
 from aizim.domain import AgentRole, sha256_bytes, sha256_json
+from aizim.domain.serialization import JsonValue
+from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.control_plane import (
     ControllerProvider,
     assign_task,
@@ -30,11 +32,14 @@ from aizim.orchestration.controller_supervisor import (
     ControllerSupervisorDependencies,
 )
 from aizim.orchestration.fake_controller_backend import FakeControllerBackend
-from aizim.state import StateService, StateServiceConfig
+from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 from aizim.state.operations import RpcRequest, RpcSuccess
 from aizim.state.rpc import rpc_call
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
+INVALID = "CONTROLLER_DECISION_INVALID"
+OVER_BUDGET = DispatchDecision("dispatch", "proof-a", "too much", 13, 1.0)
+OVER_TIMEOUT = DispatchDecision("dispatch", "proof-a", "too long", 1, 61.0)
 
 
 @pytest.fixture
@@ -69,6 +74,14 @@ def initialized_assignment(tmp_path: Path, *, assigned: bool = True) -> tuple[Pa
 
     assert run_init(root) == 0
     with StateService(StateServiceConfig(root, "setup-session")) as state:
+        identity: dict[str, JsonValue] = {
+            "project_id": root.name,
+            "base_epoch": smoke_base_epoch(root),
+            "knowledge_epoch": 0,
+        }
+        state.append_event(
+            AppendEventCommand("ProjectInitialized", "supervisor", None, None, identity)
+        )
         configure_controller(state, ControllerProvider.CODEX, "controller-model")
         register_worker(state, "proof-a", AgentRole.FORMALIZER)
         if assigned:
@@ -157,6 +170,11 @@ async def test_completed_assignment_is_not_dispatched_after_restart(
     # Then
     assert len(controller.received_context_bytes) == 1
     assert len(worker.requests) == 1
+    assert worker.requests[0].model == "worker-model"
+    with StateService(StateServiceConfig(root, "inspect")) as state:
+        events = tuple(record.envelope.event_type for record in state.query_events())
+    assert events.index("WorkerTaskDispatchPlanned") < events.index("WorkerStarted")
+    assert tuple((root / ".aizim/artifacts").rglob("controller-directive/*"))
 
 
 async def test_live_control_assignment_wakes_idle_supervisor(
@@ -172,11 +190,8 @@ async def test_live_control_assignment_wakes_idle_supervisor(
     assignment_id = _assignment_id()
 
     # When
+    await supervisor._idle.wait()
     socket = root / ".aizim/run/state.sock"
-    for _attempt in range(2_000):
-        if socket.exists():
-            break
-        await asyncio.sleep(0)
     response = await rpc_call(
         socket,
         RpcRequest("control.assign_task", {"worker_id": "proof-a", "task": "prove True"}, None),
@@ -195,17 +210,16 @@ async def test_live_control_assignment_wakes_idle_supervisor(
     [
         (BlockedDecision("blocked", "NO_SAFE_ACTION"), "CONTROLLER_BLOCKED"),
         (RejectDecision("reject", "TASK_UNSAFE"), "CONTROLLER_REJECTED"),
-        (
-            ControllerBackendError("CONTROLLER_DECISION_INVALID"),
-            "CONTROLLER_DECISION_INVALID",
-        ),
+        (ControllerBackendError(INVALID), INVALID),
         (TimeoutError(), "CONTROLLER_TIMEOUT"),
+        (OVER_BUDGET, INVALID),
+        (OVER_TIMEOUT, INVALID),
     ],
 )
 async def test_non_dispatch_decisions_never_launch_worker(
     short_tmp: Path,
     monkeypatch: pytest.MonkeyPatch,
-    decision: BlockedDecision | RejectDecision | BaseException,
+    decision: BlockedDecision | DispatchDecision | RejectDecision | BaseException,
     reason: str,
 ) -> None:
     # Given
