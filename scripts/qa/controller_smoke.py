@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import asyncio  # noqa: ANYIO_OK
 import hashlib
 import json
 import os
@@ -239,7 +239,7 @@ def _main() -> int:
             executions, duplicates = asyncio.run(_exercise(root, assignment_id))
         if (executions, duplicates) != (1, 0):
             raise ControllerSmokeError("DISPATCH_COUNT_INVALID")
-    except Exception:
+    except Exception:  # noqa: BROAD_EXCEPT_OK -- top-level smoke boundary
         print("CONTROLLER_SMOKE_FAILED", file=sys.stderr)
         return 1
     print("CONTROLLER SMOKE PASS")
