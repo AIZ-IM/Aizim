@@ -27,6 +27,26 @@ type ControllerBackendErrorCode = Literal[
     "CONTROLLER_TIMEOUT_INVALID",
 ]
 type ControllerDecision = DispatchDecision | BlockedDecision | RejectDecision
+type ControllerOperation = Literal[
+    "project.read",
+    "lean.goal",
+    "lean.multi_attempt",
+    "lean.diagnostics",
+    "document.apply",
+    "contribution.submit",
+    "knowledge.read",
+]
+_SAFE_CONTROLLER_OPERATIONS: Final[frozenset[ControllerOperation]] = frozenset(
+    {
+        "project.read",
+        "lean.goal",
+        "lean.multi_attempt",
+        "lean.diagnostics",
+        "document.apply",
+        "contribution.submit",
+        "knowledge.read",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,11 +115,21 @@ def controller_context_bytes(context: ControllerContext) -> bytes:
             "project_id": context.project_id,
             "base_epoch": context.base_epoch,
             "knowledge_epoch": context.knowledge_epoch,
-            "allowed_operations": context.allowed_operations,
+            "allowed_operations": _safe_operation_labels(context.allowed_operations),
             "max_budget": context.max_budget,
             "max_timeout_seconds": context.max_timeout_seconds,
         }
     )
+
+
+def _safe_operation_labels(operations: tuple[str, ...]) -> tuple[str, ...]:
+    if len(operations) > len(_SAFE_CONTROLLER_OPERATIONS):
+        raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
+    if len(operations) != len(set(operations)):
+        raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
+    if any(operation not in _SAFE_CONTROLLER_OPERATIONS for operation in operations):
+        raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
+    return operations
 
 
 def parse_controller_decision(raw: bytes, context: ControllerContext) -> ControllerDecision:
