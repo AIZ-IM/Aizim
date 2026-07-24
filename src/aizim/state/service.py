@@ -9,6 +9,7 @@ from types import TracebackType
 from aizim.domain.serialization import JsonValue
 
 from .capabilities import CapabilityRecord, canonical_timestamp
+from .control_operations import notify_control_committed
 from .document_operations import DocumentOperation
 from .document_service import DocumentStateMethods
 from .event_payload import thaw_payload
@@ -285,5 +286,7 @@ class StateService(DocumentStateMethods, PromotionStateMethods):
     def _dispatch(self, request: RpcRequest, trusted: bool) -> RpcResponse:
         response = dispatch_operation(self, request, trusted)
         if request.operation.startswith("control.") and isinstance(response, RpcSuccess):
-            self._dependencies.control_committed(request.operation)
+            notify_control_committed(
+                self._dependencies.control_committed, request.operation
+            )
         return response

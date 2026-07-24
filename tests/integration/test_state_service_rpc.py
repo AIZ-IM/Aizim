@@ -279,6 +279,11 @@ async def test_public_control_mutations_do_not_grant_generic_append_authority(
                 session_id=None,
             ),
         )
+        failed_control = await rpc_call(service.socket_path, requests[1])
+        health = await rpc_call(
+            service.socket_path,
+            RpcRequest(operation="health", params={}, session_id=None),
+        )
 
         # Then
         assert configured == RpcSuccess({"version": 1})
@@ -287,7 +292,38 @@ async def test_public_control_mutations_do_not_grant_generic_append_authority(
         assert service.query_projection("controller", "primary") is not None
         assert isinstance(denied, RpcFailure)
         assert denied.error.code == "NOT_AUTHORIZED"
+        assert isinstance(failed_control, RpcFailure)
+        assert failed_control.error.code == "WORKER_ALREADY_REGISTERED"
+        assert health == RpcSuccess({"event_schema_version": 1, "ready": True})
         assert committed == [request.operation for request in requests]
+
+
+@pytest.mark.asyncio
+async def test_committed_control_response_survives_wake_callback_failure(
+    project_root: Path,
+) -> None:
+    # Given
+    committed: list[str] = []
+
+    def fail_wake(operation: str) -> None:
+        committed.append(operation)
+        raise RuntimeError("injected wake failure")
+
+    async with _service(project_root, control_committed=fail_wake) as service:
+        # When
+        response = await rpc_call(
+            service.socket_path,
+            RpcRequest(
+                operation="control.configure_controller",
+                params={"provider": "codex", "model": None},
+                session_id=None,
+            ),
+        )
+
+        # Then
+        assert response == RpcSuccess({"version": 1})
+        assert service.query_projection("controller", "primary") is not None
+        assert committed == ["control.configure_controller"]
 
 
 @pytest.mark.asyncio

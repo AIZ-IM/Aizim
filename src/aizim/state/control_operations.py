@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Final, Protocol
 
@@ -31,6 +33,13 @@ class ControlOperationError(RuntimeError):
 
     def __str__(self) -> str:
         return self.code
+
+
+def notify_control_committed(
+    callback: Callable[[str], None], operation: str
+) -> None:
+    with suppress(Exception):
+        callback(operation)
 
 
 def configure_controller(
