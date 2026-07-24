@@ -209,11 +209,13 @@ class ControllerSupervisor:
             raise ControllerExecutionError("PROJECT_IDENTITY_UNAVAILABLE")
         if len(identities) != 1:
             raise ControllerExecutionError("PROJECT_IDENTITY_INVALID")
+        if re.fullmatch(r"[0-9a-f]{64}", _text(identities[0], "base_epoch")) is None:
+            raise ControllerExecutionError("PROJECT_IDENTITY_INVALID")
         try:
             epoch = current_epoch(state)
         except DocumentBrokerError:
             raise ControllerExecutionError("PROJECT_EPOCH_INVALID") from None
-        if _text(identities[0], "base_epoch") != epoch.base_epoch:
+        if re.fullmatch(r"[0-9a-f]{64}", epoch.base_epoch) is None:
             raise ControllerExecutionError("PROJECT_EPOCH_INVALID")
         return ControllerRun(
             version,

@@ -71,9 +71,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     status.add_argument("--project", type=Path, default=Path.cwd())
     status.add_argument("--json", action="store_true", dest="as_json")
     controller = commands.add_parser("controller")
-    controller_commands = controller.add_subparsers(
-        dest="controller_command", required=True
-    )
+    controller_commands = controller.add_subparsers(dest="controller_command", required=True)
     configure = controller_commands.add_parser("configure")
     configure.add_argument("--project", type=Path, required=True)
     configure.add_argument(
@@ -116,22 +114,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_status(arguments.project, arguments.as_json)
     if arguments.command == "controller":
         if arguments.controller_command == "configure":
-            return run_controller_configure(
-                arguments.project, arguments.provider, arguments.model
-            )
+            return run_controller_configure(arguments.project, arguments.provider, arguments.model)
         if arguments.controller_command == "show":
             return run_controller_show(arguments.project, arguments.as_json)
         if arguments.controller_command == "start":
             return run_controller_start(arguments.project, arguments.foreground)
     if arguments.command == "worker":
         if arguments.worker_command == "register":
-            return run_worker_register(
-                arguments.project, arguments.worker_id, arguments.role
-            )
+            return run_worker_register(arguments.project, arguments.worker_id, arguments.role)
         if arguments.worker_command == "assign":
-            return run_worker_assign(
-                arguments.project, arguments.worker_id, arguments.task
-            )
+            return run_worker_assign(arguments.project, arguments.worker_id, arguments.task)
         if arguments.worker_command == "list":
             return run_worker_list(arguments.project, arguments.as_json)
     if arguments.command == "run":

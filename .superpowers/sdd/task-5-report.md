@@ -1,3 +1,79 @@
+# Task 5 fourth review: restart after knowledge advance
+
+Date: 2026-07-24
+Commit subject: `Allow controller restart after knowledge advance`
+Review base: `fecc0cb3977af32f4a99d25eb4e7deda4a54a19e`
+
+## Findings resolved
+
+- Important: the supervisor no longer treats a legitimate difference between
+  immutable `ProjectInitialized.base_epoch` and the evolved global epoch as an
+  invalid project. It independently validates the identity base hash and the
+  current base hash, then carries the current base and knowledge epochs into
+  controller context.
+- Existing missing, malformed, duplicate, current-epoch, trusted-ID, and
+  preclaim guards remain in force.
+- Minor: `src/aizim/cli/main.py` was mechanically formatted by Ruff. Its changes
+  are line wrapping only.
+
+## TDD evidence
+
+- Evolved-epoch RED:
+  `uv run pytest -q tests/integration/test_controller_supervisor_guards.py -k evolved_current_epoch`
+  reported `1 failed, 8 deselected`. The public-init fixture appended a
+  schema-valid `KnowledgeDeltaPublished`, but `_snapshot()` raised
+  `PROJECT_EPOCH_INVALID` before controller context was produced.
+- Evolved-epoch GREEN:
+  the same command reported `1 passed, 8 deselected in 0.30s`.
+- Guard/supervisor/init/CLI regressions:
+  `uv run pytest -q tests/integration/test_controller_supervisor_guards.py tests/integration/test_controller_supervisor.py tests/integration/test_cli_init.py tests/integration/test_cli_controller_start.py`
+  reported `39 passed in 6.88s`.
+- Task 2/4 execution, replay, host, and failure regressions:
+  `uv run pytest -q tests/integration/test_cli_control.py tests/unit/test_controller_execution_transitions.py tests/unit/test_controller_execution_replay.py tests/integration/test_worker_host.py tests/integration/test_failure_events.py`
+  reported `54 passed in 23.51s`.
+
+## Static and full-suite evidence
+
+- Ruff check passed for all nine cumulative Task 5 authored Python files.
+- Ruff format check reported all nine files already formatted after the
+  authorized mechanical formatting of `src/aizim/cli/main.py`.
+- `uv run ty check` reported `All checks passed!`.
+- Authority/trusted-boundary tests reported `12 passed in 0.77s`.
+- The Python no-excuse checker reported `no violations in 9 file(s)`.
+- Pure LOC:
+  `controller_command.py=45`,
+  `init_command.py=67`,
+  `main.py=125`,
+  `controller_dispatcher.py=244`,
+  `controller_supervisor.py=250`,
+  `test_cli_controller_start.py=185`,
+  `test_cli_init.py=240`,
+  `test_controller_supervisor.py=250`, and
+  `test_controller_supervisor_guards.py=188`.
+- `git diff --check` passed.
+- The single settled `uv run pytest -q` reported
+  `769 passed, 3 skipped in 152.82s`.
+
+## Manual evolved public-init supervisor evidence
+
+The manual composition used public init, appended a schema-valid knowledge
+delta, used public controller/worker configuration and assignment, and ran the
+foreground supervisor with a terminal blocked decision. It verified that the
+immutable initial identity remained present while the evolved current epoch
+entered context, and that no PID or socket residue remained:
+
+```text
+MANUAL EVOLVED EPOCH CONTROLLER PASS
+identity_base_immutable=1 current_base=evolved current_knowledge=1
+terminal=CONTROLLER_BLOCKED preclaim_context_current=1 sockets=0 pid=0
+```
+
+No scope expanded beyond the existing supervisor guard test, the supervisor
+implementation, the explicitly requested Ruff formatting of
+`src/aizim/cli/main.py`, and this tracked report.
+
+---
+
 # Task 5 second re-review: authoritative project identity
 
 Date: 2026-07-24

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK - exercises the asyncio supervisor lifecycle
+import json
 import shutil
 from collections.abc import Iterator
 from dataclasses import replace
@@ -98,6 +99,51 @@ def dependencies(controller: FakeControllerBackend) -> ControllerSupervisorDepen
         execution_ids=(f"execution-{value:032x}" for value in count(1)).__next__,
         directive_ids=(f"directive-{value:032x}" for value in count(1)).__next__,
     )
+
+
+async def test_supervisor_uses_evolved_current_epoch(short_tmp: Path) -> None:
+    root, assignment_id = initialized(short_tmp, 1)
+    initial_base = smoke_base_epoch(root)
+    evolved_base = "b" * 64
+    with StateService(StateServiceConfig(root, "knowledge-advance")) as state:
+        state.append_event(
+            AppendEventCommand(
+                "KnowledgeDeltaPublished",
+                "test",
+                None,
+                None,
+                {
+                    "delta_id": "delta-1",
+                    "previous_base_epoch": initial_base,
+                    "previous_knowledge_epoch": 0,
+                    "base_epoch": evolved_base,
+                    "knowledge_epoch": 1,
+                },
+            )
+        )
+    controller = FakeControllerBackend(BlockedDecision("blocked", "NO_SAFE_ACTION"))
+    supervisor = ControllerSupervisor(root, dependencies(controller))
+
+    task = asyncio.create_task(supervisor.run())
+    for _attempt in range(2_000):
+        if controller.received_context_bytes and supervisor._active is None:
+            break
+        if task.done():
+            break
+        await asyncio.sleep(0)
+    supervisor.request_stop()
+    await task
+
+    assert len(controller.received_context_bytes) == 1
+    context: JsonValue = json.loads(controller.received_context_bytes[0])
+    assert type(context) is dict
+    assert context["base_epoch"] == evolved_base
+    assert context["knowledge_epoch"] == 1
+    with StateService(StateServiceConfig(root, "inspect")) as state:
+        execution = state.query_projection("worker_executions", assignment_id)
+        assert execution is not None
+        assert b'"status":"failed"' in execution.state_json
+        assert b'"reason_code":"CONTROLLER_BLOCKED"' in execution.state_json
 
 
 @pytest.mark.parametrize(
