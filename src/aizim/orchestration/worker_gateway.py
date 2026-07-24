@@ -31,16 +31,6 @@ CONTROLLER_WORKER_TOOLS: Final = (
     GatewayTool.CONTRIBUTION_SUBMIT,
     GatewayTool.KNOWLEDGE_READ,
 )
-_WORKER_GATEWAY_TARGETS: Final = frozenset(
-    {
-        GatewayTool.LEAN_GOAL,
-        GatewayTool.LEAN_MULTI_ATTEMPT,
-        GatewayTool.LEAN_DIAGNOSTICS,
-        GatewayTool.DOCUMENT_APPLY,
-        GatewayTool.CONTRIBUTION_SUBMIT,
-        GatewayTool.KNOWLEDGE_READ,
-    }
-)
 
 
 class WorkerGatewayError(RuntimeError):
@@ -48,6 +38,15 @@ class WorkerGatewayError(RuntimeError):
 
 
 class WorkerGatewayActions:
+    _TARGET_TOOLS: Final = (
+        GatewayTool.LEAN_GOAL,
+        GatewayTool.LEAN_MULTI_ATTEMPT,
+        GatewayTool.LEAN_DIAGNOSTICS,
+        GatewayTool.DOCUMENT_APPLY,
+        GatewayTool.CONTRIBUTION_SUBMIT,
+        GatewayTool.KNOWLEDGE_READ,
+    )
+
     def __init__(
         self,
         state: StateService,
@@ -73,7 +72,11 @@ class WorkerGatewayActions:
                 GatewayTool.KNOWLEDGE_READ: self.knowledge_read,
             }
         )
-        return targets
+        return {tool: targets[tool] for tool in self.target_tools()}
+
+    @classmethod
+    def target_tools(cls) -> tuple[GatewayTool, ...]:
+        return cls._TARGET_TOOLS
 
     async def multi_attempt(self, call: AuthorizedCall) -> JsonValue:
         result = await runtime_multi_attempt(self._runtime, call)
@@ -189,7 +192,7 @@ def controller_worker_tools(role: AgentRole) -> tuple[GatewayTool, ...]:
     return tuple(
         tool
         for tool in advertised_tools(role)
-        if tool in CONTROLLER_WORKER_TOOLS and tool in _WORKER_GATEWAY_TARGETS
+        if tool in CONTROLLER_WORKER_TOOLS and tool in WorkerGatewayActions.target_tools()
     )
 
 
