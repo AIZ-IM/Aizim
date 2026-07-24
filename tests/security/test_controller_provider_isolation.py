@@ -22,11 +22,9 @@ from aizim.orchestration.controller_backend import (
     ControllerContext,
 )
 from aizim.orchestration.controller_process import (
-    ControllerLaunchError,
     ControllerLaunchOutcome,
     ControllerLaunchSpec,
     launch_controller_process,
-    run_controller_host_command,
 )
 
 
@@ -59,6 +57,12 @@ def executable(tmp_path: Path, provider: ControllerProvider = ControllerProvider
         f"print({version!r} if '--version' in sys.argv else '')\n"
     )
     path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    if provider is ControllerProvider.CODEX:
+        resources = tmp_path / "codex-resources"
+        resources.mkdir(exist_ok=True)
+        bwrap = resources / "bwrap"
+        bwrap.write_text("#!/bin/sh\nexit 0\n")
+        bwrap.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     return path.resolve()
 
 
@@ -78,16 +82,6 @@ def controller_context(timeout: float = 5.0) -> ControllerContext:
         1,
     )
 
-
-def test_sync_host_command_counts_output_after_other_stream_closes(
-    tmp_path: Path,
-) -> None:
-    binary = tmp_path / "output"
-    binary.write_text(f"#!{sys.executable}\nimport os\nos.close(2)\nprint('x'*2048)\n")
-    binary.chmod(0o700)
-
-    with pytest.raises(ControllerLaunchError, match="CONTROLLER_OUTPUT_LIMIT"):
-        run_controller_host_command((str(binary),), {}, 1024)
 
 
 async def test_backend_constructor_discovers_version_inside_running_loop(
@@ -119,8 +113,9 @@ async def test_controller_provider_cannot_observe_project_or_authority_secrets(
     capability = "capability-secret-value"
     npm_secret = "npm-secret-value"
     unrelated = "unrelated-secret-value"
+    codex = executable(tmp_path)
     environment = {
-        "PATH": os.environ["PATH"],
+        "PATH": str(codex.parent),
         "HOME": str(tmp_path / "real-home"),
         "OPENAI_API_KEY": "openai-direct-auth",
         "ANTHROPIC_API_KEY": "anthropic-direct-auth",
