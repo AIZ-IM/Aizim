@@ -1,3 +1,4 @@
+from .claude_controller import ClaudeControllerBackend
 from .codex_controller import CodexControllerBackend
 from .controller_backend import (
     CONTROLLER_PLAN_TIMEOUT_SECONDS,
@@ -25,6 +26,7 @@ __all__ = [
     "MAX_WORKER_BUDGET",
     "MAX_WORKER_TIMEOUT_SECONDS",
     "BlockedDecision",
+    "ClaudeControllerBackend",
     "CodexControllerBackend",
     "ControllerBackend",
     "ControllerBackendError",

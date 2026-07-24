@@ -115,6 +115,8 @@ def test_provider_environment_is_allowlisted_and_repr_safe(tmp_path: Path) -> No
         "HOME": "/private/provider-home",
         "CODEX_HOME": "/private/provider-codex",
         "OPENAI_API_KEY": secret,
+        "ANTHROPIC_API_KEY": "anthropic-api-secret",
+        "CLAUDE_CODE_OAUTH_TOKEN": "claude-oauth-secret",
     }
     filtered = replace(
         sandbox_request,
@@ -129,6 +131,13 @@ def test_provider_environment_is_allowlisted_and_repr_safe(tmp_path: Path) -> No
     assert 'shell_environment_policy={inherit="all",ignore_default_excludes=true}' in spec.argv
     assert secret not in repr(spec)
     assert all(secret not in value for value in spec.argv)
+    assert "anthropic-api-secret" not in repr(spec)
+    assert "claude-oauth-secret" not in repr(spec)
+    assert all(
+        auth not in value
+        for value in spec.argv
+        for auth in ("anthropic-api-secret", "claude-oauth-secret")
+    )
     with pytest.raises(SandboxHostError, match="invalid provider environment") as caught:
         adapter.compile(replace(filtered, parent_env={**environment, "NPM_TOKEN": secret}))
     assert secret not in str(caught.value)

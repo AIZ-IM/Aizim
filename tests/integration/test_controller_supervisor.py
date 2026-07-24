@@ -85,7 +85,7 @@ def initialized_assignment(tmp_path: Path, *, assigned: bool = True) -> tuple[Pa
 
     assert run_init(root) == 0
     with StateService(StateServiceConfig(root, "setup-session")) as state:
-        configure_controller(state, ControllerProvider.CODEX, "controller-model")
+        configure_controller(state, ControllerProvider.CLAUDE, "controller-model")
         register_worker(state, "proof-a", AgentRole.FORMALIZER)
         if assigned:
             assign_task(state, "proof-a", "prove True")

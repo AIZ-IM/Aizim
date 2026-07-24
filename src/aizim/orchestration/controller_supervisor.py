@@ -19,7 +19,7 @@ from aizim.runtime.layout import ProjectLayout
 from aizim.runtime.state_process import StateProcessOwnership, acquire_state_process
 from aizim.state import StateDependencies, StateService, StateServiceConfig
 
-from .codex_controller import production_codex
+from .claude_controller import production_controller
 from .control_plane import ControllerProvider
 from .controller_backend import ControllerBackend
 from .controller_dispatcher import (
@@ -252,7 +252,7 @@ async def _finalize(
 
 def _default_dependencies(project: Path | None = None) -> ControllerSupervisorDependencies:
     return ControllerSupervisorDependencies(
-        controller_backend=lambda provider, model: production_codex(project, provider, model),
+        controller_backend=lambda provider, model: production_controller(project, provider, model),
         worker_backend=create_codex_backend,
         worker_preflight=(
             unavailable_worker_preflight

@@ -8,6 +8,8 @@ from .sandbox import ProviderEnvironmentPolicy, SandboxContractError, SandboxReq
 
 _PROVIDER_ENVIRONMENT_KEYS = frozenset(
     {
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
         "OPENAI_API_KEY",
         "CODEX_HOME",
         "SSL_CERT_FILE",
