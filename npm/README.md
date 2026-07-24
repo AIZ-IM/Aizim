@@ -1,7 +1,7 @@
 # Aizim for npm
 
 Aizim combines a Python research control plane, a native Rust bootstrap
-launcher, Lean 4 verification, and a package-local Codex executable.
+launcher, Lean 4 verification, and package-local Codex and Claude executables.
 
 ## Install
 
@@ -16,6 +16,31 @@ aizim --version
 The first command invocation downloads the locked CPython 3.14.6 runtime and
 hash-verified Python dependencies through the bundled uv 0.11.31 binary.
 Subsequent invocations reuse the versioned local runtime cache.
+
+## Run the foreground controller
+
+```sh
+aizim init /absolute/lean/project
+aizim controller configure \
+  --project /absolute/lean/project \
+  --provider codex \
+  --model gpt-5.6-sol
+aizim worker register \
+  --project /absolute/lean/project \
+  --worker-id proof-a \
+  --role proof_explorer
+aizim worker assign \
+  --project /absolute/lean/project \
+  --worker-id proof-a \
+  --task "prove the current Lean target"
+AIZIM_MODEL=gpt-5.6-sol aizim controller start \
+  --project /absolute/lean/project \
+  --foreground
+```
+
+Select Claude for controller planning with `--provider claude --model
+claude-opus-4-6`. The worker remains Codex-backed and uses `AIZIM_MODEL`; the
+controller provider does not change worker authority or tooling.
 
 ## Build from source
 

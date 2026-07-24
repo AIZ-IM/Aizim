@@ -33,10 +33,10 @@ export function pythonTestEnvironment(source = process.env) {
 
 export function pythonTestMarker(platform = process.platform) {
   if (platform === "darwin") {
-    return "not manual_real_codex and not lean_integration and not linux_sandbox";
+    return "not manual_real_codex and not manual_real_controller and not lean_integration and not linux_sandbox";
   }
   if (platform === "linux") {
-    return "not manual_real_codex and not lean_integration and not macos_sandbox";
+    return "not manual_real_codex and not manual_real_controller and not lean_integration and not macos_sandbox";
   }
   throw new Error(`unsupported npm test platform: ${platform}`);
 }

@@ -8,6 +8,7 @@ import {
   installArguments,
   validatePrivateRoot,
 } from "../../scripts/npm/install-smoke.mjs";
+import * as installSmokeModule from "../../scripts/npm/install-smoke.mjs";
 
 test("private smoke roots reject shared and non-private directories", async () => {
   await assert.rejects(
@@ -119,5 +120,36 @@ test("doctor failures name the exact failed checks", () => {
   assert.throws(
     () => doctorDocument(result, "global npm doctor"),
     /global npm doctor failed checks \(disk_floor\)/u,
+  );
+});
+
+test("controller smoke uses the provisioned wheel runtime and exact output", () => {
+  assert.equal(
+    typeof installSmokeModule.provisionedRuntimePython,
+    "function",
+  );
+  assert.equal(
+    installSmokeModule.provisionedRuntimePython(
+      "/cache/runtime/v1/0.1.0/target/hash/py3.14.6/READY.json",
+    ),
+    "/cache/runtime/v1/0.1.0/target/hash/py3.14.6/venv/bin/python",
+  );
+  assert.equal(
+    typeof installSmokeModule.requireControllerSmokeOutput,
+    "function",
+  );
+  const output =
+    "CONTROLLER SMOKE PASS\n" +
+    "assignment_executions=1\n" +
+    "restart_duplicates=0\n";
+  assert.equal(
+    installSmokeModule.requireControllerSmokeOutput({ stdout: output }),
+    output,
+  );
+  assert.throws(
+    () => installSmokeModule.requireControllerSmokeOutput({
+      stdout: "CONTROLLER SMOKE PASS\nassignment_executions=2\nrestart_duplicates=0\n",
+    }),
+    /controller smoke output mismatch/u,
   );
 });

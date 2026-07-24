@@ -38,6 +38,7 @@ const installChecks = {
   ready: true,
   security_gate: true,
   aizim_run: true,
+  controller_loop: true,
   missing_platform_exit_78: true,
   integrity_failure_exit_74: true,
 };
@@ -214,6 +215,13 @@ test("requires every install observation before composing native evidence", asyn
       "missing negative integrity test",
       (document) => {
         delete document.checks.integrity_failure_exit_74;
+      },
+      /install checks/,
+    ],
+    [
+      "missing controller loop smoke",
+      (document) => {
+        delete document.checks.controller_loop;
       },
       /install checks/,
     ],

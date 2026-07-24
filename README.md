@@ -14,8 +14,8 @@ acceptance platform for these slices.
 
 ## Install from npm
 
-The public npm distribution supports macOS and glibc-based Linux on arm64 and x64. It requires
-Node.js 22.14.0 or newer and an external Lean 4 installation managed by `elan`.
+The public npm distribution supports macOS arm64 and glibc-based Linux on arm64 and x64. It
+requires Node.js 22.22.2 or newer and an external Lean 4 installation managed by `elan`.
 
 Install the command globally:
 
@@ -31,10 +31,10 @@ npm install --save-dev @aiz.im/aizim
 npx --no-install aizim --version
 ```
 
-The first command may download and prepare a managed CPython 3.12 runtime in the Aizim cache.
-The npm package uses its own Codex CLI 0.145.0 and bundled uv 0.11.31. It never depends on a
-global Python, uv, or Codex installation. Removing the npm package does not remove Lean projects
-or Aizim runtime caches.
+The first command may download and prepare a managed CPython 3.14.6 runtime in the Aizim cache.
+The npm package uses its own Codex CLI 0.145.0, Claude Code 2.1.218, and bundled uv 0.11.31. It
+never depends on a global Python, uv, Codex, or Claude installation. Removing the npm package
+does not remove Lean projects or Aizim runtime caches.
 
 ## Build from source
 
@@ -81,14 +81,30 @@ aizim worker assign \
   --project /absolute/path/to/lean-project \
   --worker-id counterexample-a \
   --task "search quartic families"
+AIZIM_MODEL=gpt-5.6-sol aizim controller start \
+  --project /absolute/path/to/lean-project \
+  --foreground
 aizim controller show --project /absolute/path/to/lean-project --json
 aizim worker list --project /absolute/path/to/lean-project --json
 ```
 
-Use `--provider claude` to select Claude; `--model` is optional for either provider. Controller
-configuration, worker registration, and the latest task version survive process restarts in the
-append-only Aizim state. These control-plane commands do not yet start detached controller or
-worker processes; the current executable research path remains `aizim run`.
+For a Claude-controlled planning loop, configure the same project with:
+
+```sh
+aizim controller configure \
+  --project /absolute/path/to/lean-project \
+  --provider claude \
+  --model claude-opus-4-6
+AIZIM_MODEL=gpt-5.6-sol aizim controller start \
+  --project /absolute/path/to/lean-project \
+  --foreground
+```
+
+The provider selects only the controller. Worker execution remains Codex-backed and reads its
+model from `AIZIM_MODEL` or the project configuration. The foreground controller is the sole live
+state writer, executes each durable assignment at most once, and records runtime and execution
+status for `controller show` and `worker list`. Configuration, registration, assignments, and
+terminal execution status survive restarts; terminal assignments are not dispatched again.
 
 Slices 1–2 are engineering smoke tests only. They make no open-problem, novelty, or
 general proof-capability claim.

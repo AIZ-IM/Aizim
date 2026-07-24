@@ -25,6 +25,24 @@ the model run under the compiled profile with network disabled, so allowing the
 parent to reach model infrastructure does not give the model-controlled shell a
 network path.
 
+The foreground controller is trusted orchestration but the Codex or Claude
+controller model process is untrusted. It receives only bounded canonical
+assignment context and returns one validated dispatch, blocked, or reject
+decision. It cannot read the canonical project, `.aizim`, state RPC socket,
+gateway socket, credentials outside its provider allowlist, or a worker
+capability. A validated dispatch may name only the assigned worker and fixed
+budget and timeout ceilings. Trusted code persists only the validated directive
+instruction and fixed hashes; prompts, raw provider envelopes, responses,
+credentials, authenticated URLs, and full environments are not durable state.
+
+The supervisor owns the sole live `StateService`. Same-UID CLI clients may use
+only the three public configure, register, and assign mutations; generic event
+append remains service-session-only. The selected controller provider never
+selects the worker backend: worker execution remains Codex-backed and passes
+through the existing lease, capability, gateway, sandbox, cleanup, and Lean
+verification boundaries. Terminal assignment IDs are durable and never
+dispatched again after restart.
+
 Launcher-owned host checks also start in a fresh process group. Whether their
 direct parent exits successfully or with an error, Aizim returns its captured
 status and output only after killing and reaping any same-group descendants,

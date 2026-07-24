@@ -52,7 +52,7 @@ def run_controller_configure(
         return _domain_failure("controller", error)
     except StateServiceLifecycleError:
         return _busy("controller")
-    except Exception:
+    except (OSError, StateClientError):
         return _state_failure("controller")
     print(f"Configured primary controller with {provider.value}")
     return 0
@@ -67,15 +67,15 @@ def run_controller_show(project: Path, as_json: bool) -> int:
     except StateClientError:
         return _state_failure("controller")
     if controller is None:
-        return _domain_failure(
-            "controller", ControlPlaneError("CONTROLLER_NOT_CONFIGURED")
-        )
+        return _domain_failure("controller", ControlPlaneError("CONTROLLER_NOT_CONFIGURED"))
     if as_json:
         _print_json(controller)
     else:
         model = controller["model"]
         suffix = "" if model is None else f" model={model}"
-        print(f"primary provider={controller['provider']}{suffix}")
+        runtime = controller["runtime"]
+        runtime_status = runtime.get("status") if type(runtime) is dict else "inactive"
+        print(f"primary provider={controller['provider']}{suffix} runtime={runtime_status}")
     return 0
 
 
@@ -93,7 +93,7 @@ def run_worker_register(project: Path, worker_id: str, role: AgentRole) -> int:
         return _domain_failure("worker", error)
     except StateServiceLifecycleError:
         return _busy("worker")
-    except Exception:
+    except (OSError, StateClientError):
         return _state_failure("worker")
     print(f"Registered worker {worker_id}")
     return 0
@@ -113,7 +113,7 @@ def run_worker_assign(project: Path, worker_id: str, task: str) -> int:
         return _domain_failure("worker", error)
     except StateServiceLifecycleError:
         return _busy("worker")
-    except Exception:
+    except (OSError, StateClientError):
         return _state_failure("worker")
     print(f"Assigned task version {task_version} to {worker_id}")
     return 0
@@ -132,19 +132,21 @@ def run_worker_list(project: Path, as_json: bool) -> int:
         return 0
     controller = document["controller"]
     provider = controller.get("provider") if type(controller) is dict else "unconfigured"
-    print(f"controller {provider}")
+    runtime = controller.get("runtime") if type(controller) is dict else None
+    runtime_status = runtime.get("status") if type(runtime) is dict else "inactive"
+    print(f"controller {provider} runtime={runtime_status}")
     workers = document["workers"]
     if type(workers) is list:
         for worker in workers:
             if type(worker) is dict:
                 assignment = worker.get("assignment")
-                task_version = (
-                    assignment.get("task_version") if type(assignment) is dict else None
-                )
+                task_version = assignment.get("task_version") if type(assignment) is dict else None
                 suffix = "" if task_version is None else f" task_version={task_version}"
+                execution = assignment.get("execution") if type(assignment) is dict else None
+                execution_status = execution.get("status") if type(execution) is dict else "pending"
                 print(
                     f"{worker.get('worker_id')} role={worker.get('role')} "
-                    f"status={worker.get('status')}{suffix}"
+                    f"status={worker.get('status')}{suffix} execution={execution_status}"
                 )
     return 0
 

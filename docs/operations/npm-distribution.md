@@ -15,8 +15,9 @@ The distribution supports:
 | `linux-x64` | Linux x64 with glibc |
 
 Consumers need Node.js 22.22.2 or newer and an external Lean toolchain managed by `elan`. The npm
-package supplies Codex CLI 0.145.0, uv 0.11.31, and a managed CPython 3.14.6 runtime. It does not
-consult global Python, uv, or Codex installations. musl Linux and Windows are unsupported.
+package supplies Codex CLI 0.145.0, Claude Code 2.1.218, uv 0.11.31, and a managed CPython 3.14.6
+runtime. It does not consult global Python, uv, Codex, or Claude installations. musl Linux and
+Windows are unsupported.
 Intel macOS is unsupported; macOS packages target Apple silicon only.
 Linux hosts must permit unprivileged user namespaces for Codex's package-local bubblewrap sandbox;
 on Ubuntu 24.04, grant that permission with an AppArmor profile for the installed executable.
@@ -68,7 +69,7 @@ Python-only development remains:
 
 ```sh
 uv sync --frozen
-uv run pytest -m "not manual_real_codex" -q
+uv run pytest -m "not manual_real_codex and not manual_real_controller" -q
 ```
 
 ## Install freshly packed tarballs
@@ -99,7 +100,38 @@ npm install --global --ignore-scripts --prefix "$AIZIM_NPM_PREFIX" \
 ```
 
 Use `node scripts/npm/install-smoke.mjs` for the automated local/global, cache reuse, readiness,
-Gate B, deterministic run, missing-platform, and corrupt-integrity scenarios.
+Gate B, deterministic run, deterministic controller-loop, missing-platform, and corrupt-integrity
+scenarios. The controller smoke runs `scripts/qa/controller_smoke.py` with the provisioned
+runtime's own `venv/bin/python`; imports therefore come from the wheel installed in that runtime,
+not repository uv, a repository virtual environment, or global Python.
+
+## Operate the foreground controller
+
+The npm and source commands have the same public control surface:
+
+```sh
+aizim init /absolute/lean/project
+aizim controller configure \
+  --project /absolute/lean/project \
+  --provider codex \
+  --model gpt-5.6-sol
+aizim worker register \
+  --project /absolute/lean/project \
+  --worker-id proof-a \
+  --role proof_explorer
+aizim worker assign \
+  --project /absolute/lean/project \
+  --worker-id proof-a \
+  --task "prove the current Lean target"
+AIZIM_MODEL=gpt-5.6-sol aizim controller start \
+  --project /absolute/lean/project \
+  --foreground
+```
+
+For Claude planning, repeat configuration with `--provider claude --model
+claude-opus-4-6`, then start with the same `AIZIM_MODEL` worker setting. The provider changes only
+the controller backend; workers remain Codex-backed. `controller show` exposes the validated
+runtime state, and `worker list` exposes the current assignment's validated execution state.
 
 ## Stable failure codes
 
@@ -118,8 +150,9 @@ Python, or uv first on `PATH`.
 
 `.github/workflows/ci.yml` builds the exact three targets without restored npm, Cargo, uv, Python,
 or build caches. Every target runs source build, full tests, pack, local/global tarball
-installation, managed Python preparation, cache reuse, Gate B, deterministic fake execution, and
-negative integrity/platform checks. A separate Node 22.22.2 job verifies the minimum runtime.
+installation, managed Python preparation, cache reuse, Gate B, deterministic fake execution,
+deterministic controller restart behavior, and negative integrity/platform checks. A separate
+Node 22.22.2 job verifies the minimum runtime.
 
 Each target emits a path-free native evidence document bound to the full Git SHA, package version,
 runner ABI, tarball size, SHA-256, npm integrity, clean tracked inputs, and no restored build

@@ -273,6 +273,21 @@ async function readyRecord(path) {
   };
 }
 
+export function provisionedRuntimePython(readyMarker) {
+  return join(dirname(readyMarker), "venv", "bin", "python");
+}
+
+export function requireControllerSmokeOutput(result) {
+  const expected =
+    "CONTROLLER SMOKE PASS\n" +
+    "assignment_executions=1\n" +
+    "restart_duplicates=0\n";
+  if (result.stdout !== expected) {
+    throw new Error("controller smoke output mismatch");
+  }
+  return result.stdout;
+}
+
 async function packageInputs() {
   await pack();
   const summary = JSON.parse(
@@ -492,6 +507,13 @@ export async function installSmoke() {
     if (!runResult.stdout.includes("AIZIM RUN PASS")) {
       throw new Error("npm run result mismatch");
     }
+    const controllerSmoke = await requireSuccess(
+      provisionedRuntimePython(markers[0]),
+      [join(repositoryRoot, "scripts", "qa", "controller_smoke.py")],
+      { cwd: repositoryRoot, env: environment },
+      "npm controller loop",
+    );
+    requireControllerSmokeOutput(controllerSmoke);
 
     const sentinel = join(layout.cache, "unrelated-sentinel");
     await writeFile(sentinel, "preserve\n", { mode: 0o600 });
@@ -653,11 +675,15 @@ export async function installSmoke() {
         ready: true,
         security_gate: true,
         aizim_run: true,
+        controller_loop: true,
         missing_platform_exit_78: true,
         integrity_failure_exit_74: true,
       },
     });
-    process.stdout.write("aizim 0.1.0\nREADY\nSECURITY GATE PASS\nAIZIM RUN PASS\n");
+    process.stdout.write(
+      "aizim 0.1.0\nREADY\nSECURITY GATE PASS\nAIZIM RUN PASS\n" +
+      controllerSmoke.stdout,
+    );
   } finally {
     await rm(root, { force: true, recursive: true });
   }

@@ -226,3 +226,26 @@ def test_task_seven_authored_files_stay_within_pure_loc_limit() -> None:
         if pure_lines > 250:
             oversized.append(f"{path.relative_to(REPOSITORY_ROOT)}:{pure_lines}")
     assert oversized == []
+
+
+def test_task_nine_authored_files_stay_within_pure_loc_limit() -> None:
+    paths = (
+        REPOSITORY_ROOT / "src" / "aizim" / "cli" / "control_projection.py",
+        REPOSITORY_ROOT / "src" / "aizim" / "cli" / "control_command.py",
+        REPOSITORY_ROOT / "scripts" / "qa" / "controller_smoke.py",
+        REPOSITORY_ROOT / "tests" / "e2e" / "test_real_controller_smoke.py",
+        REPOSITORY_ROOT / "tests" / "integration" / "cli_control_support.py",
+        REPOSITORY_ROOT / "tests" / "integration" / "test_cli_control.py",
+        REPOSITORY_ROOT / "tests" / "integration" / "test_cli_control_projection.py",
+        REPOSITORY_ROOT / "tests" / "integration" / "test_cli_control_ownership.py",
+        Path(__file__),
+    )
+    oversized: list[str] = []
+    for path in paths:
+        pure_lines = sum(
+            bool(line.strip()) and not line.lstrip().startswith("#")
+            for line in path.read_text().splitlines()
+        )
+        if pure_lines > 250:
+            oversized.append(f"{path.relative_to(REPOSITORY_ROOT)}:{pure_lines}")
+    assert oversized == []

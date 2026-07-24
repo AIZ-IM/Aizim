@@ -50,6 +50,7 @@ export const INSTALL_CHECK_NAMES = Object.freeze([
   "ready",
   "security_gate",
   "aizim_run",
+  "controller_loop",
   "missing_platform_exit_78",
   "integrity_failure_exit_74",
 ]);

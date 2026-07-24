@@ -40,6 +40,7 @@ markers = [
   "linux_sandbox: requires Linux and packaged Codex CLI 0.145.0",
   "macos_sandbox: requires macOS and Codex CLI 0.145.0",
   "manual_real_codex: requires external Codex credentials and model access",
+  "manual_real_controller: requires an explicit provider, project, models, and direct credentials",
 ]
 
 [tool.ruff]
