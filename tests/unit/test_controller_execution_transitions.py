@@ -235,3 +235,80 @@ def test_stopped_controller_accepts_a_new_session(tmp_path: Path) -> None:
         assert runtime is not None
         assert _payload(runtime)["controller_session_id"] == "new-session"
         assert _payload(runtime)["status"] == "running"
+
+
+@pytest.mark.parametrize("crashed", [False, True])
+def test_inactive_controller_rejects_dispatch_without_event(tmp_path: Path, crashed: bool) -> None:
+    # Given
+    with StateService(StateServiceConfig(tmp_path, f"stale-dispatch-{crashed}")) as state:
+        _configure(state, "proof-a")
+        _assignment_id(state, "proof-a", "prove the fixture")
+        claim = claim_assignment(
+            state,
+            worker_id="proof-a",
+            controller_session_id=_SESSION_ID,
+            controller_version=1,
+            execution_id="execution-1",
+        )
+        if crashed:
+            assert recover_unclean_controller(state) == _SESSION_ID
+        else:
+            stop_controller(state, _SESSION_ID)
+        before = state.query_events()
+
+        # When / Then
+        with pytest.raises(ControllerExecutionError, match="CONTROLLER_NOT_RUNNING"):
+            record_dispatch_planned(
+                state,
+                claim,
+                directive_id="directive-1",
+                directive_artifact_hash="d" * 64,
+                instruction_hash="a" * 64,
+                budget=12,
+                timeout_milliseconds=60_000,
+            )
+        assert state.query_events() == before
+
+
+def test_new_session_rejects_stale_terminal_claim_without_event(tmp_path: Path) -> None:
+    # Given
+    with StateService(StateServiceConfig(tmp_path, "stale-terminal")) as state:
+        _configure(state, "proof-a")
+        _assignment_id(state, "proof-a", "prove the fixture")
+        claim = claim_assignment(
+            state,
+            worker_id="proof-a",
+            controller_session_id=_SESSION_ID,
+            controller_version=1,
+            execution_id="execution-1",
+        )
+        record_dispatch_planned(
+            state,
+            claim,
+            directive_id="directive-1",
+            directive_artifact_hash="d" * 64,
+            instruction_hash="a" * 64,
+            budget=12,
+            timeout_milliseconds=60_000,
+        )
+        stop_controller(state, _SESSION_ID)
+        _start(state, "controller-session-2")
+        before = state.query_events()
+
+        # When / Then
+        with pytest.raises(ControllerExecutionError, match="CONTROLLER_SESSION_STALE"):
+            complete_assignment(state, claim, "b" * 64)
+        assert state.query_events() == before
+
+
+def test_second_controller_start_rejects_without_event(tmp_path: Path) -> None:
+    # Given
+    with StateService(StateServiceConfig(tmp_path, "already-running")) as state:
+        configure_controller(state, ControllerProvider.CODEX, "fixture-model")
+        _start(state)
+        before = state.query_events()
+
+        # When / Then
+        with pytest.raises(ControllerExecutionError, match="CONTROLLER_ALREADY_RUNNING"):
+            _start(state, "controller-session-2")
+        assert state.query_events() == before

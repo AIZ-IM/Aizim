@@ -223,6 +223,24 @@ def _validate_claim(
     execution_payload = _payload(execution)
     if execution_payload.get("execution_id") != claim.execution_id:
         raise ControllerExecutionError("EXECUTION_ID_STALE")
+    configured = state.query_projection("controller", _CONTROLLER_ID)
+    if configured is None or configured.version != claim.controller_version:
+        raise ControllerExecutionError("CONTROLLER_VERSION_STALE")
+    runtime = state.query_projection("controller_runtime", _CONTROLLER_ID)
+    if runtime is None:
+        raise ControllerExecutionError("CONTROLLER_NOT_RUNNING")
+    runtime_payload = _payload(runtime)
+    if runtime_payload.get("status") != "running":
+        raise ControllerExecutionError("CONTROLLER_NOT_RUNNING")
+    if _text(execution_payload, "controller_session_id") != _text(
+        runtime_payload, "controller_session_id"
+    ):
+        raise ControllerExecutionError("CONTROLLER_SESSION_STALE")
+    if (
+        _integer(execution_payload, "controller_version") != configured.version
+        or _integer(runtime_payload, "controller_version") != configured.version
+    ):
+        raise ControllerExecutionError("CONTROLLER_VERSION_STALE")
     if execution_payload.get("status") not in allowed_statuses:
         raise ControllerExecutionError("EXECUTION_TERMINAL")
 

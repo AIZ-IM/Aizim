@@ -30,6 +30,9 @@ def start_controller(
         raise ControllerExecutionError("CONTROLLER_PROVIDER_INVALID")
     if configured_payload.get("provider") != provider.value:
         raise ControllerExecutionError("CONTROLLER_PROVIDER_STALE")
+    runtime = state.query_projection("controller_runtime", _CONTROLLER_ID)
+    if runtime is not None and _payload(runtime).get("status") == "running":
+        raise ControllerExecutionError("CONTROLLER_ALREADY_RUNNING")
     state.append_event(
         AppendEventCommand(
             "ControllerStarted",
