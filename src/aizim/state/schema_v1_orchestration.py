@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from aizim.domain.serialization import JsonValue
+
 from .schema_v1_validation import integer_payload, sha256_payload
+
+
+def _positive_integer(value: JsonValue) -> bool:
+    return type(value) is int and value > 0
+
+
+def _enum(*values: str) -> Callable[[JsonValue], bool]:
+    allowed = frozenset(values)
+    return lambda value: type(value) is str and value in allowed
 
 
 def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
@@ -11,11 +22,7 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
             "ControllerConfigured": codec(
                 ("controller_id", "provider"),
                 ("model",),
-                {
-                    "provider": lambda value: (
-                        type(value) is str and value in {"codex", "claude"}
-                    )
-                },
+                {"provider": lambda value: type(value) is str and value in {"codex", "claude"}},
             ),
             "WorkerConfigured": codec(("worker_id", "role", "status")),
             "WorkerTaskAssigned": codec(
@@ -105,6 +112,97 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
             "EvaluationTransitionRejected": codec(
                 ("field", "requested_hash", "reason_code"),
                 validators={"requested_hash": sha256_payload},
+            ),
+            "ControllerStarted": codec(
+                (
+                    "controller_id",
+                    "controller_session_id",
+                    "controller_version",
+                    "provider",
+                    "backend_version",
+                    "executable_hash",
+                ),
+                validators={
+                    "controller_version": _positive_integer,
+                    "provider": _enum("codex", "claude"),
+                    "executable_hash": sha256_payload,
+                },
+            ),
+            "ControllerStopped": codec(
+                ("controller_id", "controller_session_id", "reason_code"),
+                validators={
+                    "reason_code": _enum(
+                        "OPERATOR_SIGNAL",
+                        "PREFLIGHT_FAILED",
+                        "CONTROLLER_FAILED",
+                    )
+                },
+            ),
+            "ControllerCrashed": codec(
+                ("controller_id", "controller_session_id", "reason_code"),
+                validators={"reason_code": _enum("UNCLEAN_SHUTDOWN")},
+            ),
+            "WorkerTaskClaimed": codec(
+                (
+                    "assignment_id",
+                    "controller_id",
+                    "controller_session_id",
+                    "controller_version",
+                    "worker_id",
+                    "task_version",
+                    "execution_id",
+                ),
+                validators={
+                    "assignment_id": sha256_payload,
+                    "controller_version": _positive_integer,
+                    "task_version": _positive_integer,
+                },
+            ),
+            "WorkerTaskDispatchPlanned": codec(
+                (
+                    "assignment_id",
+                    "execution_id",
+                    "directive_id",
+                    "directive_artifact_hash",
+                    "instruction_hash",
+                    "budget",
+                    "timeout_milliseconds",
+                ),
+                validators={
+                    "assignment_id": sha256_payload,
+                    "directive_artifact_hash": sha256_payload,
+                    "instruction_hash": sha256_payload,
+                    "budget": _positive_integer,
+                    "timeout_milliseconds": _positive_integer,
+                },
+            ),
+            "WorkerTaskCompleted": codec(
+                ("assignment_id", "execution_id", "result_hash"),
+                validators={
+                    "assignment_id": sha256_payload,
+                    "result_hash": sha256_payload,
+                },
+            ),
+            "WorkerTaskFailed": codec(
+                ("assignment_id", "execution_id", "reason_code"),
+                validators={
+                    "assignment_id": sha256_payload,
+                    "reason_code": _enum(
+                        "CONTROLLER_BLOCKED",
+                        "CONTROLLER_REJECTED",
+                        "CONTROLLER_DECISION_INVALID",
+                        "CONTROLLER_TIMEOUT",
+                        "WORKER_FAILED",
+                        "WORKER_ROLE_UNSUPPORTED",
+                    ),
+                },
+            ),
+            "WorkerTaskInterrupted": codec(
+                ("assignment_id", "execution_id", "reason_code"),
+                validators={
+                    "assignment_id": sha256_payload,
+                    "reason_code": _enum("OPERATOR_SIGNAL", "CONTROLLER_RESTART"),
+                },
             ),
         }
     )

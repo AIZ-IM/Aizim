@@ -75,6 +75,7 @@ _HASH_CASES: Final = (
         {"delta_id": "d", "knowledge_epoch": 1},
     ),
     ("LeanRuntimeCrashed", "artifact_hash", {"runtime_id": "r", "reason_code": "failed"}),
+    ("WorkerTaskCompleted", "result_hash", {"assignment_id": _HASH, "execution_id": "e"}),
     (
         "EnvironmentTransitionProposed",
         "old_fingerprint",

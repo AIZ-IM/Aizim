@@ -98,10 +98,12 @@ def test_only_state_service_instantiates_private_event_store() -> None:
 def test_task_three_authored_files_stay_within_pure_loc_limit() -> None:
     paths = (
         *(REPOSITORY_ROOT / "src" / "aizim" / "state").glob("*.py"),
+        *(REPOSITORY_ROOT / "src" / "aizim" / "orchestration").glob("controller_*.py"),
         REPOSITORY_ROOT / "tests" / "unit" / "test_event_store.py",
         REPOSITORY_ROOT / "tests" / "unit" / "test_event_replay.py",
         REPOSITORY_ROOT / "tests" / "unit" / "test_event_contract.py",
-        REPOSITORY_ROOT / "tests" / "integration" / "test_state_service_rpc.py",
+        *(REPOSITORY_ROOT / "tests" / "unit").glob("test_controller_execution*.py"),
+        *(REPOSITORY_ROOT / "tests" / "integration").glob("test_state_service_*rpc.py"),
         REPOSITORY_ROOT / "tests" / "integration" / "test_state_service_lifecycle.py",
         Path(__file__),
     )

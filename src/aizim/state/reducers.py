@@ -8,6 +8,11 @@ from aizim.domain.serialization import JsonValue, canonical_json
 from .event_payload import thaw_payload
 from .events import EventEnvelope
 from .projection_types import ProjectionRecord
+from .projections_orchestration import (
+    ORCHESTRATION_ENTITY_FIELDS,
+    ORCHESTRATION_EVENT_PROJECTIONS,
+    reduce_orchestration_payload,
+)
 
 _EVENT_PROJECTION: Final = {
     "ProjectInitialized": "project",
@@ -60,6 +65,7 @@ _EVENT_PROJECTION: Final = {
     "EnvironmentTransitionRejected": "project",
     "AlignmentReviewed": "alignment_reviews",
     "InterventionRecorded": "interventions",
+    **ORCHESTRATION_EVENT_PROJECTIONS,
 }
 
 _ENTITY_FIELD: Final = {
@@ -108,6 +114,7 @@ _ENTITY_FIELD: Final = {
     "EnvironmentTransitionRejected": "transition_id",
     "AlignmentReviewed": "review_id",
     "InterventionRecorded": "intervention_id",
+    **ORCHESTRATION_ENTITY_FIELDS,
 }
 
 
@@ -201,6 +208,8 @@ def apply_event(
 def _projection_payload(
     snapshots: tuple[ProjectionRecord, ...], event: EventEnvelope
 ) -> dict[str, JsonValue]:
+    if event.event_type in ORCHESTRATION_EVENT_PROJECTIONS:
+        return reduce_orchestration_payload(snapshots, event)
     payload = thaw_payload(event.payload)
     if event.event_type not in {"LeaseReleased", "LeaseRecovered"}:
         return payload

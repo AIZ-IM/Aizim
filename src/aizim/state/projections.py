@@ -23,6 +23,8 @@ PROJECTION_NAMES: Final = (
     "workers",
     "worker_roster",
     "worker_assignments",
+    "controller_runtime",
+    "worker_executions",
     "worker_cursors",
     "epochs",
     "leases",

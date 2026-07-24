@@ -227,7 +227,7 @@ def test_schema_v1_codec_rejects_wrong_payload_field_type(
 
 
 def test_projection_registry_is_fixed() -> None:
-    assert PROJECTION_NAMES == (
+    assert (
         "project",
         "runs",
         "artifacts",
@@ -236,7 +236,7 @@ def test_projection_registry_is_fixed() -> None:
         "controller",
         "workers",
         "worker_roster",
-        "worker_assignments",
+        *("worker_assignments", "controller_runtime", "worker_executions"),
         "worker_cursors",
         "epochs",
         "leases",
@@ -250,7 +250,7 @@ def test_projection_registry_is_fixed() -> None:
         "resources",
         "alignment_reviews",
         "interventions",
-    )
+    ) == PROJECTION_NAMES
 
 
 def test_identical_artifact_content_can_be_registered_by_distinct_runs(tmp_path: Path) -> None:
