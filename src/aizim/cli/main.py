@@ -17,6 +17,7 @@ from .control_command import (
     run_worker_list,
     run_worker_register,
 )
+from .controller_command import run_controller_start
 from .doctor_command import run_doctor
 from .init_command import run_init
 from .security_probe_command import run_security_probe
@@ -82,6 +83,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     show = controller_commands.add_parser("show")
     show.add_argument("--project", type=Path, default=Path.cwd())
     show.add_argument("--json", action="store_true", dest="as_json")
+    start = controller_commands.add_parser("start")
+    start.add_argument("--project", type=Path, required=True)
+    start.add_argument("--foreground", action="store_true")
     worker = commands.add_parser("worker")
     worker_commands = worker.add_subparsers(dest="worker_command", required=True)
     register = worker_commands.add_parser("register")
@@ -117,6 +121,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         if arguments.controller_command == "show":
             return run_controller_show(arguments.project, arguments.as_json)
+        if arguments.controller_command == "start":
+            return run_controller_start(arguments.project, arguments.foreground)
     if arguments.command == "worker":
         if arguments.worker_command == "register":
             return run_worker_register(
