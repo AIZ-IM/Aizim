@@ -1,3 +1,84 @@
+# Task 5 second re-review: authoritative project identity
+
+Date: 2026-07-24
+Commit subject: `Initialize controller project identity`
+Review base: `6e90a77fdd94e70d72d32f40322b45d0ed38f847`
+
+## Findings resolved
+
+- Important: public `aizim init` now creates the sole durable
+  `ProjectInitialized` event. Re-init validates but never duplicates or rewrites
+  it; missing identity is created, while conflicting, multiple, or structurally
+  invalid existing identities fail closed.
+- The created smoke-project identity uses `project.name`,
+  `smoke_base_epoch(project)`, and initial `knowledge_epoch = 0`. Marker-only
+  Lean projects retain the pre-existing public-init contract through a
+  deterministic hash of their validated `lakefile.toml` and `lean-toolchain`.
+- Existing identities validate their immutable initial hash structurally
+  instead of comparing it to the current global epoch, so legitimate
+  `KnowledgeDeltaPublished` evolution does not make re-init fail.
+- Minor: the recording worker backend now checks at worker entry that the exact
+  directive-artifact directory is non-empty and the durable worker-execution
+  projection is already `planned`. The former post-hoc-only ordering assertion
+  was removed.
+- Happy-path supervisor and CLI-controller fixtures no longer append
+  `ProjectInitialized`; they prove the public init boundary supplies identity.
+  The guard fixture alone bypasses or duplicates initialization to test
+  fail-closed states.
+
+## Second scope amendment
+
+The parent explicitly authorized this re-review to modify
+`src/aizim/cli/init_command.py` and `tests/integration/test_cli_init.py` in
+addition to the existing Task 5 controller files and this report. Public init
+is the authoritative project-identity boundary. No other files were modified.
+
+## TDD evidence
+
+- Public-init RED:
+  `uv run pytest -q tests/integration/test_cli_init.py -k 'creates_only_private or invalid_existing_identity'`
+  reported `4 failed, 9 deselected`. The happy path observed zero
+  `ProjectInitialized` events (`0 == 1`), while conflict, multiple, and
+  advanced-initial-epoch cases returned exit 0 instead of exit 2.
+- Public-init GREEN:
+  the identity/idempotence/conflict/evolution subset reported
+  `5 passed, 9 deselected in 2.90s`.
+- Settled focused init/supervisor/guard/CLI plus Task 2/4 execution, replay,
+  host, and failure regressions reported `92 passed in 30.06s`.
+
+## Static and full-suite evidence
+
+- Ruff check and format check passed for all five changed Python files.
+- `uv run ty check` reported `All checks passed!`.
+- Authority/trusted-boundary tests reported `12 passed in 1.10s`.
+- The Python no-excuse checker reported `no violations in 5 file(s)`.
+- Pure LOC:
+  `init_command.py=67`,
+  `controller_dispatcher.py=244`,
+  `controller_supervisor.py=248`,
+  `test_cli_init.py=240`,
+  `test_controller_supervisor.py=250`,
+  `test_controller_supervisor_guards.py=146`, and
+  `test_cli_controller_start.py=185`.
+- `git diff --check` passed.
+- The single settled `uv run pytest -q` reported
+  `768 passed, 3 skipped in 159.86s`.
+
+## Manual public CLI evidence
+
+The manual composition used public init twice, public configure/register,
+post-start public assignment, foreground signal handling, and foreground
+restart. No direct identity event was inserted:
+
+```text
+MANUAL PUBLIC INIT CONTROLLER PASS
+project_initialized=1 reinit_duplicates=0 live_assignment=1
+artifact_before_worker=1 planned_before_worker=1 worker_model=worker-model
+active_signal=interrupted restart_duplicates=0 leases=0 sockets=0 pid=0
+```
+
+---
+
 # Task 5 controller supervisor review hardening
 
 Date: 2026-07-24

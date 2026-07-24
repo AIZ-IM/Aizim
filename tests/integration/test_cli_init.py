@@ -12,10 +12,18 @@ import pytest
 
 import aizim.cli.init_command as init_command
 import aizim.state.store as state_store
+from aizim.domain.serialization import JsonValue
+from aizim.lean.project import smoke_base_epoch
 from aizim.runtime.layout import ProjectLayout
-from aizim.state import StateDependencies, StateService, StateServiceConfig
+from aizim.state import (
+    AppendEventCommand,
+    EventEnvelope,
+    StateDependencies,
+    StateService,
+    StateServiceConfig,
+)
 
-FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal_lean"
+FIXTURE = Path(__file__).parents[2] / "examples" / "smoke_lean"
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -25,7 +33,22 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def copy_project(tmp_path: Path) -> Path:
-    return Path(shutil.copytree(FIXTURE, tmp_path / "lean-project"))
+    return Path(
+        shutil.copytree(
+            FIXTURE,
+            tmp_path / "lean-project",
+            ignore=shutil.ignore_patterns(".aizim"),
+        )
+    )
+
+
+def project_identities(root: Path) -> tuple[EventEnvelope, ...]:
+    with StateService(StateServiceConfig(root, "identity-inspect")) as state:
+        return tuple(
+            record.envelope
+            for record in state.query_events()
+            if record.envelope.event_type == "ProjectInitialized"
+        )
 
 
 def outside_snapshot(root: Path) -> dict[str, tuple[str, bytes]]:
@@ -45,15 +68,74 @@ def test_init_creates_only_private_aizim_state_and_is_idempotent(tmp_path: Path)
     before = outside_snapshot(root)
 
     first = run_cli("init", str(root))
+    first_identities = project_identities(root)
     second = run_cli("init", str(root))
+    second_identities = project_identities(root)
 
     assert first.returncode == second.returncode == 0
+    assert first_identities == second_identities
+    assert len(first_identities) == 1
+    assert dict(first_identities[0].payload) == {
+        "project_id": root.name,
+        "base_epoch": smoke_base_epoch(root),
+        "knowledge_epoch": 0,
+    }
     assert outside_snapshot(root) == before
     owned = root / ".aizim"
     for relative in ("", "run", "artifacts", "promoted", "documents"):
         assert stat.S_IMODE((owned / relative).stat().st_mode) == 0o700
     for relative in ("config.toml", "state.sqlite3"):
         assert stat.S_IMODE((owned / relative).stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize("existing", ["conflict", "multiple", "advanced"])
+def test_init_rejects_invalid_existing_identity_without_rewrite(
+    tmp_path: Path, existing: str
+) -> None:
+    root = copy_project(tmp_path)
+    layout = ProjectLayout.from_lean_project(root)
+    layout.prepare_runtime()
+    payloads: list[dict[str, JsonValue]] = [
+        {
+            "project_id": "different-project" if existing == "conflict" else root.name,
+            "base_epoch": smoke_base_epoch(root),
+            "knowledge_epoch": 1 if existing == "advanced" else 0,
+        }
+    ]
+    if existing == "multiple":
+        payloads.append({**payloads[0], "project_id": "duplicate-project"})
+    with StateService(StateServiceConfig(root, "identity-setup")) as state:
+        for payload in payloads:
+            state.append_event(
+                AppendEventCommand("ProjectInitialized", "test", None, None, payload)
+            )
+    before = project_identities(root)
+
+    result = run_cli("init", str(root))
+
+    assert result.returncode == 2
+    assert project_identities(root) == before
+
+
+def test_reinit_accepts_advanced_knowledge_epoch(tmp_path: Path) -> None:
+    root = copy_project(tmp_path)
+    assert run_cli("init", str(root)).returncode == 0
+    identity = project_identities(root)
+    with StateService(StateServiceConfig(root, "knowledge-setup")) as state:
+        state.append_event(
+            AppendEventCommand(
+                "KnowledgeDeltaPublished",
+                "test",
+                None,
+                None,
+                {"delta_id": "delta-1", "base_epoch": "b" * 64, "knowledge_epoch": 1},
+            )
+        )
+
+    result = run_cli("init", str(root))
+
+    assert result.returncode == 0
+    assert project_identities(root) == identity
 
 
 def test_init_conflicting_config_is_exit_two_and_does_not_rewrite_state(

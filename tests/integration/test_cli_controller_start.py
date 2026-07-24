@@ -15,7 +15,6 @@ import aizim.cli.main as cli_main
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
 from aizim.cli.init_command import run_init
 from aizim.domain import AgentRole, sha256_bytes, sha256_json
-from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.control_plane import (
     ControllerProvider,
     assign_task,
@@ -40,9 +39,6 @@ from aizim.orchestration.controller_supervisor import (
     ControllerSupervisorDependencies as SupervisorDeps,
 )
 from aizim.orchestration.fake_controller_backend import FakeControllerBackend as Controller
-from aizim.state import (
-    AppendEventCommand as Event,
-)
 from aizim.state import (
     StateService,
 )
@@ -80,19 +76,6 @@ def initialized(tmp_path: Path) -> tuple[Path, str]:
     root = Path(shutil.copytree(SMOKE_ROOT, tmp_path / "lean-project", ignore=IGNORE))
     assert run_init(root) == 0
     with StateService(StateConfig(root, "setup-session")) as state:
-        state.append_event(
-            Event(
-                "ProjectInitialized",
-                "supervisor",
-                None,
-                None,
-                {
-                    "project_id": root.name,
-                    "base_epoch": smoke_base_epoch(root),
-                    "knowledge_epoch": 0,
-                },
-            )
-        )
         configure_controller(state, ControllerProvider.CODEX, "controller-model")
         register_worker(state, "proof-a", AgentRole.FORMALIZER)
         assign_task(state, "proof-a", "prove True")

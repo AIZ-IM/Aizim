@@ -10,9 +10,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
-from aizim.domain import AgentRole, sha256_bytes, sha256_json
-from aizim.domain.serialization import JsonValue
-from aizim.lean.project import smoke_base_epoch
+from aizim.domain import AgentRole, canonical_json, sha256_bytes, sha256_json
 from aizim.orchestration.control_plane import (
     ControllerProvider,
     assign_task,
@@ -32,14 +30,13 @@ from aizim.orchestration.controller_supervisor import (
     ControllerSupervisorDependencies,
 )
 from aizim.orchestration.fake_controller_backend import FakeControllerBackend
-from aizim.state import AppendEventCommand, StateService, StateServiceConfig
+from aizim.state import StateService, StateServiceConfig
 from aizim.state.operations import RpcRequest, RpcSuccess
 from aizim.state.rpc import rpc_call
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
 INVALID = "CONTROLLER_DECISION_INVALID"
 OVER_BUDGET = DispatchDecision("dispatch", "proof-a", "too much", 13, 1.0)
-OVER_TIMEOUT = DispatchDecision("dispatch", "proof-a", "too long", 1, 61.0)
 
 
 @pytest.fixture
@@ -50,7 +47,8 @@ def short_tmp(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 
 
 class RecordingSubmittedBackend:
-    def __init__(self) -> None:
+    def __init__(self, root: Path) -> None:
+        self.root = root
         self.requests: list[AgentRequest] = []
 
     @property
@@ -58,6 +56,19 @@ class RecordingSubmittedBackend:
         return BackendIdentity("fake", "deterministic-v1", None)
 
     async def run(self, request: AgentRequest) -> AgentResult:
+        assert tuple(
+            (self.root / ".aizim/artifacts" / request.run_id / "controller-directive").iterdir()
+        )
+        response = await rpc_call(
+            self.root / ".aizim/run/state.sock",
+            RpcRequest(
+                "query_projections",
+                {"projection_name": "worker_executions"},
+                None,
+            ),
+        )
+        assert isinstance(response, RpcSuccess)
+        assert b'"status":"planned"' in canonical_json(response.result)
         self.requests.append(request)
         return AgentResult(request.worker_id, "submitted", "done", "a" * 64, "b" * 64, 0)
 
@@ -74,14 +85,6 @@ def initialized_assignment(tmp_path: Path, *, assigned: bool = True) -> tuple[Pa
 
     assert run_init(root) == 0
     with StateService(StateServiceConfig(root, "setup-session")) as state:
-        identity: dict[str, JsonValue] = {
-            "project_id": root.name,
-            "base_epoch": smoke_base_epoch(root),
-            "knowledge_epoch": 0,
-        }
-        state.append_event(
-            AppendEventCommand("ProjectInitialized", "supervisor", None, None, identity)
-        )
         configure_controller(state, ControllerProvider.CODEX, "controller-model")
         register_worker(state, "proof-a", AgentRole.FORMALIZER)
         if assigned:
@@ -154,7 +157,7 @@ async def test_completed_assignment_is_not_dispatched_after_restart(
     controller = FakeControllerBackend(
         DispatchDecision("dispatch", "proof-a", "Use the assigned document.", 3, 15.0)
     )
-    worker = RecordingSubmittedBackend()
+    worker = RecordingSubmittedBackend(root)
     injected = dependencies(controller, worker)
     first = ControllerSupervisor(root, injected)
 
@@ -169,12 +172,7 @@ async def test_completed_assignment_is_not_dispatched_after_restart(
 
     # Then
     assert len(controller.received_context_bytes) == 1
-    assert len(worker.requests) == 1
-    assert worker.requests[0].model == "worker-model"
-    with StateService(StateServiceConfig(root, "inspect")) as state:
-        events = tuple(record.envelope.event_type for record in state.query_events())
-    assert events.index("WorkerTaskDispatchPlanned") < events.index("WorkerStarted")
-    assert tuple((root / ".aizim/artifacts").rglob("controller-directive/*"))
+    assert [request.model for request in worker.requests] == ["worker-model"]
 
 
 async def test_live_control_assignment_wakes_idle_supervisor(
@@ -185,7 +183,9 @@ async def test_live_control_assignment_wakes_idle_supervisor(
     controller = FakeControllerBackend(
         DispatchDecision("dispatch", "proof-a", "Use the assigned document.", 3, 15.0)
     )
-    supervisor = ControllerSupervisor(root, dependencies(controller, RecordingSubmittedBackend()))
+    supervisor = ControllerSupervisor(
+        root, dependencies(controller, RecordingSubmittedBackend(root))
+    )
     task = asyncio.create_task(supervisor.run())
     assignment_id = _assignment_id()
 
@@ -213,7 +213,7 @@ async def test_live_control_assignment_wakes_idle_supervisor(
         (ControllerBackendError(INVALID), INVALID),
         (TimeoutError(), "CONTROLLER_TIMEOUT"),
         (OVER_BUDGET, INVALID),
-        (OVER_TIMEOUT, INVALID),
+        (DispatchDecision("dispatch", "proof-a", "too long", 1, 61.0), INVALID),
     ],
 )
 async def test_non_dispatch_decisions_never_launch_worker(
@@ -224,7 +224,7 @@ async def test_non_dispatch_decisions_never_launch_worker(
 ) -> None:
     # Given
     root, assignment_id = initialized_assignment(short_tmp)
-    worker = RecordingSubmittedBackend()
+    worker = RecordingSubmittedBackend(root)
     fallback = BlockedDecision("blocked", "NO_SAFE_ACTION")
     controller = FakeControllerBackend(
         fallback if isinstance(decision, BaseException) else decision
@@ -265,7 +265,7 @@ async def test_startup_guard_happens_before_claim(
     controller = FakeControllerBackend(
         DispatchDecision("dispatch", "proof-a", "unreachable", 1, 1.0)
     )
-    injected = dependencies(controller, RecordingSubmittedBackend())
+    injected = dependencies(controller, RecordingSubmittedBackend(root))
 
     async def guard_preflight() -> None:
         if guard == "provider":

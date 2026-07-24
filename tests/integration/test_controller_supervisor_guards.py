@@ -30,6 +30,7 @@ from aizim.orchestration.controller_supervisor import (
     _default_dependencies,
 )
 from aizim.orchestration.fake_controller_backend import FakeControllerBackend
+from aizim.runtime.layout import ProjectLayout
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
@@ -59,11 +60,14 @@ def initialized(tmp_path: Path, identities: int) -> tuple[Path, str]:
             ignore=shutil.ignore_patterns(".aizim"),
         )
     )
-    assert run_init(root) == 0
+    if identities:
+        assert run_init(root) == 0
+    else:
+        ProjectLayout.from_lean_project(root).prepare_runtime()
     with StateService(StateServiceConfig(root, "setup-session")) as state:
-        for index in range(identities):
+        for index in range(1, identities):
             payload: dict[str, JsonValue] = {
-                "project_id": root.name if index == 0 else f"duplicate-{index}",
+                "project_id": f"duplicate-{index}",
                 "base_epoch": smoke_base_epoch(root),
                 "knowledge_epoch": 0,
             }
