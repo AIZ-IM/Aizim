@@ -142,6 +142,19 @@ def test_context_bytes_reject_unsafe_operation_labels(
     assert str(error.value) == "CONTROLLER_DECISION_INVALID"
 
 
+def test_context_bytes_reject_unhashable_operation_label() -> None:
+    # Given
+    context = _context()
+    object.__setattr__(context, "allowed_operations", (["unhashable"],))
+
+    # When
+    with pytest.raises(ControllerBackendError) as error:
+        controller_context_bytes(context)
+
+    # Then
+    assert str(error.value) == "CONTROLLER_DECISION_INVALID"
+
+
 @pytest.mark.parametrize(
     ("payload", "expected"),
     (

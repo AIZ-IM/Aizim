@@ -123,6 +123,10 @@ def controller_context_bytes(context: ControllerContext) -> bytes:
 
 
 def _safe_operation_labels(operations: tuple[str, ...]) -> tuple[str, ...]:
+    if type(operations) is not tuple:
+        raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
+    if any(type(operation) is not str for operation in operations):
+        raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
     if len(operations) > len(_SAFE_CONTROLLER_OPERATIONS):
         raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
     if len(operations) != len(set(operations)):
