@@ -1,0 +1,150 @@
+name: External provider contract
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provider-contract-codex:
+    name: Codex provider contract ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-15
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-x64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      AIZIM_PROVIDER_CONTRACT: "1"
+      AIZIM_PROVIDER_CONTRACT_PROVIDER: codex
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create private temporary root
+        run: |
+          mkdir -p "$RUNNER_TEMP/aizim-private-tmp"
+          chmod 700 "$RUNNER_TEMP/aizim-private-tmp"
+          echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install latest pinned npm
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1
+          echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"
+          test "$("$RUNNER_TEMP/npm-12/bin/npm" --version)" = "12.0.1"
+      - name: Install exact Codex CLI
+        run: |
+          "$RUNNER_TEMP/npm-12/bin/npm" install --global \
+            --prefix "$RUNNER_TEMP/provider-cli" \
+            @openai/codex@0.145.0
+          echo "$RUNNER_TEMP/provider-cli/bin" >> "$GITHUB_PATH"
+          test "$("$RUNNER_TEMP/provider-cli/bin/codex" --version)" = \
+            "codex-cli 0.145.0"
+      - name: Enable Linux sandbox namespaces
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.31"
+          enable-cache: false
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Verify Codex Controller and Worker contracts without credentials
+        run: >-
+          uv run pytest
+          tests/integration/test_provider_contract.py
+          tests/security/test_controller_provider_isolation.py
+          tests/unit/test_provider_executables.py
+          -m "not macos_sandbox"
+          -q
+
+  provider-contract-claude:
+    name: Claude provider contract ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-15
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-x64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      AIZIM_PROVIDER_CONTRACT: "1"
+      AIZIM_PROVIDER_CONTRACT_PROVIDER: claude
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create private temporary root
+        run: |
+          mkdir -p "$RUNNER_TEMP/aizim-private-tmp"
+          chmod 700 "$RUNNER_TEMP/aizim-private-tmp"
+          echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install latest pinned npm
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1
+          echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"
+          test "$("$RUNNER_TEMP/npm-12/bin/npm" --version)" = "12.0.1"
+      - name: Install exact Claude and Codex CLIs
+        run: |
+          "$RUNNER_TEMP/npm-12/bin/npm" install --global \
+            --prefix "$RUNNER_TEMP/provider-cli" \
+            --allow-scripts=@anthropic-ai/claude-code \
+            @openai/codex@0.145.0 \
+            @anthropic-ai/claude-code@2.1.218
+          echo "$RUNNER_TEMP/provider-cli/bin" >> "$GITHUB_PATH"
+          test "$("$RUNNER_TEMP/provider-cli/bin/codex" --version)" = \
+            "codex-cli 0.145.0"
+          test "$("$RUNNER_TEMP/provider-cli/bin/claude" --version)" = \
+            "2.1.218 (Claude Code)"
+      - name: Enable Linux sandbox namespaces
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.31"
+          enable-cache: false
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Verify Claude Controller and Codex Worker contracts without credentials
+        run: >-
+          uv run pytest
+          tests/integration/test_provider_contract.py
+          tests/security/test_controller_provider_isolation.py
+          tests/unit/test_provider_executables.py
+          -m "not macos_sandbox"
+          -q

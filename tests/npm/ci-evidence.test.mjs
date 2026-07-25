@@ -47,6 +47,15 @@ function digest(algorithm, value) {
   );
 }
 
+function workflowJob(workflow, jobId) {
+  const marker = `  ${jobId}:\n`;
+  const start = workflow.indexOf(marker);
+  assert.notEqual(start, -1, `missing workflow job: ${jobId}`);
+  const remainder = workflow.slice(start + marker.length);
+  const nextJob = remainder.search(/^  [a-z0-9_-]+:\n/mu);
+  return nextJob === -1 ? remainder : remainder.slice(0, nextJob);
+}
+
 async function packageRecord(directory, name, filename, value) {
   await writeFile(join(directory, filename), value);
   return {
@@ -282,13 +291,25 @@ test("composes native evidence only from matching build, test, pack, and install
   assert.equal(document.checks.npm_test, true);
 });
 
-test("CI pins current actions and qualifies the exact three native runners without publishing", async () => {
+test("CI isolates external provider contracts from provider-free package lanes", async () => {
   const workflow = await readFile(
     new URL("../../.github/workflows/ci.yml", import.meta.url),
     "utf8",
   );
   const leanWorkflow = await readFile(
     new URL("../../.github/workflows/lean-integration.yml", import.meta.url),
+    "utf8",
+  );
+  const providerWorkflow = await readFile(
+    new URL("../../.github/workflows/provider-contract.yml", import.meta.url),
+    "utf8",
+  );
+  const registryWorkflow = await readFile(
+    new URL("../../.github/workflows/npm-registry-smoke.yml", import.meta.url),
+    "utf8",
+  );
+  const releaseWorkflow = await readFile(
+    new URL("../../.github/workflows/npm-release.yml", import.meta.url),
     "utf8",
   );
   for (const value of [
@@ -330,8 +351,72 @@ test("CI pins current actions and qualifies the exact three native runners witho
   ]) {
     assert.ok(leanWorkflow.includes(value), `missing Lean CI contract: ${value}`);
   }
+  assert.doesNotMatch(leanWorkflow, /@anthropic-ai\/claude-code/u);
+  assert.equal(
+    leanWorkflow.match(/@openai\/codex@0\.145\.0/gu)?.length,
+    1,
+  );
+
+  for (const value of [
+    "provider-contract-codex:",
+    "provider-contract-claude:",
+    "AIZIM_PROVIDER_CONTRACT: \"1\"",
+    "darwin-arm64",
+    "linux-arm64",
+    "linux-x64",
+    "macos-15",
+    "ubuntu-24.04-arm",
+    "ubuntu-24.04",
+    "kernel.unprivileged_userns_clone=1",
+    "kernel.apparmor_restrict_unprivileged_userns=0",
+    "uv sync --frozen",
+    "tests/integration/test_provider_contract.py",
+    "tests/security/test_controller_provider_isolation.py",
+    "tests/unit/test_provider_executables.py",
+  ]) {
+    assert.ok(
+      providerWorkflow.includes(value),
+      `missing provider CI contract: ${value}`,
+    );
+  }
+  for (const target of [
+    "- target: darwin-arm64",
+    "- target: linux-arm64",
+    "- target: linux-x64",
+    "runner: macos-15",
+    "runner: ubuntu-24.04-arm",
+    "runner: ubuntu-24.04",
+  ]) {
+    assert.equal(
+      providerWorkflow
+        .split("\n")
+        .filter((line) => line.trim() === target).length,
+      2,
+      `provider workflow must qualify ${target} in both lanes`,
+    );
+  }
+  const codexJob = workflowJob(providerWorkflow, "provider-contract-codex");
+  const claudeJob = workflowJob(providerWorkflow, "provider-contract-claude");
+  assert.match(codexJob, /@openai\/codex@0\.145\.0/u);
+  assert.doesNotMatch(codexJob, /@anthropic-ai\/claude-code/u);
+  assert.match(claudeJob, /@openai\/codex@0\.145\.0/u);
+  assert.match(claudeJob, /@anthropic-ai\/claude-code@2\.1\.218/u);
+  assert.match(
+    claudeJob,
+    /--allow-scripts=@anthropic-ai\/claude-code/u,
+  );
+  assert.match(codexJob, /AIZIM_PROVIDER_CONTRACT_PROVIDER: codex/u);
+  assert.match(claudeJob, /AIZIM_PROVIDER_CONTRACT_PROVIDER: claude/u);
   assert.doesNotMatch(
-    `${workflow}\n${leanWorkflow}`,
+    `${workflow}\n${registryWorkflow}\n${releaseWorkflow}`,
+    /@openai\/codex|@anthropic-ai\/claude-code|AIZIM_PROVIDER_CONTRACT/u,
+  );
+  assert.doesNotMatch(
+    providerWorkflow,
+    /OPENAI_API_KEY|ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN|secrets\./u,
+  );
+  assert.doesNotMatch(
+    `${workflow}\n${leanWorkflow}\n${providerWorkflow}\n${registryWorkflow}\n${releaseWorkflow}`,
     /0\.11\.29|0\.144\.6|NODE_AUTH_TOKEN|NPM_TOKEN|id-token:\s*write/u,
   );
   const combinedWorkflows = `${workflow}\n${leanWorkflow}`;
@@ -349,7 +434,11 @@ test("CI pins current actions and qualifies the exact three native runners witho
     combinedWorkflows.match(/name: Create private temporary root/gu)?.length,
     4,
   );
-  for (const line of `${workflow}\n${leanWorkflow}`.match(/^\s*uses:\s*.+$/gmu) ?? []) {
+  for (
+    const line of `${workflow}\n${leanWorkflow}\n${providerWorkflow}\n${registryWorkflow}\n${releaseWorkflow}`.match(
+      /^\s*uses:\s*.+$/gmu,
+    ) ?? []
+  ) {
     assert.match(line, /@[0-9a-f]{40}(?:\s+#\s+v\d+\.\d+\.\d+)?$/u);
   }
 });
