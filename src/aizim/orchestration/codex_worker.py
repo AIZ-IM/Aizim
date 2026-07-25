@@ -26,8 +26,9 @@ from aizim.runtime.distribution import (
     resolve_codex_executable,
     without_distribution_environment,
 )
+from aizim.runtime.provider_executables import codex_runtime_root
 
-from .controller_process import codex_runtime_root, private_workspace
+from .controller_process import private_workspace
 from .run_identity import candidate_name, contribution_id
 
 

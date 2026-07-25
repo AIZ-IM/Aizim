@@ -60,20 +60,6 @@ def private_workspace(prefix: str) -> Iterator[tuple[Path, Path, Path]]:
         yield private, view, scratch
 
 
-def codex_runtime_root(executable: Path) -> Path:
-    package = executable.parent.parent
-    if (
-        executable.name == "codex.js"
-        and executable.parent.name == "bin"
-        and (package / "package.json").is_file()
-    ):
-        return package.resolve(strict=True)
-    return next(
-        (root for root in executable.parents if root.name == "vendor"),
-        executable.parent,
-    ).resolve(strict=True)
-
-
 def run_controller_host_command(
     argv: tuple[str, ...],
     environment: dict[str, str],

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import aizim.runtime.provider_executables as providers
 from aizim.agents.linux_sandbox import (
     LinuxSandboxAdapter,
     LinuxSandboxDependencies,
@@ -117,3 +118,25 @@ def test_platform_selector_returns_linux_adapter_for_packaged_codex(
 
     assert isinstance(adapter, LinuxSandboxAdapter)
     assert adapter.codex_executable == codex
+
+
+def test_linux_adapter_locates_bwrap_next_to_external_codex_js(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = tmp_path / "node_modules/@openai/codex"
+    codex = executable(package / "bin/codex.js")
+    (package / "package.json").write_text('{"name":"@openai/codex"}\n')
+    bwrap = executable(
+        package / "node_modules/@openai/codex-test/vendor/test-triple" / "codex-resources/bwrap"
+    )
+    monkeypatch.setattr(
+        providers,
+        "_host_codex_layout",
+        lambda: ("test", "test-triple"),
+    )
+
+    adapter = sandbox_adapter(codex, "linux")
+
+    assert isinstance(adapter, LinuxSandboxAdapter)
+    assert adapter.sandbox_executable == bwrap

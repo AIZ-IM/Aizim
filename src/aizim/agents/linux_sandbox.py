@@ -40,7 +40,15 @@ class LinuxSandboxAdapter:
 
     @classmethod
     def for_executable(cls, executable: Path) -> LinuxSandboxAdapter:
-        bwrap = executable.parent.parent / "codex-resources" / "bwrap"
+        from aizim.runtime.provider_executables import (
+            ProviderExecutableError,
+            codex_bwrap_executable,
+        )
+
+        try:
+            bwrap = codex_bwrap_executable(executable)
+        except ProviderExecutableError:
+            bwrap = executable.parent.parent / "codex-resources" / "bwrap"
         return cls(
             LinuxSandboxDependencies(
                 platform=sys.platform,
@@ -61,7 +69,15 @@ class LinuxSandboxAdapter:
 
     @property
     def sandbox_executable(self) -> Path:
-        return self.codex_executable.parent.parent / "codex-resources" / "bwrap"
+        from aizim.runtime.provider_executables import (
+            ProviderExecutableError,
+            codex_bwrap_executable,
+        )
+
+        try:
+            return codex_bwrap_executable(self.codex_executable)
+        except ProviderExecutableError:
+            return self.codex_executable.parent.parent / "codex-resources" / "bwrap"
 
     def validate_host(self) -> Path:
         return self._validate_host()

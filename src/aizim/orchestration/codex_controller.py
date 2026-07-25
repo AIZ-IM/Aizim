@@ -14,6 +14,7 @@ from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import ProviderEnvironmentPolicy, SandboxRequest
 from aizim.domain import sha256_file
 from aizim.runtime.distribution import resolve_codex_executable
+from aizim.runtime.provider_executables import codex_runtime_root
 
 from .controller_backend import (
     ControllerBackendError,
@@ -27,7 +28,6 @@ from .controller_process import (
     ControllerLaunchError,
     ControllerLaunchOutcome,
     ControllerLaunchSpec,
-    codex_runtime_root,
     launch_controller_process,
     private_workspace,
     run_controller_host_command,
