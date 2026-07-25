@@ -5,13 +5,12 @@ from pathlib import Path
 
 import pytest
 
+import aizim.runtime.distribution as distribution
 import aizim.runtime.provider_executables as providers
 from aizim.runtime.distribution import (
     DISTRIBUTION_ENVIRONMENT,
     DistributionError,
     load_distribution_context,
-    resolve_claude_executable,
-    resolve_codex_executable,
     resolve_ripgrep_executable,
     without_distribution_environment,
 )
@@ -42,6 +41,11 @@ def test_no_distribution_keys_selects_source_mode() -> None:
     assert context.target is None
     assert not hasattr(context, "claude_executable")
     assert not hasattr(context, "codex_executable")
+
+
+def test_distribution_boundary_exposes_no_provider_specific_resolvers() -> None:
+    assert not hasattr(distribution, "resolve_codex_executable")
+    assert not hasattr(distribution, "resolve_claude_executable")
 
 
 def test_all_exact_keys_produce_an_immutable_path_safe_npm_context(tmp_path: Path) -> None:
@@ -121,11 +125,11 @@ def test_external_resolvers_reject_relative_missing_directory_and_non_executable
             non_executable,
         ]:
             environment = {name: str(candidate), "PATH": ""}
-            with pytest.raises(DistributionError) as failure:
+            with pytest.raises(providers.ProviderExecutableError) as failure:
                 resolver = (
-                    resolve_codex_executable
+                    providers.discover_codex_executable
                     if name == "AIZIM_CODEX_EXECUTABLE"
-                    else resolve_claude_executable
+                    else providers.discover_claude_executable
                 )
                 resolver(environment)
             assert failure.value.code == code
@@ -148,10 +152,10 @@ def test_npm_mode_uses_independent_external_overrides_before_path(tmp_path: Path
         "PATH": str(path_root),
     }
 
-    assert resolve_codex_executable(environment) == override_codex
-    assert resolve_claude_executable(environment) == override_claude
-    assert resolve_codex_executable({"PATH": str(path_root)}) == path_codex
-    assert resolve_claude_executable({"PATH": str(path_root)}) == path_claude
+    assert providers.discover_codex_executable(environment) == override_codex
+    assert providers.discover_claude_executable(environment) == override_claude
+    assert providers.discover_codex_executable({"PATH": str(path_root)}) == path_codex
+    assert providers.discover_claude_executable({"PATH": str(path_root)}) == path_claude
 
 
 def test_ripgrep_fallback_is_distribution_mode_independent(tmp_path: Path) -> None:
@@ -191,13 +195,13 @@ def test_source_resolution_uses_ripgrep_from_the_codex_native_dependency(
 
 
 def test_source_resolution_rejects_an_unavailable_codex() -> None:
-    with pytest.raises(DistributionError) as failure:
-        resolve_codex_executable({"PATH": ""})
+    with pytest.raises(providers.ProviderExecutableError) as failure:
+        providers.discover_codex_executable({"PATH": ""})
 
     assert failure.value.code == "CODEX_EXECUTABLE_UNAVAILABLE"
 
-    with pytest.raises(DistributionError) as claude_failure:
-        resolve_claude_executable({"PATH": ""})
+    with pytest.raises(providers.ProviderExecutableError) as claude_failure:
+        providers.discover_claude_executable({"PATH": ""})
 
     assert claude_failure.value.code == "CLAUDE_EXECUTABLE_UNAVAILABLE"
 

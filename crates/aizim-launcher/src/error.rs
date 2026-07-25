@@ -81,7 +81,7 @@ impl LauncherError {
         let message = match code {
             "MANIFEST_IO_FAILED" => "a distribution manifest could not be read safely",
             "ARTIFACT_INTEGRITY_FAILED" => "a packaged artifact failed integrity verification",
-            "CODEX_INTEGRITY_FAILED" => "the packaged Codex executable is invalid",
+            "EXECUTABLE_INTEGRITY_FAILED" => "a packaged executable is invalid",
             "CACHE_LAYOUT_INVALID" => "the managed runtime cache layout is unsafe",
             "AIZIM_EXEC_FAILED" => "the installed Aizim entry point could not be executed",
             _ => "a launcher integrity check failed",

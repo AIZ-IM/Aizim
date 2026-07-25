@@ -262,6 +262,23 @@ fn verifies_valid_manifests_and_returns_canonical_artifacts() -> TestResult {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn rejects_a_non_executable_bundled_uv_with_a_neutral_code() -> TestResult {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = fixture()?;
+    let mut permissions = fs::metadata(&fixture.uv)?.permissions();
+    permissions.set_mode(0o644);
+    fs::set_permissions(&fixture.uv, permissions)?;
+
+    let error = expected_failure(VerifiedDistribution::load(&fixture.args))?;
+    assert_eq!(error.kind, ErrorKind::Integrity);
+    assert_eq!(error.code, "EXECUTABLE_INTEGRITY_FAILED");
+    assert!(!error.to_string().contains("Codex"));
+    Ok(())
+}
+
 #[test]
 fn rejects_unknown_manifest_fields() -> TestResult {
     let mut fixture = fixture()?;

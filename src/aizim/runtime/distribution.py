@@ -11,7 +11,6 @@ from aizim import __version__
 from .provider_executables import (
     ProviderExecutableError,
     codex_ripgrep_executable,
-    discover_claude_executable,
     discover_codex_executable,
 )
 
@@ -66,20 +65,6 @@ def load_distribution_context(environ: Mapping[str, str]) -> DistributionContext
     )
 
 
-def resolve_claude_executable(environ: Mapping[str, str]) -> Path:
-    try:
-        return discover_claude_executable(environ)
-    except ProviderExecutableError as error:
-        raise DistributionError(error.code) from error
-
-
-def resolve_codex_executable(environ: Mapping[str, str]) -> Path:
-    try:
-        return discover_codex_executable(environ)
-    except ProviderExecutableError as error:
-        raise DistributionError(error.code) from error
-
-
 def resolve_ripgrep_executable(environ: Mapping[str, str]) -> Path:
     import shutil
 
@@ -91,9 +76,9 @@ def resolve_ripgrep_executable(environ: Mapping[str, str]) -> Path:
         if executable.is_file() and os.access(executable, os.X_OK):
             return executable
     try:
-        codex = resolve_codex_executable(environ)
+        codex = discover_codex_executable(environ)
         return codex_ripgrep_executable(codex)
-    except (DistributionError, ProviderExecutableError) as error:
+    except ProviderExecutableError as error:
         raise DistributionError("RIPGREP_EXECUTABLE_UNAVAILABLE") from error
 
 

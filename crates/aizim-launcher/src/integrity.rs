@@ -50,12 +50,15 @@ pub fn verify_executable(path: &Path) -> Result<PathBuf, LauncherError> {
         return Err(LauncherError::configuration("ARGUMENTS_INVALID"));
     }
     let metadata = fs::symlink_metadata(path)
-        .map_err(|source| LauncherError::integrity("CODEX_INTEGRITY_FAILED").with_source(source))?;
+        .map_err(|source| {
+            LauncherError::integrity("EXECUTABLE_INTEGRITY_FAILED").with_source(source)
+        })?;
     if !metadata.file_type().is_file() || metadata.permissions().mode() & 0o111 == 0 {
-        return Err(LauncherError::integrity("CODEX_INTEGRITY_FAILED"));
+        return Err(LauncherError::integrity("EXECUTABLE_INTEGRITY_FAILED"));
     }
-    fs::canonicalize(path)
-        .map_err(|source| LauncherError::integrity("CODEX_INTEGRITY_FAILED").with_source(source))
+    fs::canonicalize(path).map_err(|source| {
+        LauncherError::integrity("EXECUTABLE_INTEGRITY_FAILED").with_source(source)
+    })
 }
 
 /// Stream a file and return its lowercase SHA-256 digest.

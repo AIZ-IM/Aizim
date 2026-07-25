@@ -3,7 +3,6 @@ from .distribution import (
     DistributionContext,
     DistributionError,
     load_distribution_context,
-    resolve_codex_executable,
     without_distribution_environment,
 )
 from .layout import CONFIG_TEMPLATE, LayoutError, ProjectLayout
@@ -16,6 +15,5 @@ __all__ = [
     "LayoutError",
     "ProjectLayout",
     "load_distribution_context",
-    "resolve_codex_executable",
     "without_distribution_environment",
 ]
