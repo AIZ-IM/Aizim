@@ -27,6 +27,7 @@ from aizim.orchestration.controller_process import (
     ControllerLaunchSpec,
     launch_controller_process,
 )
+from aizim.runtime.provider_executables import ResolvedExecutable
 
 type Captured = list[ControllerLaunchSpec]
 _VERSION_SCRIPT = "import sys\nprint('codex-cli 0.145.0'if'--version'in sys.argv else'')\n"
@@ -56,6 +57,10 @@ def executable(tmp_path: Path, body: str = _VERSION_SCRIPT) -> Path:
     path.write_text(f"#!{sys.executable}\n{body}")
     path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     return path.resolve()
+
+
+def descriptor(path: Path) -> ResolvedExecutable:
+    return ResolvedExecutable(path, "codex-cli 0.145.0", sha256_file(path))
 
 
 def context() -> ControllerContext:
@@ -107,7 +112,11 @@ async def test_plan_uses_exact_codex_argv_and_canonical_context(
         lambda _executable: PassthroughSandbox(),
     )
     backend = CodexControllerBackend(
-        binary, model, project, {"PATH": os.environ["PATH"]}, launcher(captured)
+        descriptor(binary),
+        model,
+        project,
+        {"PATH": os.environ["PATH"]},
+        launcher(captured),
     )
 
     decision = await backend.plan(context())
@@ -163,7 +172,7 @@ async def test_preflight_checks_version_login_and_discards_output(
         lambda _executable: PassthroughSandbox(),
     )
     backend = CodexControllerBackend(
-        binary,
+        descriptor(binary),
         None,
         project,
         {"HOME": str(tmp_path / "auth-home"), "PATH": os.environ["PATH"]},
@@ -207,7 +216,7 @@ async def test_plan_rejects_invalid_final_file(
             final_path(spec).write_bytes(body)
         return ControllerLaunchOutcome(b"", "0" * 64, 0)
 
-    backend = CodexControllerBackend(binary, None, project, {}, launch)
+    backend = CodexControllerBackend(descriptor(binary), None, project, {}, launch)
     with pytest.raises(ControllerBackendError, match="CONTROLLER_DECISION_INVALID") as caught:
         await backend.plan(context())
     cause = caught.value.__cause__
@@ -225,7 +234,7 @@ async def test_plan_rejects_executable_replacement(
         "aizim.orchestration.codex_controller.sandbox_adapter",
         lambda _executable: PassthroughSandbox(),
     )
-    backend = CodexControllerBackend(binary, None, project, {}, launcher([]))
+    backend = CodexControllerBackend(descriptor(binary), None, project, {}, launcher([]))
     binary.write_bytes(binary.read_bytes() + b"\n")
 
     with pytest.raises(ControllerBackendError, match="CONTROLLER_DECISION_INVALID") as caught:

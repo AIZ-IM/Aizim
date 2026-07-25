@@ -3,18 +3,20 @@ from __future__ import annotations
 import os
 import ssl
 import stat
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final
+from typing import Final, Never
 
 from aizim.agents import BackendIdentity
 from aizim.agents.macos_sandbox import SandboxHostError
 from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import ProviderEnvironmentPolicy, SandboxRequest
-from aizim.domain import sha256_file
-from aizim.runtime.distribution import resolve_codex_executable
-from aizim.runtime.provider_executables import codex_runtime_root
+from aizim.runtime.provider_executables import (
+    ProviderExecutableError,
+    ResolvedExecutable,
+    codex_runtime_root,
+    revalidate_codex,
+)
 
 from .controller_backend import (
     ControllerBackendError,
@@ -30,10 +32,8 @@ from .controller_process import (
     ControllerLaunchSpec,
     launch_controller_process,
     private_workspace,
-    run_controller_host_command,
 )
 
-_CODEX_VERSION: Final = "codex-cli 0.145.0"
 _OUTPUT_LIMIT: Final = 1024 * 1024
 _SCHEMA_PATH: Final = Path(__file__).with_name("controller_decision.schema.json").resolve()
 _AUTH_ENVIRONMENT: Final = frozenset(
@@ -55,24 +55,26 @@ class CodexControllerError(RuntimeError):
 class CodexControllerBackend:
     def __init__(
         self,
-        executable: Path,
+        executable: ResolvedExecutable,
         model: str | None,
         project_root: Path,
         parent_environment: Mapping[str, str],
         launch: ControllerLauncher = launch_controller_process,
     ) -> None:
-        self._executable = _canonical_executable(executable)
+        try:
+            revalidate_codex(executable, parent_environment)
+        except ProviderExecutableError as error:
+            _raise_provider_error(error)
+        self._descriptor = executable
+        self._executable = executable.path
         self._project = _canonical_project(project_root)
         if model is not None and (type(model) is not str or not model):
             raise CodexControllerError("CONTROLLER_MODEL_INVALID")
         self._model = model
         self._source_environment = dict(parent_environment)
         self._launch = launch
-        version = _version(self._executable, self._source_environment)
-        if version != _CODEX_VERSION:
-            raise CodexControllerError("CONTROLLER_VERSION_UNSUPPORTED")
-        self._image_hash = sha256_file(self._executable)
-        self._identity = BackendIdentity("codex", version, self._image_hash)
+        self._image_hash = executable.sha256
+        self._identity = BackendIdentity("codex", executable.version, executable.sha256)
 
     @property
     def identity(self) -> BackendIdentity:
@@ -176,11 +178,10 @@ class CodexControllerBackend:
         )
 
     def _validate_image(self) -> None:
-        executable = _canonical_executable(self._executable)
-        if executable != self._executable or sha256_file(executable) != self._image_hash:
-            raise CodexControllerError("CONTROLLER_IMAGE_CHANGED")
-        if _version(executable, self._source_environment) != _CODEX_VERSION:
-            raise CodexControllerError("CONTROLLER_VERSION_UNSUPPORTED")
+        try:
+            revalidate_codex(self._descriptor, self._source_environment)
+        except ProviderExecutableError as error:
+            _raise_provider_error(error)
 
 
 def _environment(source: Mapping[str, str], home: Path, scratch: Path) -> dict[str, str]:
@@ -222,25 +223,6 @@ def _canonical_project(path: Path) -> Path:
     return resolved
 
 
-def _version(executable: Path, environment: Mapping[str, str]) -> str:
-    try:
-        output = run_controller_host_command(
-            (str(executable), "--version"),
-            _environment(
-                environment,
-                Path(tempfile.gettempdir()),
-                Path(tempfile.gettempdir()),
-            ),
-            64 * 1024,
-        )
-    except ControllerLaunchError as error:
-        raise CodexControllerError("CONTROLLER_VERSION_UNAVAILABLE") from error
-    try:
-        return output.decode().strip()
-    except UnicodeDecodeError as error:
-        raise CodexControllerError("CONTROLLER_VERSION_UNAVAILABLE") from error
-
-
 def _runtime_roots(executable: Path) -> tuple[Path, ...]:
     defaults = ssl.get_default_verify_paths()
     candidates = (
@@ -265,12 +247,11 @@ def _read_decision(final: Path, context: ControllerContext) -> ControllerDecisio
         raise CodexControllerError("CONTROLLER_RESULT_INVALID") from error
 
 
-def production_codex(
-    project: Path | None,
-    provider: str,
-    model: str | None,
-) -> CodexControllerBackend:
-    if project is None or provider != "codex":
-        raise CodexControllerError("CONTROLLER_BACKEND_UNAVAILABLE")
-    source = dict(os.environ)
-    return CodexControllerBackend(resolve_codex_executable(source), model, project, source)
+def _raise_provider_error(error: ProviderExecutableError) -> Never:
+    if error.code == "UNSUPPORTED_CODEX_VERSION":
+        raise CodexControllerError("CONTROLLER_VERSION_UNSUPPORTED") from error
+    if error.code == "CODEX_EXECUTABLE_UNAVAILABLE":
+        raise CodexControllerError("CONTROLLER_EXECUTABLE_UNAVAILABLE") from error
+    if error.code == "PROVIDER_VERSION_UNAVAILABLE":
+        raise CodexControllerError("CONTROLLER_VERSION_UNAVAILABLE") from error
+    raise CodexControllerError("CONTROLLER_IMAGE_CHANGED") from error

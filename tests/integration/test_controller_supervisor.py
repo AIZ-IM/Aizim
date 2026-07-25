@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio  # noqa: ANYIO_OK - exercises the asyncio supervisor contract
 import shutil
 from collections.abc import Iterator
+from dataclasses import replace
 from itertools import count
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
 
 import pytest
 
@@ -30,11 +32,13 @@ from aizim.orchestration.controller_backend import (
     RejectDecision,
 )
 from aizim.orchestration.controller_execution import ControllerExecutionError
+from aizim.orchestration.controller_providers import ResolvedControllerRuntime
 from aizim.orchestration.controller_supervisor import (
     ControllerSupervisor,
     ControllerSupervisorDependencies,
 )
 from aizim.orchestration.fake_controller_backend import FakeControllerBackend
+from aizim.runtime.provider_executables import ResolvedExecutable
 from aizim.state import StateService, StateServiceConfig
 from aizim.state.operations import RpcRequest, RpcSuccess
 from aizim.state.rpc import rpc_call
@@ -143,15 +147,79 @@ async def wait_for_status(
 def dependencies(
     controller: FakeControllerBackend,
     worker: RecordingSubmittedBackend,
+    observed: list[tuple[str, object]] | None = None,
 ) -> ControllerSupervisorDependencies:
+    codex = ResolvedExecutable(
+        Path("/opt/aizim-test/codex"),
+        "codex-cli 0.145.0",
+        "a" * 64,
+    )
+    selected = ResolvedExecutable(
+        Path("/opt/aizim-test/claude"),
+        "2.1.218 (Claude Code)",
+        "b" * 64,
+    )
+
+    def resolve_runtime(provider: ControllerProviderId) -> ResolvedControllerRuntime:
+        runtime = ResolvedControllerRuntime(provider, codex, selected)
+        if observed is not None:
+            observed.append(("resolve", runtime))
+        return runtime
+
+    def controller_backend(
+        runtime: ResolvedControllerRuntime,
+        _model: str | None,
+    ) -> FakeControllerBackend:
+        if observed is not None:
+            observed.append(("controller", runtime))
+        return controller
+
+    def worker_backend(executable: ResolvedExecutable) -> RecordingSubmittedBackend:
+        if observed is not None:
+            observed.append(("worker", executable))
+        return worker
+
+    async def worker_preflight(executable: ResolvedExecutable) -> None:
+        if observed is not None:
+            observed.append(("preflight", executable))
+
     return ControllerSupervisorDependencies(
-        controller_backend=lambda _provider, _model: controller,
-        worker_backend=lambda: worker,
-        worker_preflight=lambda: asyncio.sleep(0),
+        resolve_runtime=resolve_runtime,
+        controller_backend=controller_backend,
+        worker_backend=worker_backend,
+        worker_preflight=worker_preflight,
         session_ids=(f"controller-{value:032x}" for value in count(1)).__next__,
         execution_ids=(f"execution-{value:032x}" for value in count(1)).__next__,
         directive_ids=(f"directive-{value:032x}" for value in count(1)).__next__,
     )
+
+
+async def test_supervisor_injects_one_runtime_snapshot_into_every_role(
+    short_tmp: Path,
+) -> None:
+    root, _assignment_id = initialized_assignment(short_tmp)
+    controller = FakeControllerBackend(BlockedDecision("blocked", "NO_SAFE_ACTION"))
+    observed: list[tuple[str, object]] = []
+    supervisor = ControllerSupervisor(
+        root,
+        dependencies(
+            controller,
+            RecordingSubmittedBackend(root),
+            observed,
+        ),
+    )
+
+    supervisor.request_stop()
+    await supervisor.run()
+
+    runtime = cast(ResolvedControllerRuntime, observed[0][1])
+    assert type(runtime) is ResolvedControllerRuntime
+    assert observed == [
+        ("resolve", runtime),
+        ("controller", runtime),
+        ("preflight", runtime.codex),
+        ("worker", runtime.codex),
+    ]
 
 
 async def test_completed_assignment_is_not_dispatched_after_restart(
@@ -268,7 +336,7 @@ async def test_startup_guard_happens_before_claim(
     )
     injected = dependencies(controller, RecordingSubmittedBackend(root))
 
-    async def guard_preflight() -> None:
+    async def guard_preflight(_executable: ResolvedExecutable | None = None) -> None:
         if guard == "provider":
             raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
         result = await rpc_call(
@@ -284,14 +352,7 @@ async def test_startup_guard_happens_before_claim(
     if guard == "provider":
         monkeypatch.setattr(controller, "preflight", guard_preflight)
     else:
-        injected = ControllerSupervisorDependencies(
-            injected.controller_backend,
-            injected.worker_backend,
-            guard_preflight,
-            injected.session_ids,
-            injected.execution_ids,
-            injected.directive_ids,
-        )
+        injected = replace(injected, worker_preflight=guard_preflight)
 
     # When / Then
     with pytest.raises(expected):

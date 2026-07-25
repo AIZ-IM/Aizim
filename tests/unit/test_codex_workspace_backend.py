@@ -13,6 +13,7 @@ from aizim.orchestration.codex_worker import (
     project_view_sources,
     proof_instruction,
 )
+from aizim.runtime.provider_executables import ResolvedExecutable
 
 
 class RecordingBackend:
@@ -59,6 +60,14 @@ def _executable(path: Path, output: str = "codex-cli 0.145.0") -> Path:
     path.write_text(f"#!/bin/sh\nprintf '%s\\n' '{output}'\n")
     path.chmod(0o755)
     return path
+
+
+def _descriptor(path: Path) -> ResolvedExecutable:
+    return ResolvedExecutable(
+        path.resolve(),
+        "codex-cli 0.145.0",
+        sha256_file(path),
+    )
 
 
 def _npm_environment(codex: Path, claude: Path, path: str) -> dict[str, str]:
@@ -158,20 +167,15 @@ def test_backend_identity_uses_injected_codex_despite_global_path_drift(
     wrong_bin.mkdir()
     _executable(wrong_bin / "codex").write_text("#!/bin/sh\nprintf 'wrong\\n'\n")
     sidecar = _executable(tmp_path / "aizim-gateway-sidecar")
-    developer = tmp_path / "developer"
-    developer.mkdir()
     monkeypatch.setattr(codex_worker, "_sidecar_executable", lambda: sidecar)
-    monkeypatch.setattr(
-        codex_worker,
-        "host_command_output",
-        lambda argv: str(developer)
-        if argv == ("/usr/bin/xcode-select", "-p")
-        else "codex-cli 0.145.0",
-    )
 
-    first = create_codex_backend(_npm_environment(injected, claude, str(wrong_bin)))
+    first = create_codex_backend(
+        _descriptor(injected),
+        _npm_environment(injected, claude, str(wrong_bin)),
+    )
     second = create_codex_backend(
-        _npm_environment(injected, claude, "/different/global/path")
+        _descriptor(injected),
+        _npm_environment(injected, claude, "/different/global/path"),
     )
 
     assert first.identity.executable_sha256 == sha256_file(injected)

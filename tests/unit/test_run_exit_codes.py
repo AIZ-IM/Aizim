@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import cast
 
 import pytest
 
+from aizim.agents import CodexBackend
 from aizim.agents.codex_backend import CodexBackendError
 from aizim.agents.macos_sandbox import SandboxHostError
 from aizim.config.model import ConfigError
@@ -15,6 +17,7 @@ from aizim.orchestration.promotion_consumer import PromotionConsumerError
 from aizim.orchestration.resources import ResourcePolicyError
 from aizim.orchestration.runner import RunFailureCategory, _run_exit_code
 from aizim.orchestration.worker import WorkerExecutionError
+from aizim.runtime.provider_executables import ResolvedExecutable
 from aizim.state.service import StateServiceLifecycleError
 
 
@@ -66,3 +69,37 @@ def test_synchronous_run_boundary_returns_the_mapped_failure_code(
 
     assert runner.run_autonomous_shared(Path("."), "codex") == category
     assert capsys.readouterr().err == "aizim run: autonomous-shared run failed\n"
+
+
+def test_direct_codex_run_passes_the_single_resolved_descriptor_to_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    descriptor = ResolvedExecutable(
+        Path("/opt/aizim-test/codex"),
+        "codex-cli 0.145.0",
+        "a" * 64,
+    )
+    backend = cast(CodexBackend, object())
+    resolutions: list[dict[str, str]] = []
+    constructions: list[tuple[ResolvedExecutable, dict[str, str]]] = []
+
+    def resolve(environment: dict[str, str]) -> ResolvedExecutable:
+        resolutions.append(environment)
+        if len(resolutions) > 1:
+            raise AssertionError("ambient Codex was resolved more than once")
+        return descriptor
+
+    def create(
+        executable: ResolvedExecutable,
+        environment: dict[str, str],
+    ) -> CodexBackend:
+        constructions.append((executable, environment))
+        return backend
+
+    monkeypatch.setattr(runner, "resolve_codex", resolve)
+    monkeypatch.setattr(runner, "create_codex_backend", create)
+    environment = {"PATH": "/external/bin"}
+
+    assert runner._create_external_codex_backend(environment) is backend
+    assert resolutions == [environment]
+    assert constructions == [(descriptor, environment)]

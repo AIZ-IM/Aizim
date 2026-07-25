@@ -19,6 +19,7 @@ from aizim.agents.launcher import AgentLaunchError, CodexLaunchOutcome, launch_c
 from aizim.agents.macos_profile import compile_macos_profile
 from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
 from aizim.domain import AgentRole, sha256_file
+from aizim.runtime.provider_executables import ResolvedExecutable
 
 
 def request(tmp_path: Path, *, model: str | None = "gpt-5.2-codex") -> AgentRequest:
@@ -143,9 +144,7 @@ def test_alignment_request_uses_a_closed_verdict_schema(tmp_path: Path) -> None:
     )
     schema = json.loads(launch.output_schema_path.read_text())
 
-    assert launch.argv[launch.argv.index("--output-schema") + 1] == str(
-        launch.output_schema_path
-    )
+    assert launch.argv[launch.argv.index("--output-schema") + 1] == str(launch.output_schema_path)
     assert launch.output_schema_path.name == "codex_alignment_result.schema.json"
     assert schema["required"] == ["status", "summary"]
     assert schema["additionalProperties"] is False
@@ -239,7 +238,11 @@ async def test_codex_backend_has_verified_identity_and_always_finalizes(
 
     base = sandbox_spec(agent_request)
     dependencies = CodexBackendDependencies(
-        codex_executable=executable,
+        codex_executable=ResolvedExecutable(
+            executable.resolve(),
+            "codex-cli 0.145.0",
+            sha256_file(executable),
+        ),
         codex_version=lambda _path: "codex-cli 0.145.0",
         sandbox=lambda _request: replace(base, argv=(str(executable), *base.argv[1:])),
         sidecar_executable=Path("/opt/aizim/bin/aizim-gateway-sidecar"),

@@ -7,10 +7,11 @@ import sys
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
+from typing import cast
 
 import pytest
 
-from aizim.agents.sandbox import ProbeOperation
+from aizim.agents.sandbox import ProbeOperation, ProbeReport, ProbeRequest
 from aizim.cli import security_probe_command
 from aizim.domain.serialization import JsonValue
 from aizim.gateway import (
@@ -22,7 +23,12 @@ from aizim.gateway import (
 )
 from aizim.gateway.authority_probe import AuthorityProbeError, run_authority_probe
 from aizim.runtime.layout import ProjectLayout
-from aizim.security_gate import run_security_gate
+from aizim.runtime.provider_executables import resolve_codex
+from aizim.security_gate import (
+    SecurityGateError,
+    _launch_attested_probe,
+    run_security_gate,
+)
 from aizim.state import StateService, StateServiceConfig
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "attack_probe_project"
@@ -104,6 +110,47 @@ def test_authority_probe_revokes_capability_after_unexpected_dispatch(
         record = state.capability_record(sha256(raw_token.encode()).hexdigest())
         assert record is not None
         assert record.revoked_at is not None
+
+
+async def test_security_probe_revalidates_the_resolved_codex_image(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binary = tmp_path / "codex"
+    binary.write_text("#!/bin/sh\nprintf 'codex-cli 0.145.0\\n'\n")
+    binary.chmod(0o755)
+    environment = {
+        "AIZIM_CODEX_EXECUTABLE": str(binary),
+        "PATH": "",
+    }
+    executable = resolve_codex(environment)
+
+    class ReplacingAdapter:
+        async def launch_probe(self, _request: ProbeRequest) -> ProbeReport:
+            binary.write_text("#!/bin/sh\nprintf 'codex-cli 0.145.0\\n'\n# replaced\n")
+            return ProbeReport(
+                "darwin",
+                True,
+                "codex-cli 0.145.0",
+                "/usr/bin/sandbox-exec",
+                "a" * 64,
+                (),
+                (),
+                "b" * 64,
+                "b" * 64,
+            )
+
+    monkeypatch.setattr(
+        "aizim.security_gate.sandbox_adapter",
+        lambda _path: ReplacingAdapter(),
+    )
+
+    with pytest.raises(SecurityGateError, match=r"^CODEX_IMAGE_CHANGED$"):
+        await _launch_attested_probe(
+            executable,
+            environment,
+            cast(ProbeRequest, object()),
+        )
 
 
 @pytest.mark.macos_sandbox

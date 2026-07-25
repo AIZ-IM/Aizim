@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from aizim.agents.launcher import AgentLaunchError, HostCommandSpec, run_host_command
 from aizim.domain import sha256_file
 
 CODEX_VERSIONS: Final = frozenset({"codex-cli 0.145.0"})
@@ -213,6 +212,12 @@ def _canonical_executable(path: Path, code: str) -> Path:
 
 
 def _version(path: Path, environ: Mapping[str, str]) -> str:
+    from aizim.agents.launcher import (
+        AgentLaunchError,
+        HostCommandSpec,
+        run_host_command,
+    )
+
     environment = {name: environ[name] for name in _VERSION_ENVIRONMENT if name in environ}
     try:
         outcome = run_host_command(

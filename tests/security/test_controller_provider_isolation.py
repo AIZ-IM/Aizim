@@ -25,6 +25,7 @@ from aizim.orchestration.controller_process import (
     ControllerLaunchSpec,
     launch_controller_process,
 )
+from aizim.runtime.provider_executables import ResolvedExecutable
 
 CODEX = ControllerProviderId("codex")
 CLAUDE = ControllerProviderId("claude")
@@ -66,6 +67,16 @@ def executable(tmp_path: Path, provider: ControllerProviderId = CODEX) -> Path:
         bwrap.write_text("#!/bin/sh\nexit 0\n")
         bwrap.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     return path.resolve()
+
+
+def descriptor(path: Path, provider: ControllerProviderId) -> ResolvedExecutable:
+    canonical = path.resolve()
+    version = "codex-cli 0.145.0" if provider == CODEX else "2.1.218 (Claude Code)"
+    return ResolvedExecutable(
+        canonical,
+        version,
+        hashlib.sha256(canonical.read_bytes()).hexdigest(),
+    )
 
 
 def controller_context(timeout: float = 5.0) -> ControllerContext:
@@ -118,7 +129,7 @@ async def test_backend_constructor_discovers_version_inside_running_loop(
     project = tmp_path / "project"
     project.mkdir()
 
-    backend = CodexControllerBackend(binary, None, project, {})
+    backend = CodexControllerBackend(descriptor(binary, CODEX), None, project, {})
 
     assert backend.identity.version == "codex-cli 0.145.0"
 
@@ -184,10 +195,21 @@ async def test_controller_provider_cannot_observe_project_or_authority_secrets(
     match provider.value:
         case "codex":
             backend: ControllerBackend = CodexControllerBackend(
-                binary, None, project, environment, launch
+                descriptor(binary, CODEX),
+                None,
+                project,
+                environment,
+                launch,
             )
         case "claude":
-            backend = ClaudeControllerBackend(binary, None, project, environment, launch)
+            backend = ClaudeControllerBackend(
+                descriptor(binary, CLAUDE),
+                descriptor(codex, CODEX),
+                None,
+                project,
+                environment,
+                launch,
+            )
         case _:
             raise AssertionError("unexpected test provider")
     await backend.plan(controller_context())
@@ -226,7 +248,11 @@ async def test_worker_preflight_compiles_private_probe_without_model(
     project.mkdir()
     binary = executable(tmp_path)
 
-    await preflight_codex_worker(project, {"PATH": str(binary.parent)})
+    await preflight_codex_worker(
+        project,
+        descriptor(binary, CODEX),
+        {"PATH": str(binary.parent)},
+    )
 
     assert not tuple(tmp_path.glob("aizim-worker-*"))
 
@@ -251,7 +277,12 @@ async def test_claude_timeout_reaps_process(
         lambda _executable: PassthroughSandbox(),
     )
     backend = ClaudeControllerBackend(
-        claude, None, project, {"PATH": str(claude.parent)}, launch_controller_process
+        descriptor(claude, CLAUDE),
+        descriptor(_codex, CODEX),
+        None,
+        project,
+        {"PATH": str(claude.parent)},
+        launch_controller_process,
     )
 
     with pytest.raises(TimeoutError):
@@ -299,7 +330,14 @@ async def test_real_outer_sandbox_runs_secret_safe_fake_claude(tmp_path: Path) -
         assert all(secret not in rendered for secret in secrets)
         return await launch_controller_process(spec)
 
-    backend = ClaudeControllerBackend(binary, None, project, environment, launch)
+    backend = ClaudeControllerBackend(
+        descriptor(binary, CLAUDE),
+        descriptor(codex, CODEX),
+        None,
+        project,
+        environment,
+        launch,
+    )
 
     decision = await backend.plan(controller_context())
     assert decision == BlockedDecision("blocked", "NO_SAFE_ACTION")

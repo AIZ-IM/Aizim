@@ -31,6 +31,7 @@ from aizim.orchestration.controller_execution import (
     record_dispatch_planned,
 )
 from aizim.orchestration.controller_lifecycle import start_controller
+from aizim.orchestration.controller_providers import ResolvedControllerRuntime
 from aizim.orchestration.controller_supervisor import (
     ControllerSupervisor as Supervisor,
 )
@@ -38,6 +39,7 @@ from aizim.orchestration.controller_supervisor import (
     ControllerSupervisorDependencies as SupervisorDeps,
 )
 from aizim.orchestration.fake_controller_backend import FakeControllerBackend as Controller
+from aizim.runtime.provider_executables import ResolvedExecutable
 from aizim.state import (
     StateService,
 )
@@ -93,10 +95,20 @@ def dependencies(
     controller: Controller,
     worker: WorkerBackend,
 ) -> SupervisorDeps:
+    codex = ResolvedExecutable(
+        Path("/opt/aizim-test/codex"),
+        "codex-cli 0.145.0",
+        "a" * 64,
+    )
     return SupervisorDeps(
-        controller_backend=lambda _provider, _model: controller,
-        worker_backend=lambda: worker,
-        worker_preflight=lambda: asyncio.sleep(0),
+        resolve_runtime=lambda provider: ResolvedControllerRuntime(
+            provider,
+            codex,
+            codex,
+        ),
+        controller_backend=lambda _runtime, _model: controller,
+        worker_backend=lambda _executable: worker,
+        worker_preflight=lambda _executable: asyncio.sleep(0),
         session_ids=(f"controller-{value:032x}" for value in count(1)).__next__,
         execution_ids=(f"execution-{value:032x}" for value in count(1)).__next__,
         directive_ids=(f"directive-{value:032x}" for value in count(1)).__next__,

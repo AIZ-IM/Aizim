@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK - composes existing asyncio RPC and worker lifecycles
+import os
 import re
 import secrets
 import shutil
@@ -17,7 +18,8 @@ from aizim.lean.broker_knowledge import current_epoch
 from aizim.lean.models import DocumentBrokerError
 from aizim.orchestration.codex_worker import create_codex_backend, preflight_codex_worker
 from aizim.runtime.layout import ProjectLayout
-from aizim.runtime.state_process import StateProcessOwnership, acquire_state_process
+from aizim.runtime.provider_executables import ResolvedExecutable
+from aizim.runtime.state_process import acquire_state_process
 from aizim.state import StateDependencies, StateService, StateServiceConfig
 
 from .controller_backend import ControllerBackend
@@ -26,7 +28,6 @@ from .controller_dispatcher import (
     ControllerDispatcherDependencies,
     ControllerRun,
     prepare_next,
-    record_controller_stop,
     unavailable_worker_preflight,
 )
 from .controller_execution import (
@@ -39,15 +40,22 @@ from .controller_lifecycle import (
     recover_unclean_controller,
     start_controller,
 )
-from .controller_providers import production_controller
+from .controller_providers import (
+    ControllerProviderRegistryError,
+    ResolvedControllerRuntime,
+    build_controller_backend,
+    resolve_controller_runtime,
+)
 from .resources import ResourceGovernor
+from .supervisor_cleanup import finalize_controller, unavailable_controller
 
 
 @dataclass(frozen=True, slots=True)
 class ControllerSupervisorDependencies:
-    controller_backend: Callable[[ControllerProviderId, str | None], ControllerBackend]
-    worker_backend: Callable[[], AgentBackend]
-    worker_preflight: Callable[[], Awaitable[None]]
+    resolve_runtime: Callable[[ControllerProviderId], ResolvedControllerRuntime]
+    controller_backend: Callable[[ResolvedControllerRuntime, str | None], ControllerBackend]
+    worker_backend: Callable[[ResolvedExecutable], AgentBackend]
+    worker_preflight: Callable[[ResolvedExecutable], Awaitable[None]]
     session_ids: Callable[[], str]
     execution_ids: Callable[[], str]
     directive_ids: Callable[[], str]
@@ -97,7 +105,11 @@ class ControllerSupervisor:
             controller_model = _payload(configured).get("model")
             if controller_model is not None and type(controller_model) is not str:
                 raise ControllerExecutionError("CONTROLLER_MODEL_INVALID")
-            controller = self._dependencies.controller_backend(provider, controller_model)
+            try:
+                runtime = self._dependencies.resolve_runtime(provider)
+            except ControllerProviderRegistryError as error:
+                raise ControllerExecutionError(error.code) from error
+            controller = self._dependencies.controller_backend(runtime, controller_model)
             initial_run = self._snapshot(state, configured.version, session_id)
             if config.model is None:
                 raise ControllerExecutionError("WORKER_MODEL_REQUIRED")
@@ -109,7 +121,7 @@ class ControllerSupervisor:
             )
             try:
                 await controller.preflight()
-                await self._dependencies.worker_preflight()
+                await self._dependencies.worker_preflight(runtime.codex)
                 governor.validate(layout.root, config.run.lean_runtime)
             except Exception:  # noqa: BROAD_EXCEPT_OK - readiness boundary
                 stop_reason = "PREFLIGHT_FAILED"
@@ -129,7 +141,7 @@ class ControllerSupervisor:
                     layout.root,
                     config.model,
                     governor,
-                    self._dependencies.worker_backend(),
+                    self._dependencies.worker_backend(runtime.codex),
                     controller,
                 )
             )
@@ -142,7 +154,7 @@ class ControllerSupervisor:
             raise
         finally:
             cleanup = asyncio.create_task(
-                _finalize(state, ownership, (started, session_id, stop_reason))
+                finalize_controller(state, ownership, (started, session_id, stop_reason))
             )
             try:
                 interruption = await await_cleanup(cleanup)
@@ -229,36 +241,24 @@ class ControllerSupervisor:
             raise ControllerExecutionError("TRUSTED_ID_INVALID")
         return value
 
-
-async def _finalize(
-    state: StateService | None,
-    ownership: StateProcessOwnership,
-    details: tuple[bool, str, str],
-) -> None:
-    started, session_id, reason_code = details
-    try:
-        if state is not None:
-            try:
-                if started:
-                    record_controller_stop(state, session_id, reason_code)
-            finally:
-                try:
-                    state.checkpoint()
-                finally:
-                    await state.aclose()
-    finally:
-        ownership.close()
-
-
 def _default_dependencies(project: Path | None = None) -> ControllerSupervisorDependencies:
+    environment = dict(os.environ)
+
+    async def worker_preflight(executable: ResolvedExecutable) -> None:
+        if project is None:
+            await unavailable_worker_preflight()
+        else:
+            await preflight_codex_worker(project, executable, environment)
+
     return ControllerSupervisorDependencies(
-        controller_backend=lambda provider, model: production_controller(project, provider, model),
-        worker_backend=create_codex_backend,
-        worker_preflight=(
-            unavailable_worker_preflight
-            if project is None
-            else lambda: preflight_codex_worker(project)
+        resolve_runtime=lambda provider: resolve_controller_runtime(provider, environment),
+        controller_backend=lambda runtime, model: (
+            build_controller_backend(runtime, project, model, environment)
+            if project is not None
+            else unavailable_controller()
         ),
+        worker_backend=lambda executable: create_codex_backend(executable, environment),
+        worker_preflight=worker_preflight,
         session_ids=lambda: f"controller-{secrets.token_hex(16)}",
         execution_ids=lambda: f"execution-{secrets.token_hex(16)}",
         directive_ids=lambda: f"directive-{secrets.token_hex(16)}",

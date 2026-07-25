@@ -17,16 +17,17 @@ from aizim.agents import (
     WorkspaceViewBuilder,
 )
 from aizim.agents.launcher import launch_codex
-from aizim.agents.macos_sandbox import SandboxHostError, host_command_output
+from aizim.agents.macos_sandbox import SandboxHostError
 from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import SandboxRequest
 from aizim.domain import sha256_file
-from aizim.runtime.distribution import (
-    DistributionError,
-    resolve_codex_executable,
-    without_distribution_environment,
+from aizim.runtime.distribution import without_distribution_environment
+from aizim.runtime.provider_executables import (
+    ProviderExecutableError,
+    ResolvedExecutable,
+    codex_runtime_root,
+    revalidate_codex,
 )
-from aizim.runtime.provider_executables import codex_runtime_root
 
 from .controller_process import private_workspace
 from .run_identity import candidate_name, contribution_id
@@ -78,16 +79,27 @@ class CodexWorkspaceBackend:
             workspace.close()
 
 
-def create_codex_backend(parent_environment: Mapping[str, str] | None = None) -> CodexBackend:
+def create_codex_backend(
+    executable: ResolvedExecutable,
+    parent_environment: Mapping[str, str] | None = None,
+) -> CodexBackend:
     source_environment = dict(os.environ if parent_environment is None else parent_environment)
     try:
-        executable = resolve_codex_executable(source_environment)
-    except DistributionError as error:
+        revalidate_codex(executable, source_environment)
+    except ProviderExecutableError as error:
         raise CodexWorkerError(error.code) from error
+    path = executable.path
     sidecar = _sidecar_executable()
     environment = without_distribution_environment(source_environment)
-    sandbox = sandbox_adapter(executable)
-    runtime_read_roots = _runtime_read_roots(executable)
+    sandbox = sandbox_adapter(path)
+    runtime_read_roots = _runtime_read_roots(path)
+
+    def codex_version(_path: Path) -> str:
+        try:
+            revalidate_codex(executable, source_environment)
+        except ProviderExecutableError as error:
+            raise CodexWorkerError(error.code) from error
+        return executable.version
 
     def compile_sandbox(request: AgentRequest):
         return sandbox.compile(
@@ -95,7 +107,7 @@ def create_codex_backend(parent_environment: Mapping[str, str] | None = None) ->
                 _canonical_project(request),
                 request.view_root,
                 request.scratch_root,
-                (str(executable),),
+                (str(path),),
                 environment,
                 runtime_read_roots,
             )
@@ -104,7 +116,7 @@ def create_codex_backend(parent_environment: Mapping[str, str] | None = None) ->
     return CodexBackend(
         CodexBackendDependencies(
             executable,
-            _codex_version,
+            codex_version,
             compile_sandbox,
             sidecar,
             launch_codex,
@@ -116,31 +128,32 @@ def create_codex_backend(parent_environment: Mapping[str, str] | None = None) ->
 
 async def preflight_codex_worker(
     project_root: Path,
+    executable: ResolvedExecutable,
     parent_environment: Mapping[str, str] | None = None,
 ) -> None:
     source = dict(os.environ if parent_environment is None else parent_environment)
     try:
-        executable = resolve_codex_executable(source)
-    except DistributionError as error:
-        raise CodexWorkerError("CODEX_EXECUTABLE_UNAVAILABLE") from error
-    image_hash = sha256_file(executable)
-    if _codex_version(executable) != "codex-cli 0.145.0":
-        raise CodexWorkerError("UNSUPPORTED_CODEX_VERSION")
+        revalidate_codex(executable, source)
+    except ProviderExecutableError as error:
+        raise CodexWorkerError(error.code) from error
+    path = executable.path
     with private_workspace("aizim-worker-") as (_private, view, scratch):
         request = SandboxRequest(
             project_root,
             view,
             scratch,
-            (str(executable),),
+            (str(path),),
             without_distribution_environment(source),
-            _runtime_read_roots(executable),
+            _runtime_read_roots(path),
         )
         try:
-            sandbox_adapter(executable).compile(request)
+            sandbox_adapter(path).compile(request)
         except (SandboxHostError, ValueError) as error:
             raise CodexWorkerError("WORKER_SANDBOX_UNAVAILABLE") from error
-        if sha256_file(executable) != image_hash:
-            raise CodexWorkerError("CODEX_IMAGE_CHANGED")
+        try:
+            revalidate_codex(executable, source)
+        except ProviderExecutableError as error:
+            raise CodexWorkerError(error.code) from error
 
 
 def _runtime_read_roots(executable: Path) -> tuple[Path, ...]:
@@ -258,13 +271,6 @@ def _sidecar_executable() -> Path:
     if not sidecar.is_file() or not os.access(sidecar, os.X_OK):
         raise CodexWorkerError("SIDECAR_EXECUTABLE_UNAVAILABLE")
     return sidecar
-
-
-def _codex_version(executable: Path) -> str:
-    try:
-        return host_command_output((str(executable), "--version"))
-    except SandboxHostError as error:
-        raise CodexWorkerError("CODEX_HOST_COMMAND_FAILED") from error
 
 
 def _canonical_project(request: AgentRequest) -> Path:

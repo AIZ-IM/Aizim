@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import secrets
 import shutil
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from aizim.agents import BackendIdentity, CodexBackend
@@ -24,6 +26,7 @@ from aizim.modes.manifest import (
     write_named_artifact,
 )
 from aizim.runtime.layout import ProjectLayout
+from aizim.runtime.provider_executables import resolve_codex
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 from aizim.state.events import utc_now
 
@@ -77,7 +80,7 @@ async def _run(project: Path, backend: str) -> tuple[AizimConfig, SharedRunResul
         else:
             if config.model is None:
                 raise RunError("MODEL_REQUIRED")
-            real_backend = create_codex_backend()
+            real_backend = _create_external_codex_backend(dict(os.environ))
             codex_backend = real_backend
             backend_identity = real_backend.identity
             model_identifier = config.model
@@ -136,14 +139,17 @@ async def _run(project: Path, backend: str) -> tuple[AizimConfig, SharedRunResul
             if verdict != "aligned":
                 abort_for_alignment(state, run_id)
                 _record_evaluation_artifacts(state, layout.root, policy, result, manifest_input)
-                raise RunError(
-                    "ALIGNMENT_AUDIT_FAILED", RunFailureCategory.LEAN_VERIFICATION
-                )
+                raise RunError("ALIGNMENT_AUDIT_FAILED", RunFailureCategory.LEAN_VERIFICATION)
             record_completion(state, run_id)
         _record_evaluation_artifacts(state, layout.root, policy, result, manifest_input)
     finally:
         state.close()
     return config, result
+
+
+def _create_external_codex_backend(environ: Mapping[str, str]) -> CodexBackend:
+    executable = resolve_codex(environ)
+    return create_codex_backend(executable, environ)
 
 
 def _initialize(state: StateService, project_root: Path) -> None:

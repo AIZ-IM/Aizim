@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 import aizim.orchestration.controller_supervisor as supervisor_module
+import aizim.orchestration.supervisor_cleanup as cleanup_module
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
 from aizim.cli.init_command import run_init
 from aizim.domain import AgentRole, ControllerProviderId, sha256_bytes, sha256_json
@@ -24,6 +25,10 @@ from aizim.orchestration.control_plane import (
 )
 from aizim.orchestration.controller_backend import BlockedDecision
 from aizim.orchestration.controller_execution import ControllerExecutionError
+from aizim.orchestration.controller_providers import (
+    ControllerProviderRegistryError,
+    ResolvedControllerRuntime,
+)
 from aizim.orchestration.controller_supervisor import (
     ControllerSupervisor,
     ControllerSupervisorDependencies,
@@ -31,6 +36,7 @@ from aizim.orchestration.controller_supervisor import (
 )
 from aizim.orchestration.fake_controller_backend import FakeControllerBackend
 from aizim.runtime.layout import ProjectLayout
+from aizim.runtime.provider_executables import ResolvedExecutable
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
@@ -90,10 +96,20 @@ def initialized(tmp_path: Path, identities: int) -> tuple[Path, str]:
 
 def dependencies(controller: FakeControllerBackend) -> ControllerSupervisorDependencies:
     worker = UnusedWorker()
+    codex = ResolvedExecutable(
+        Path("/opt/aizim-test/codex"),
+        "codex-cli 0.145.0",
+        "a" * 64,
+    )
     return ControllerSupervisorDependencies(
-        controller_backend=lambda _provider, _model: controller,
-        worker_backend=lambda: worker,
-        worker_preflight=lambda: asyncio.sleep(0),
+        resolve_runtime=lambda provider: ResolvedControllerRuntime(
+            provider,
+            codex,
+            codex,
+        ),
+        controller_backend=lambda _runtime, _model: controller,
+        worker_backend=lambda _executable: worker,
+        worker_preflight=lambda _executable: asyncio.sleep(0),
         session_ids=(f"controller-{value:032x}" for value in count(1)).__next__,
         execution_ids=(f"execution-{value:032x}" for value in count(1)).__next__,
         directive_ids=(f"directive-{value:032x}" for value in count(1)).__next__,
@@ -145,6 +161,36 @@ async def test_supervisor_uses_evolved_current_epoch(short_tmp: Path) -> None:
         assert b'"reason_code":"CONTROLLER_BLOCKED"' in execution.state_json
 
 
+async def test_unsupported_persisted_provider_fails_before_controller_start(
+    short_tmp: Path,
+) -> None:
+    root, _assignment_id = initialized(short_tmp, 1)
+    with StateService(StateServiceConfig(root, "future-provider")) as state:
+        configure_controller(
+            state,
+            ControllerProviderId("future_provider-1"),
+            None,
+        )
+    controller = FakeControllerBackend(BlockedDecision("blocked", "NO_SAFE_ACTION"))
+    injected = dependencies(controller)
+
+    def unsupported(
+        _provider: ControllerProviderId,
+    ) -> ResolvedControllerRuntime:
+        raise ControllerProviderRegistryError("CONTROLLER_PROVIDER_UNSUPPORTED")
+
+    injected = replace(injected, resolve_runtime=unsupported)
+
+    with pytest.raises(
+        ControllerExecutionError,
+        match=r"^CONTROLLER_PROVIDER_UNSUPPORTED$",
+    ):
+        await ControllerSupervisor(root, injected).run()
+
+    with StateService(StateServiceConfig(root, "future-provider-inspect")) as state:
+        assert state.query_projection("controller_runtime", "primary") is None
+
+
 @pytest.mark.parametrize(
     ("guard", "code"),
     [
@@ -177,7 +223,7 @@ async def test_guards_precede_claim_and_cleanup(
             worker_backend=injected.worker_backend,
         )
         monkeypatch.setattr(
-            supervisor_module,
+            cleanup_module,
             "record_controller_stop",
             lambda *_args: (_ for _ in ()).throw(ControllerExecutionError("STOP_FAILED")),
         )

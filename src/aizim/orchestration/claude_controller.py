@@ -5,10 +5,9 @@ import os
 import shutil
 import ssl
 import stat
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final
+from typing import Final, Never
 
 from aizim.agents import BackendIdentity
 from aizim.agents.macos_sandbox import SandboxHostError
@@ -16,9 +15,12 @@ from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import ProviderEnvironmentPolicy, SandboxRequest
 from aizim.domain import canonical_json, sha256_file
 from aizim.domain.serialization import JsonValue
-from aizim.runtime.distribution import DistributionError
-from aizim.runtime.distribution import resolve_claude_executable as resolve_claude
-from aizim.runtime.distribution import resolve_codex_executable as resolve_codex
+from aizim.runtime.provider_executables import (
+    ProviderExecutableError,
+    ResolvedExecutable,
+    revalidate_claude,
+    revalidate_codex,
+)
 
 from . import controller_backend as cb
 from . import controller_process as process
@@ -48,13 +50,23 @@ class ClaudeControllerError(RuntimeError):
 class ClaudeControllerBackend:
     def __init__(
         self,
-        executable: Path,
+        executable: ResolvedExecutable,
+        sandbox_codex: ResolvedExecutable,
         model: str | None,
         project_root: Path,
         parent_environment: Mapping[str, str],
         launch: process.ControllerLauncher = process.launch_controller_process,
     ) -> None:
-        self._executable = _canonical_executable(executable)
+        try:
+            revalidate_claude(executable, parent_environment)
+        except ProviderExecutableError as error:
+            _raise_provider_error(error)
+        try:
+            revalidate_codex(sandbox_codex, parent_environment)
+        except ProviderExecutableError as error:
+            raise ClaudeControllerError("CONTROLLER_SANDBOX_UNAVAILABLE") from error
+        self._descriptor = executable
+        self._executable = executable.path
         self._project = _canonical_project(project_root)
         if model is not None and (type(model) is not str or not model):
             raise ClaudeControllerError("CONTROLLER_MODEL_INVALID")
@@ -63,16 +75,10 @@ class ClaudeControllerBackend:
             dict(parent_environment),
             launch,
         )
-        try:
-            self._sandbox_executable = resolve_codex(self._source_environment)
-        except DistributionError as error:
-            raise ClaudeControllerError("CONTROLLER_SANDBOX_UNAVAILABLE") from error
-        self._sandbox_hash = sha256_file(self._sandbox_executable)
-        version = _version(self._executable, self._source_environment)
-        if version != "2.1.218 (Claude Code)":
-            raise ClaudeControllerError("CONTROLLER_VERSION_UNSUPPORTED")
-        self._image_hash = sha256_file(self._executable)
-        self._identity = BackendIdentity("claude", version, self._image_hash)
+        self._sandbox_descriptor = sandbox_codex
+        self._sandbox_executable = sandbox_codex.path
+        self._image_hash = executable.sha256
+        self._identity = BackendIdentity("claude", executable.version, executable.sha256)
 
     @property
     def identity(self) -> BackendIdentity:
@@ -143,8 +149,10 @@ class ClaudeControllerBackend:
             _runtime_roots(runtime_executable),
             ProviderEnvironmentPolicy.FILTERED_PARENT,
         )
-        if sha256_file(_canonical_executable(self._sandbox_executable)) != self._sandbox_hash:
-            raise ClaudeControllerError("CONTROLLER_SANDBOX_CHANGED")
+        try:
+            revalidate_codex(self._sandbox_descriptor, self._source_environment)
+        except ProviderExecutableError as error:
+            raise ClaudeControllerError("CONTROLLER_SANDBOX_CHANGED") from error
         try:
             spec = sandbox_adapter(self._sandbox_executable).compile(request)
         except (OSError, ValueError, SandboxHostError) as error:
@@ -163,11 +171,10 @@ class ClaudeControllerBackend:
         )
 
     def _validate_image(self) -> None:
-        executable = _canonical_executable(self._executable)
-        if executable != self._executable or sha256_file(executable) != self._image_hash:
-            raise ClaudeControllerError("CONTROLLER_IMAGE_CHANGED")
-        if _version(executable, self._source_environment) != "2.1.218 (Claude Code)":
-            raise ClaudeControllerError("CONTROLLER_VERSION_UNSUPPORTED")
+        try:
+            revalidate_claude(self._descriptor, self._source_environment)
+        except ProviderExecutableError as error:
+            _raise_provider_error(error)
 
 
 def _environment(source: Mapping[str, str], home: Path, scratch: Path) -> dict[str, str]:
@@ -209,22 +216,6 @@ def _canonical_project(path: Path) -> Path:
     return resolved
 
 
-def _version(executable: Path, environment: Mapping[str, str]) -> str:
-    try:
-        temporary = Path(tempfile.gettempdir())
-        output = process.run_controller_host_command(
-            (str(executable), "--version"),
-            _environment(environment, temporary, temporary),
-            64 * 1024,
-        )
-    except process.ControllerLaunchError as error:
-        raise ClaudeControllerError("CONTROLLER_VERSION_UNAVAILABLE") from error
-    try:
-        return output.decode().strip()
-    except UnicodeDecodeError as error:
-        raise ClaudeControllerError("CONTROLLER_VERSION_UNAVAILABLE") from error
-
-
 def _runtime_roots(executable: Path) -> tuple[Path, ...]:
     defaults = ssl.get_default_verify_paths()
     candidates = (
@@ -259,8 +250,11 @@ def _unique_json_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonVal
     return value
 
 
-def production_claude(project: Path | None, model: str | None) -> ClaudeControllerBackend:
-    if project is None:
-        raise ClaudeControllerError("CONTROLLER_BACKEND_UNAVAILABLE")
-    source = dict(os.environ)
-    return ClaudeControllerBackend(resolve_claude(source), model, project, source)
+def _raise_provider_error(error: ProviderExecutableError) -> Never:
+    if error.code == "CONTROLLER_VERSION_UNSUPPORTED":
+        raise ClaudeControllerError(error.code) from error
+    if error.code == "CLAUDE_EXECUTABLE_UNAVAILABLE":
+        raise ClaudeControllerError("CONTROLLER_EXECUTABLE_UNAVAILABLE") from error
+    if error.code == "PROVIDER_VERSION_UNAVAILABLE":
+        raise ClaudeControllerError("CONTROLLER_VERSION_UNAVAILABLE") from error
+    raise ClaudeControllerError("CONTROLLER_IMAGE_CHANGED") from error

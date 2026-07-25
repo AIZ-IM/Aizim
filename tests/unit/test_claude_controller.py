@@ -27,6 +27,7 @@ from aizim.orchestration.controller_process import (
     ControllerLaunchSpec,
 )
 from aizim.orchestration.controller_providers import production_controller
+from aizim.runtime.provider_executables import ResolvedExecutable
 
 type Captured = list[ControllerLaunchSpec]
 _CODEX_SCRIPT = "import sys\nprint('codex-cli 0.145.0'if'--version'in sys.argv else'')\n"
@@ -63,6 +64,10 @@ def binaries(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     codex = executable(tmp_path, "codex", _CODEX_SCRIPT)
     claude = executable(tmp_path, "claude", _CLAUDE_SCRIPT)
     return codex, claude, {"PATH": str(tmp_path)}
+
+
+def descriptor(path: Path, version: str) -> ResolvedExecutable:
+    return ResolvedExecutable(path, version, sha256_file(path))
 
 
 def context(timeout: float = 20.0) -> ControllerContext:
@@ -113,7 +118,14 @@ def test_production_factory_routes_claude(tmp_path: Path, monkeypatch: pytest.Mo
     _codex, claude, environment = binaries(tmp_path)
     project = tmp_path / "project"
     project.mkdir()
-    backend = ClaudeControllerBackend(claude, None, project, environment, launcher([]))
+    backend = ClaudeControllerBackend(
+        descriptor(claude, "2.1.218 (Claude Code)"),
+        descriptor(_codex, "codex-cli 0.145.0"),
+        None,
+        project,
+        environment,
+        launcher([]),
+    )
     monkeypatch.setattr(
         provider_module,
         "ClaudeControllerBackend",
@@ -138,7 +150,14 @@ async def test_plan_uses_exact_claude_argv_and_structured_output(
         "aizim.orchestration.claude_controller.sandbox_adapter",
         lambda _executable: PassthroughSandbox(),
     )
-    backend = ClaudeControllerBackend(claude, model, project, environment, launcher(captured))
+    backend = ClaudeControllerBackend(
+        descriptor(claude, "2.1.218 (Claude Code)"),
+        descriptor(_codex, "codex-cli 0.145.0"),
+        model,
+        project,
+        environment,
+        launcher(captured),
+    )
 
     assert await backend.plan(context()) == DispatchDecision("dispatch", "proof-a", "rfl", 2, 10.0)
     spec = captured[-1]
@@ -197,9 +216,20 @@ async def test_provider_stdin_is_byte_identical(
         final.write_bytes(canonical_json(_DECISION))
         return ControllerLaunchOutcome(b"", "0" * 64, 0)
 
-    await CodexControllerBackend(codex, None, project, environment, launch_codex).plan(context())
+    await CodexControllerBackend(
+        descriptor(codex, "codex-cli 0.145.0"),
+        None,
+        project,
+        environment,
+        launch_codex,
+    ).plan(context())
     await ClaudeControllerBackend(
-        claude, None, project, environment, launcher(claude_captured)
+        descriptor(claude, "2.1.218 (Claude Code)"),
+        descriptor(codex, "codex-cli 0.145.0"),
+        None,
+        project,
+        environment,
+        launcher(claude_captured),
     ).plan(context())
 
     assert codex_captured[-1].stdin == claude_captured[-1].stdin
@@ -219,7 +249,12 @@ async def test_preflight_checks_image_version_and_auth_without_exposing_secrets(
         lambda _executable: PassthroughSandbox(),
     )
     backend = ClaudeControllerBackend(
-        claude, None, project, environment, launcher(captured, b'{"auth":"secret-payload"}')
+        descriptor(claude, "2.1.218 (Claude Code)"),
+        descriptor(_codex, "codex-cli 0.145.0"),
+        None,
+        project,
+        environment,
+        launcher(captured, b'{"auth":"secret-payload"}'),
     )
 
     await backend.preflight()
@@ -263,7 +298,12 @@ async def test_plan_rejects_invalid_or_failed_results(
         lambda _executable: PassthroughSandbox(),
     )
     backend = ClaudeControllerBackend(
-        claude, None, project, environment, launcher([], envelope, exit_code)
+        descriptor(claude, "2.1.218 (Claude Code)"),
+        descriptor(_codex, "codex-cli 0.145.0"),
+        None,
+        project,
+        environment,
+        launcher([], envelope, exit_code),
     )
 
     with pytest.raises(ControllerBackendError, match="CONTROLLER_DECISION_INVALID") as caught:
@@ -283,7 +323,14 @@ async def test_plan_rejects_executable_replacement(
         "aizim.orchestration.claude_controller.sandbox_adapter",
         lambda _executable: PassthroughSandbox(),
     )
-    backend = ClaudeControllerBackend(claude, None, project, environment, launcher([]))
+    backend = ClaudeControllerBackend(
+        descriptor(claude, "2.1.218 (Claude Code)"),
+        descriptor(_codex, "codex-cli 0.145.0"),
+        None,
+        project,
+        environment,
+        launcher([]),
+    )
     claude.write_bytes(claude.read_bytes() + b"\n")
 
     with pytest.raises(ControllerBackendError, match="CONTROLLER_DECISION_INVALID") as caught:

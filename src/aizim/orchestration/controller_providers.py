@@ -52,7 +52,7 @@ def _codex_backend(
     model: str | None,
     environ: Mapping[str, str],
 ) -> ControllerBackend:
-    return CodexControllerBackend(runtime.controller.path, model, project, environ)
+    return CodexControllerBackend(runtime.controller, model, project, environ)
 
 
 def _claude_backend(
@@ -61,7 +61,13 @@ def _claude_backend(
     model: str | None,
     environ: Mapping[str, str],
 ) -> ControllerBackend:
-    return ClaudeControllerBackend(runtime.controller.path, model, project, environ)
+    return ClaudeControllerBackend(
+        runtime.controller,
+        runtime.codex,
+        model,
+        project,
+        environ,
+    )
 
 
 _ADAPTERS = MappingProxyType(

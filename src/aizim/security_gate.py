@@ -6,6 +6,7 @@ import secrets
 import socket
 import stat
 import sys
+from collections.abc import Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
@@ -16,6 +17,7 @@ from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import (
     ProbeAttempt,
     ProbeOperation,
+    ProbeReport,
     ProbeRequest,
     SandboxPlatform,
     record_gate_completion,
@@ -29,8 +31,14 @@ from aizim.gateway.authority_probe import (
     authority_denial_reasons,
     run_authority_probe,
 )
-from aizim.runtime.distribution import resolve_codex_executable
 from aizim.runtime.layout import ProjectLayout
+from aizim.runtime.provider_executables import (
+    ProviderExecutableError,
+    ResolvedExecutable,
+    codex_runtime_root,
+    resolve_codex,
+    revalidate_codex,
+)
 from aizim.state import StateService, StateServiceConfig
 
 
@@ -75,9 +83,18 @@ class _ObservedBroker(gateway_api.GatewaySessionBroker):
         super()._accept(reader, writer)
 
 
-async def run_security_gate(project_root: Path) -> SecurityGateReport:
+async def run_security_gate(
+    project_root: Path,
+    executable: ResolvedExecutable | None = None,
+) -> SecurityGateReport:
     layout = ProjectLayout.from_lean_project(project_root)
     layout.validate_runtime()
+    environment = dict(os.environ)
+    if executable is None:
+        try:
+            executable = resolve_codex(environment)
+        except ProviderExecutableError as error:
+            raise SecurityGateError(error.code) from error
     leased, unleased = _regular_lean_sources(layout.root)
     source = ViewSource(
         PurePosixPath(leased.relative_to(layout.root).as_posix()), sha256_file(leased)
@@ -94,7 +111,12 @@ async def run_security_gate(project_root: Path) -> SecurityGateReport:
         cleanup.callback(tcp.close)
         resources = _GateResources(run_id, layout, view, unleased, shared, tcp, broker_socket)
         with StateService(StateServiceConfig(layout.root, "security-gate-live")) as state:
-            live_report, protected_digest = await _run_live_gate(state, resources)
+            live_report, protected_digest = await _run_live_gate(
+                state,
+                resources,
+                executable,
+                environment,
+            )
     expected_sandbox = tuple(operation.value for operation in tuple(ProbeOperation)[:9])
     with StateService(StateServiceConfig(layout.root, "security-gate-replay")) as restarted:
         replay = restarted.replay_verify()
@@ -122,7 +144,10 @@ async def run_security_gate(project_root: Path) -> SecurityGateReport:
 
 
 async def _run_live_gate(
-    state: StateService, resources: _GateResources
+    state: StateService,
+    resources: _GateResources,
+    executable: ResolvedExecutable,
+    environment: Mapping[str, str],
 ) -> tuple[SecurityGateReport, str]:
     setup = await run_authority_probe(state, resources.run_id)
     broker: _ObservedBroker | None = None
@@ -148,20 +173,22 @@ async def _run_live_gate(
         canonical_socket = resources.layout.run_root / "gateway.sock"
         if not stat.S_ISSOCK(canonical_socket.lstat().st_mode):
             raise SecurityGateError("broker did not bind the canonical socket entry")
-        codex_executable = resolve_codex_executable(os.environ)
+        codex_executable = executable.path
         runtime_read_roots = tuple(
             dict.fromkeys(
                 (
                     Path(sys.prefix).resolve(strict=True),
-                    codex_executable.parents[2].resolve(strict=True),
+                    codex_runtime_root(codex_executable),
                 )
             )
         )
-        probe = await sandbox_adapter(codex_executable).launch_probe(
+        probe = await _launch_attested_probe(
+            executable,
+            environment,
             replace(
                 _probe_request(state, resources, broker.socket_path),
                 runtime_read_roots=runtime_read_roots,
-            )
+            ),
         )
     finally:
         try:
@@ -206,6 +233,19 @@ async def _run_live_gate(
         ),
         before_digest,
     )
+
+
+async def _launch_attested_probe(
+    executable: ResolvedExecutable,
+    environment: Mapping[str, str],
+    request: ProbeRequest,
+) -> ProbeReport:
+    probe = await sandbox_adapter(executable.path).launch_probe(request)
+    try:
+        revalidate_codex(executable, environment)
+    except ProviderExecutableError as error:
+        raise SecurityGateError(error.code) from error
+    return probe
 
 
 def _probe_request(

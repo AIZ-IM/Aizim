@@ -8,6 +8,7 @@ from pathlib import Path
 
 from aizim.async_lifecycle import await_cleanup
 from aizim.domain import sha256_file
+from aizim.runtime.provider_executables import ResolvedExecutable
 
 from .backend import AgentRequest, AgentResult, BackendIdentity
 from .launcher import CodexLaunchOutcome, CodexLaunchSpec
@@ -30,7 +31,7 @@ class CodexBackendError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class CodexBackendDependencies:
-    codex_executable: Path
+    codex_executable: ResolvedExecutable
     codex_version: CodexVersion = field(repr=False)
     sandbox: SandboxCompiler = field(repr=False)
     sidecar_executable: Path
@@ -41,18 +42,24 @@ class CodexBackendDependencies:
 
 class CodexBackend:
     def __init__(self, dependencies: CodexBackendDependencies) -> None:
+        descriptor = dependencies.codex_executable
         try:
-            executable = dependencies.codex_executable.resolve(strict=True)
+            executable = descriptor.path.resolve(strict=True)
             version = dependencies.codex_version(executable)
+            digest = sha256_file(executable)
         except OSError as error:
             raise CodexBackendError("CODEX_EXECUTABLE_UNAVAILABLE") from error
-        if not executable.is_file() or version != _CODEX_VERSION:
+        if not executable.is_file() or executable != descriptor.path:
+            raise CodexBackendError("CODEX_EXECUTABLE_UNAVAILABLE")
+        if version != _CODEX_VERSION or version != descriptor.version:
             raise CodexBackendError("UNSUPPORTED_CODEX_VERSION")
+        if digest != descriptor.sha256:
+            raise CodexBackendError("CODEX_IMAGE_CHANGED")
         if not dependencies.sidecar_executable.is_absolute():
             raise CodexBackendError("SIDECAR_EXECUTABLE_INVALID")
         self._dependencies = dependencies
         self._executable = executable
-        self._image_hash = sha256_file(executable)
+        self._image_hash = descriptor.sha256
         self._identity = BackendIdentity("codex", version, self._image_hash)
 
     @property
@@ -71,10 +78,15 @@ class CodexBackend:
     async def _run(self, request: AgentRequest) -> AgentResult:
         try:
             current_path = self._executable.resolve(strict=True)
+            current_version = self._dependencies.codex_version(current_path)
             current_hash = sha256_file(current_path)
-        except OSError as error:
+        except (OSError, RuntimeError) as error:
             raise CodexBackendError("CODEX_IMAGE_CHANGED") from error
-        if current_path != self._executable or current_hash != self._image_hash:
+        if (
+            current_path != self._executable
+            or current_version != self._identity.version
+            or current_hash != self._image_hash
+        ):
             raise CodexBackendError("CODEX_IMAGE_CHANGED")
         sandbox = self._dependencies.sandbox(request)
         try:

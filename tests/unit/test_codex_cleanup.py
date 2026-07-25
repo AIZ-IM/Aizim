@@ -20,6 +20,15 @@ from aizim.agents.launcher import AgentLaunchError, CodexLaunchOutcome, launch_c
 from aizim.agents.macos_profile import compile_macos_profile, validate_macos_profile
 from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
 from aizim.domain import AgentRole
+from aizim.runtime.provider_executables import ResolvedExecutable
+
+
+def _descriptor(path: Path) -> ResolvedExecutable:
+    return ResolvedExecutable(
+        path.resolve(),
+        "codex-cli 0.145.0",
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
 
 
 def _request(tmp_path: Path) -> AgentRequest:
@@ -152,7 +161,7 @@ async def test_repeated_cancellation_cannot_skip_revoke_or_cleanup(tmp_path: Pat
 
     backend = CodexBackend(
         CodexBackendDependencies(
-            executable,
+            _descriptor(executable),
             lambda _path: "codex-cli 0.145.0",
             lambda _request: replace(sandbox),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
@@ -194,7 +203,7 @@ async def test_replaced_codex_is_rejected_before_the_sandbox_compiler(tmp_path: 
 
     backend = CodexBackend(
         CodexBackendDependencies(
-            executable,
+            _descriptor(executable),
             lambda _path: "codex-cli 0.145.0",
             compile_sandbox,
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),

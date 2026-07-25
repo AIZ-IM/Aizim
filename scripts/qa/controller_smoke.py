@@ -19,14 +19,16 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
-from aizim.domain import sha256_json
+from aizim.domain import ControllerProviderId, sha256_json
 from aizim.domain.serialization import JsonValue
 from aizim.orchestration.controller_backend import DispatchDecision
+from aizim.orchestration.controller_providers import ResolvedControllerRuntime
 from aizim.orchestration.controller_supervisor import (
     ControllerSupervisor,
     ControllerSupervisorDependencies,
 )
 from aizim.orchestration.fake_controller_backend import FakeControllerBackend
+from aizim.runtime.provider_executables import ResolvedExecutable
 from aizim.state import StateService, StateServiceConfig
 from aizim.state.operations import RpcRequest, RpcSuccess
 from aizim.state.rpc import rpc_call
@@ -135,13 +137,24 @@ def _dependencies(
     sessions = (f"controller-{value:032x}" for value in count(1))
     executions = (f"execution-{value:032x}" for value in count(1))
     directives = (f"directive-{value:032x}" for value in count(1))
+    executable = ResolvedExecutable(
+        Path(sys.executable).resolve(strict=True),
+        "codex-cli 0.145.0",
+        "0" * 64,
+    )
+    runtime = ResolvedControllerRuntime(
+        ControllerProviderId("codex"),
+        executable,
+        executable,
+    )
 
-    async def worker_preflight() -> None:
+    async def worker_preflight(_executable: ResolvedExecutable) -> None:
         return None
 
     return ControllerSupervisorDependencies(
-        controller_backend=lambda _provider, _model: controller,
-        worker_backend=lambda: worker,
+        resolve_runtime=lambda _provider: runtime,
+        controller_backend=lambda _runtime, _model: controller,
+        worker_backend=lambda _executable: worker,
         worker_preflight=worker_preflight,
         session_ids=sessions.__next__,
         execution_ids=executions.__next__,
