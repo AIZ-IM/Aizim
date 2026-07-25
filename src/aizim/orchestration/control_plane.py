@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from enum import StrEnum
-
-from aizim.domain import AgentRole
+from aizim.domain import AgentRole, ControllerProviderId
 from aizim.state.control_operations import (
     ControlOperationError as ControlPlaneError,
 )
@@ -21,24 +19,19 @@ from aizim.state.control_operations import (
 
 __all__ = [
     "ControlPlaneError",
-    "ControllerProvider",
+    "ControllerProviderId",
     "assign_task",
     "configure_controller",
     "register_worker",
 ]
 
 
-class ControllerProvider(StrEnum):
-    CODEX = "codex"
-    CLAUDE = "claude"
-
-
 def configure_controller(
     target: ControlOperationTarget,
-    provider: ControllerProvider,
+    provider: ControllerProviderId,
     model: str | None,
 ) -> int:
-    value = provider.value if type(provider) is ControllerProvider else ""
+    value = provider.value if type(provider) is ControllerProviderId else ""
     return _configure_controller(target, value, model)
 
 

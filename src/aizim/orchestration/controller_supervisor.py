@@ -11,6 +11,7 @@ from pathlib import Path
 from aizim.agents import AgentBackend
 from aizim.async_lifecycle import await_cleanup
 from aizim.config import load_config
+from aizim.domain import ControllerProviderId
 from aizim.lean import DocumentBroker
 from aizim.lean.broker_knowledge import current_epoch
 from aizim.lean.models import DocumentBrokerError
@@ -20,7 +21,6 @@ from aizim.runtime.state_process import StateProcessOwnership, acquire_state_pro
 from aizim.state import StateDependencies, StateService, StateServiceConfig
 
 from .claude_controller import production_controller
-from .control_plane import ControllerProvider
 from .controller_backend import ControllerBackend
 from .controller_dispatcher import (
     ControllerDispatcher,
@@ -45,7 +45,7 @@ from .resources import ResourceGovernor
 
 @dataclass(frozen=True, slots=True)
 class ControllerSupervisorDependencies:
-    controller_backend: Callable[[ControllerProvider, str | None], ControllerBackend]
+    controller_backend: Callable[[ControllerProviderId, str | None], ControllerBackend]
     worker_backend: Callable[[], AgentBackend]
     worker_preflight: Callable[[], Awaitable[None]]
     session_ids: Callable[[], str]
@@ -91,7 +91,7 @@ class ControllerSupervisor:
             if configured is None:
                 raise ControllerExecutionError("CONTROLLER_NOT_CONFIGURED")
             try:
-                provider = ControllerProvider(_text(_payload(configured), "provider"))
+                provider = ControllerProviderId(_text(_payload(configured), "provider"))
             except ValueError:
                 raise ControllerExecutionError("CONTROLLER_PROVIDER_INVALID") from None
             controller_model = _payload(configured).get("model")

@@ -5,12 +5,9 @@ import sys
 from pathlib import Path
 from typing import Final
 
-from aizim.domain import AgentRole
+from aizim.domain import AgentRole, ControllerProviderId
 from aizim.domain.serialization import JsonValue
-from aizim.orchestration.control_plane import (
-    ControllerProvider,
-    ControlPlaneError,
-)
+from aizim.orchestration.control_plane import ControlPlaneError
 from aizim.runtime.layout import LayoutError, ProjectLayout
 from aizim.state.service import StateServiceLifecycleError
 
@@ -36,7 +33,7 @@ _MESSAGES: Final = {
 
 def run_controller_configure(
     project: Path,
-    provider: ControllerProvider,
+    provider: ControllerProviderId,
     model: str | None,
 ) -> int:
     layout = _layout(project, "controller")

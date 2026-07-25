@@ -10,9 +10,14 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
-from aizim.domain import AgentRole, canonical_json, sha256_bytes, sha256_json
+from aizim.domain import (
+    AgentRole,
+    ControllerProviderId,
+    canonical_json,
+    sha256_bytes,
+    sha256_json,
+)
 from aizim.orchestration.control_plane import (
-    ControllerProvider,
     assign_task,
     configure_controller,
     register_worker,
@@ -85,7 +90,7 @@ def initialized_assignment(tmp_path: Path, *, assigned: bool = True) -> tuple[Pa
 
     assert run_init(root) == 0
     with StateService(StateServiceConfig(root, "setup-session")) as state:
-        configure_controller(state, ControllerProvider.CLAUDE, "controller-model")
+        configure_controller(state, ControllerProviderId("claude"), "controller-model")
         register_worker(state, "proof-a", AgentRole.FORMALIZER)
         if assigned:
             assign_task(state, "proof-a", "prove True")

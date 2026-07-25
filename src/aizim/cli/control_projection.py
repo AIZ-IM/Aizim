@@ -4,6 +4,7 @@ import re
 from collections.abc import Mapping
 from typing import Literal, assert_never
 
+from aizim.domain.controller_provider import is_controller_provider_id
 from aizim.domain.serialization import JsonValue
 
 from .state_client import ProjectionDocument, StateClientError
@@ -49,11 +50,7 @@ def controller_document(
     payload = _payload(record)
     provider = payload.get("provider")
     model = payload.get("model")
-    if (
-        type(provider) is not str
-        or provider not in {"codex", "claude"}
-        or (model is not None and type(model) is not str)
-    ):
+    if not is_controller_provider_id(provider) or (model is not None and type(model) is not str):
         raise StateClientError("controller projection is malformed")
     runtime = _controller_runtime(records, record.version, provider)
     return {

@@ -6,10 +6,9 @@ from typing import Final
 
 import pytest
 
-from aizim.domain import AgentRole
+from aizim.domain import AgentRole, ControllerProviderId
 from aizim.domain.serialization import JsonValue
 from aizim.orchestration.control_plane import (
-    ControllerProvider,
     assign_task,
     configure_controller,
     register_worker,
@@ -45,14 +44,14 @@ def _start(state: StateService, session_id: str = _SESSION_ID) -> None:
         state,
         session_id=session_id,
         controller_version=1,
-        provider=ControllerProvider.CODEX,
+        provider=ControllerProviderId("codex"),
         backend_version="0.145.0",
         executable_hash="c" * 64,
     )
 
 
 def _configure(state: StateService, *worker_ids: str) -> None:
-    configure_controller(state, ControllerProvider.CODEX, "fixture-model")
+    configure_controller(state, ControllerProviderId("codex"), "fixture-model")
     for worker_id in worker_ids:
         register_worker(state, worker_id, AgentRole.FORMALIZER)
     _start(state)
@@ -141,7 +140,7 @@ def test_stale_controller_version_rejects_claim_without_event(tmp_path: Path) ->
 def test_stale_controller_start_uses_execution_error_without_event(tmp_path: Path) -> None:
     # Given
     with StateService(StateServiceConfig(tmp_path, "stale-controller-start")) as state:
-        configure_controller(state, ControllerProvider.CODEX, "fixture-model")
+        configure_controller(state, ControllerProviderId("codex"), "fixture-model")
         before = state.query_events()
 
         # When / Then
@@ -150,7 +149,7 @@ def test_stale_controller_start_uses_execution_error_without_event(tmp_path: Pat
                 state,
                 session_id=_SESSION_ID,
                 controller_version=2,
-                provider=ControllerProvider.CODEX,
+                provider=ControllerProviderId("codex"),
                 backend_version="0.145.0",
                 executable_hash="c" * 64,
             )

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Final, Protocol
 
 from aizim.domain import AgentRole, sha256_bytes, sha256_json
+from aizim.domain.controller_provider import is_controller_provider_id
 from aizim.domain.serialization import JsonValue
 
 from .operations import AppendEventCommand
@@ -14,7 +15,6 @@ from .projections import ProjectionRecord
 from .store_contracts import EventRecord
 
 _CONTROLLER_ID: Final = "primary"
-_CONTROLLER_PROVIDERS: Final = frozenset({"claude", "codex"})
 _WORKER_ID: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 _MAX_TASK_BYTES: Final = 64 * 1024
 
@@ -22,9 +22,7 @@ _MAX_TASK_BYTES: Final = 64 * 1024
 class ControlOperationTarget(Protocol):
     def append_event(self, command: AppendEventCommand) -> EventRecord: ...
 
-    def query_projection(
-        self, name: str, entity_id: str
-    ) -> ProjectionRecord | None: ...
+    def query_projection(self, name: str, entity_id: str) -> ProjectionRecord | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,17 +33,13 @@ class ControlOperationError(RuntimeError):
         return self.code
 
 
-def notify_control_committed(
-    callback: Callable[[str], None], operation: str
-) -> None:
+def notify_control_committed(callback: Callable[[str], None], operation: str) -> None:
     with suppress(Exception):
         callback(operation)
 
 
-def configure_controller(
-    target: ControlOperationTarget, provider: str, model: str | None
-) -> int:
-    if type(provider) is not str or provider not in _CONTROLLER_PROVIDERS:
+def configure_controller(target: ControlOperationTarget, provider: str, model: str | None) -> int:
+    if not is_controller_provider_id(provider):
         raise ControlOperationError("CONTROLLER_PROVIDER_INVALID")
     if model is not None and (type(model) is not str or not model.strip()):
         raise ControlOperationError("CONTROLLER_MODEL_INVALID")
@@ -67,9 +61,7 @@ def configure_controller(
     return _projection_version(target, "controller", _CONTROLLER_ID)
 
 
-def register_worker(
-    target: ControlOperationTarget, worker_id: str, role: AgentRole
-) -> int:
+def register_worker(target: ControlOperationTarget, worker_id: str, role: AgentRole) -> int:
     _validate_worker_id(worker_id)
     if type(role) is not AgentRole:
         raise ControlOperationError("WORKER_ROLE_INVALID")
@@ -91,9 +83,7 @@ def register_worker(
     return _projection_version(target, "worker_roster", worker_id)
 
 
-def assign_task(
-    target: ControlOperationTarget, worker_id: str, task: str
-) -> int:
+def assign_task(target: ControlOperationTarget, worker_id: str, task: str) -> int:
     _validate_worker_id(worker_id)
     _validate_task(task)
     if target.query_projection("controller", _CONTROLLER_ID) is None:
@@ -130,9 +120,7 @@ def assign_task(
     return _projection_version(target, "worker_assignments", worker_id)
 
 
-def _projection_version(
-    target: ControlOperationTarget, name: str, entity_id: str
-) -> int:
+def _projection_version(target: ControlOperationTarget, name: str, entity_id: str) -> int:
     record = target.query_projection(name, entity_id)
     if record is None:
         raise ControlOperationError("CONTROL_STATE_INVALID")

@@ -14,9 +14,8 @@ import aizim.cli.controller_command as controller_command
 import aizim.cli.main as cli_main
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
 from aizim.cli.init_command import run_init
-from aizim.domain import AgentRole, sha256_bytes, sha256_json
+from aizim.domain import AgentRole, ControllerProviderId, sha256_bytes, sha256_json
 from aizim.orchestration.control_plane import (
-    ControllerProvider,
     assign_task,
     configure_controller,
     register_worker,
@@ -76,7 +75,7 @@ def initialized(tmp_path: Path) -> tuple[Path, str]:
     root = Path(shutil.copytree(SMOKE_ROOT, tmp_path / "lean-project", ignore=IGNORE))
     assert run_init(root) == 0
     with StateService(StateConfig(root, "setup-session")) as state:
-        configure_controller(state, ControllerProvider.CODEX, "controller-model")
+        configure_controller(state, ControllerProviderId("codex"), "controller-model")
         register_worker(state, "proof-a", AgentRole.FORMALIZER)
         assign_task(state, "proof-a", "prove True")
     assignment_id = sha256_json(
@@ -201,7 +200,7 @@ async def test_recovers_unclean_planned_execution(short_tmp: Path) -> None:
             state,
             session_id=old_session,
             controller_version=1,
-            provider=ControllerProvider.CODEX,
+            provider=ControllerProviderId("codex"),
             backend_version="old-controller",
             executable_hash="a" * 64,
         )

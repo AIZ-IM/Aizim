@@ -111,6 +111,34 @@ def test_controller_document_adds_null_runtime_without_runtime_projection() -> N
     }
 
 
+def test_controller_document_accepts_well_formed_future_provider() -> None:
+    future = projection(
+        "controller",
+        "primary",
+        {"provider": "future_provider-1"},
+    )
+
+    assert controller_document((future,)) == {
+        "controller_id": "primary",
+        "model": None,
+        "provider": "future_provider-1",
+        "runtime": None,
+        "version": 1,
+    }
+
+
+@pytest.mark.parametrize("provider", ("", "Codex", "contains/path", "a" * 65))
+def test_controller_document_rejects_malformed_provider(provider: str) -> None:
+    malformed = projection(
+        "controller",
+        "primary",
+        {"provider": provider},
+    )
+
+    with pytest.raises(StateClientError, match="controller projection is malformed"):
+        controller_document((malformed,))
+
+
 @pytest.mark.parametrize(
     ("status", "reason_code"),
     (

@@ -6,16 +6,14 @@ import shutil
 import stat
 import sys
 from pathlib import Path
-from typing import assert_never
 
 import pytest
 
 from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
-from aizim.domain import AgentRole
+from aizim.domain import AgentRole, ControllerProviderId
 from aizim.orchestration.claude_controller import ClaudeControllerBackend
 from aizim.orchestration.codex_controller import CodexControllerBackend
 from aizim.orchestration.codex_worker import preflight_codex_worker
-from aizim.orchestration.control_plane import ControllerProvider
 from aizim.orchestration.controller_backend import (
     BlockedDecision,
     ControllerBackend,
@@ -26,6 +24,9 @@ from aizim.orchestration.controller_process import (
     ControllerLaunchSpec,
     launch_controller_process,
 )
+
+CODEX = ControllerProviderId("codex")
+CLAUDE = ControllerProviderId("claude")
 
 
 class PassthroughSandbox:
@@ -43,13 +44,13 @@ class PassthroughSandbox:
         )
 
 
-def executable(tmp_path: Path, provider: ControllerProvider = ControllerProvider.CODEX) -> Path:
+def executable(tmp_path: Path, provider: ControllerProviderId = CODEX) -> Path:
     root = tmp_path / "provider-bin"
     root.mkdir(exist_ok=True)
     path = root / provider.value
     version = {
-        ControllerProvider.CODEX: "codex-cli 0.145.0",
-        ControllerProvider.CLAUDE: "2.1.218 (Claude Code)",
+        CODEX: "codex-cli 0.145.0",
+        CLAUDE: "2.1.218 (Claude Code)",
     }[provider]
     path.write_text(
         f"#!{sys.executable}\nimport sys\n"
@@ -57,7 +58,7 @@ def executable(tmp_path: Path, provider: ControllerProvider = ControllerProvider
         f"print({version!r} if '--version' in sys.argv else '')\n"
     )
     path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-    if provider is ControllerProvider.CODEX:
+    if provider == CODEX:
         resources = tmp_path / "codex-resources"
         resources.mkdir(exist_ok=True)
         bwrap = resources / "bwrap"
@@ -83,7 +84,6 @@ def controller_context(timeout: float = 5.0) -> ControllerContext:
     )
 
 
-
 async def test_backend_constructor_discovers_version_inside_running_loop(
     tmp_path: Path,
 ) -> None:
@@ -96,9 +96,9 @@ async def test_backend_constructor_discovers_version_inside_running_loop(
     assert backend.identity.version == "codex-cli 0.145.0"
 
 
-@pytest.mark.parametrize("provider", tuple(ControllerProvider))
+@pytest.mark.parametrize("provider", (CODEX, CLAUDE))
 async def test_controller_provider_cannot_observe_project_or_authority_secrets(
-    tmp_path: Path, provider: ControllerProvider
+    tmp_path: Path, provider: ControllerProviderId
 ) -> None:
     project = tmp_path / "canonical-project"
     state = project / ".aizim/run"
@@ -140,29 +140,29 @@ async def test_controller_provider_cannot_observe_project_or_authority_secrets(
                 repr(view_entries).encode(),
             )
         )
-        match provider:
-            case ControllerProvider.CODEX:
+        match provider.value:
+            case "codex":
                 final = Path(spec.argv[spec.argv.index("--output-last-message") + 1])
                 final.write_bytes(b'{"action":"blocked","reason_code":"NO_SAFE_ACTION"}')
                 output = b""
-            case ControllerProvider.CLAUDE:
+            case "claude":
                 output = (
                     b'{"session_id":"raw-session-secret","structured_output":'
                     b'{"action":"blocked","reason_code":"NO_SAFE_ACTION"}}'
                 )
-            case unreachable:
-                assert_never(unreachable)
+            case _:
+                raise AssertionError("unexpected test provider")
         return ControllerLaunchOutcome(output, hashlib.sha256(b"").hexdigest(), 0)
 
-    match provider:
-        case ControllerProvider.CODEX:
+    match provider.value:
+        case "codex":
             backend: ControllerBackend = CodexControllerBackend(
                 binary, None, project, environment, launch
             )
-        case ControllerProvider.CLAUDE:
+        case "claude":
             backend = ClaudeControllerBackend(binary, None, project, environment, launch)
-        case unreachable:
-            assert_never(unreachable)
+        case _:
+            raise AssertionError("unexpected test provider")
     await backend.plan(controller_context())
 
     combined = b"\n".join(observed)
@@ -184,7 +184,7 @@ async def test_controller_provider_cannot_observe_project_or_authority_secrets(
         assert value.encode() not in combined
     direct_auth = (
         b"OPENAI_API_KEY=openai-direct-auth"
-        if provider is ControllerProvider.CODEX
+        if provider == CODEX
         else b"ANTHROPIC_API_KEY=anthropic-direct-auth"
     )
     assert direct_auth in combined
@@ -215,7 +215,7 @@ async def test_claude_timeout_reaps_process(
         f"else:\n open({str(pid_file)!r},'w').write(str(os.getpid()))\n"
         " os.execv('/usr/bin/tail',('tail','-f','/dev/null'))\n"
     )
-    claude = executable(tmp_path, ControllerProvider.CLAUDE)
+    claude = executable(tmp_path, CLAUDE)
     claude.write_text(f"#!{sys.executable}\n{body}")
     project = tmp_path / "timeout-project"
     project.mkdir()
@@ -242,7 +242,7 @@ async def test_real_outer_sandbox_runs_secret_safe_fake_claude(tmp_path: Path) -
     state.mkdir(parents=True)
     for path in (project / "secret.txt", state / "state.sock"):
         path.write_text("project-authority-secret")
-    binary = executable(tmp_path, ControllerProvider.CLAUDE)
+    binary = executable(tmp_path, CLAUDE)
     script = (
         "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '2.1.218 (Claude Code)'; exit; fi\n"
         '[ "$ANTHROPIC_API_KEY" = approved-anthropic-auth ] || exit 41; '

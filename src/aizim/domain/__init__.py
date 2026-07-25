@@ -8,6 +8,7 @@ from ..config.model import (
     RunManifest,
     RunPolicy,
 )
+from .controller_provider import ControllerProviderId, is_controller_provider_id
 from .model import (
     AgentRole,
     Contribution,
@@ -33,6 +34,7 @@ __all__ = [
     "AlignmentReviewKind",
     "Contribution",
     "ContributionPayloadKind",
+    "ControllerProviderId",
     "EpochPair",
     "FileLease",
     "FormalParticipation",
@@ -47,6 +49,7 @@ __all__ = [
     "canonical_json",
     "compute_base_epoch",
     "compute_environment_fingerprint",
+    "is_controller_provider_id",
     "sha256_bytes",
     "sha256_file",
     "sha256_json",

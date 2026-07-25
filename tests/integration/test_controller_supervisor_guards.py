@@ -14,11 +14,10 @@ import pytest
 import aizim.orchestration.controller_supervisor as supervisor_module
 from aizim.agents import AgentRequest, AgentResult, BackendIdentity
 from aizim.cli.init_command import run_init
-from aizim.domain import AgentRole, sha256_bytes, sha256_json
+from aizim.domain import AgentRole, ControllerProviderId, sha256_bytes, sha256_json
 from aizim.domain.serialization import JsonValue
 from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.control_plane import (
-    ControllerProvider,
     assign_task,
     configure_controller,
     register_worker,
@@ -75,7 +74,7 @@ def initialized(tmp_path: Path, identities: int) -> tuple[Path, str]:
             state.append_event(
                 AppendEventCommand("ProjectInitialized", "supervisor", None, None, payload)
             )
-        configure_controller(state, ControllerProvider.CODEX, "controller-model")
+        configure_controller(state, ControllerProviderId("codex"), "controller-model")
         register_worker(state, "proof-a", AgentRole.FORMALIZER)
         assign_task(state, "proof-a", "prove True")
     assignment_id = sha256_json(

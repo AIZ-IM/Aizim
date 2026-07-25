@@ -6,10 +6,9 @@ from typing import Final
 
 import pytest
 
-from aizim.domain import AgentRole
+from aizim.domain import AgentRole, ControllerProviderId
 from aizim.domain.serialization import JsonValue
 from aizim.orchestration.control_plane import (
-    ControllerProvider,
     assign_task,
     configure_controller,
     register_worker,
@@ -52,14 +51,14 @@ def _start(state: StateService, session_id: str = _SESSION_ID) -> None:
         state,
         session_id=session_id,
         controller_version=1,
-        provider=ControllerProvider.CODEX,
+        provider=ControllerProviderId("codex"),
         backend_version="0.145.0",
         executable_hash="c" * 64,
     )
 
 
 def _configure(state: StateService, *worker_ids: str) -> None:
-    configure_controller(state, ControllerProvider.CODEX, "fixture-model")
+    configure_controller(state, ControllerProviderId("codex"), "fixture-model")
     for worker_id in worker_ids:
         register_worker(state, worker_id, AgentRole.FORMALIZER)
     _start(state)
@@ -223,7 +222,7 @@ def test_recovery_crashes_running_session_once_and_interrupts_in_stable_order(
 def test_stopped_controller_accepts_a_new_session(tmp_path: Path) -> None:
     # Given
     with StateService(StateServiceConfig(tmp_path, "controller-restart")) as state:
-        configure_controller(state, ControllerProvider.CODEX, "fixture-model")
+        configure_controller(state, ControllerProviderId("codex"), "fixture-model")
         _start(state, "old-session")
         stop_controller(state, "old-session")
 
@@ -304,7 +303,7 @@ def test_new_session_rejects_stale_terminal_claim_without_event(tmp_path: Path) 
 def test_second_controller_start_rejects_without_event(tmp_path: Path) -> None:
     # Given
     with StateService(StateServiceConfig(tmp_path, "already-running")) as state:
-        configure_controller(state, ControllerProvider.CODEX, "fixture-model")
+        configure_controller(state, ControllerProviderId("codex"), "fixture-model")
         _start(state)
         before = state.query_events()
 

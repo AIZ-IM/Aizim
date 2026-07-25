@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from aizim.domain.controller_provider import is_controller_provider_id
 from aizim.domain.serialization import JsonValue
 
 from .schema_v1_validation import integer_payload, sha256_payload
@@ -22,7 +23,7 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
             "ControllerConfigured": codec(
                 ("controller_id", "provider"),
                 ("model",),
-                {"provider": lambda value: type(value) is str and value in {"codex", "claude"}},
+                {"provider": is_controller_provider_id},
             ),
             "WorkerConfigured": codec(("worker_id", "role", "status")),
             "WorkerTaskAssigned": codec(
@@ -124,7 +125,7 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
                 ),
                 validators={
                     "controller_version": _positive_integer,
-                    "provider": _enum("codex", "claude"),
+                    "provider": is_controller_provider_id,
                     "executable_hash": sha256_payload,
                 },
             ),

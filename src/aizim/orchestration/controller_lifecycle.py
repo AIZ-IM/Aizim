@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 
+from aizim.domain import ControllerProviderId
 from aizim.domain.serialization import JsonValue
 from aizim.state import AppendEventCommand, ProjectionRecord, StateService
 
-from .control_plane import ControllerProvider
 from .controller_execution import ControllerExecutionError
 
 _CONTROLLER_ID = "primary"
@@ -16,7 +16,7 @@ def start_controller(
     *,
     session_id: str,
     controller_version: int,
-    provider: ControllerProvider,
+    provider: ControllerProviderId,
     backend_version: str,
     executable_hash: str,
 ) -> None:
@@ -26,7 +26,7 @@ def start_controller(
     configured_payload = _payload(configured)
     if configured.version != controller_version:
         raise ControllerExecutionError("CONTROLLER_VERSION_STALE")
-    if type(provider) is not ControllerProvider:
+    if type(provider) is not ControllerProviderId:
         raise ControllerExecutionError("CONTROLLER_PROVIDER_INVALID")
     if configured_payload.get("provider") != provider.value:
         raise ControllerExecutionError("CONTROLLER_PROVIDER_STALE")

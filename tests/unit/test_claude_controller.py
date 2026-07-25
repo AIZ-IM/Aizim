@@ -10,14 +10,13 @@ import pytest
 
 import aizim.orchestration.claude_controller as claude_module
 from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
-from aizim.domain import AgentRole, canonical_json, sha256_file
+from aizim.domain import AgentRole, ControllerProviderId, canonical_json, sha256_file
 from aizim.orchestration.claude_controller import (
     ClaudeControllerBackend,
     ClaudeControllerError,
     production_controller,
 )
 from aizim.orchestration.codex_controller import CodexControllerBackend
-from aizim.orchestration.control_plane import ControllerProvider
 from aizim.orchestration.controller_backend import (
     ControllerBackendError,
     ControllerContext,
@@ -116,7 +115,7 @@ def test_production_factory_routes_claude(tmp_path: Path, monkeypatch: pytest.Mo
     project.mkdir()
     backend = ClaudeControllerBackend(claude, None, project, environment, launcher([]))
     monkeypatch.setattr(claude_module, "production_claude", lambda *_arguments: backend)
-    assert production_controller(project, ControllerProvider.CLAUDE, None) is backend
+    assert production_controller(project, ControllerProviderId("claude"), None) is backend
 
 
 @pytest.mark.parametrize("model", [None, "claude-opus-4-6"])

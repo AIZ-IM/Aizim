@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aizim.domain import AgentRole
+from aizim.domain import AgentRole, ControllerProviderId
 from aizim.orchestration.control_plane import (
-    ControllerProvider,
     assign_task,
     configure_controller,
     register_worker,
@@ -17,7 +16,7 @@ def test_controller_roster_and_assignments_replay_deterministically(
 ) -> None:
     # Given
     with StateService(StateServiceConfig(tmp_path, "control-replay")) as state:
-        configure_controller(state, ControllerProvider.CODEX, "fixture-model")
+        configure_controller(state, ControllerProviderId("codex"), "fixture-model")
         register_worker(state, "worker-1", AgentRole.FORMALIZER)
 
         # When
@@ -35,3 +34,21 @@ def test_controller_roster_and_assignments_replay_deterministically(
     assert controller is not None and controller.version == 1
     assert roster is not None and roster.version == 1
     assert assignment is not None and assignment.version == 2
+
+
+def test_well_formed_unregistered_provider_replays_deterministically(
+    tmp_path: Path,
+) -> None:
+    with StateService(StateServiceConfig(tmp_path, "future-provider")) as state:
+        configure_controller(
+            state,
+            ControllerProviderId("future_provider-1"),
+            None,
+        )
+
+        controller = state.query_projection("controller", "primary")
+        verification = state.replay_verify()
+
+    assert controller is not None
+    assert b'"provider":"future_provider-1"' in controller.state_json
+    assert verification.matched

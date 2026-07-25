@@ -8,13 +8,13 @@ import stat
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final, assert_never
+from typing import Final
 
 from aizim.agents import BackendIdentity
 from aizim.agents.macos_sandbox import SandboxHostError
 from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import ProviderEnvironmentPolicy, SandboxRequest
-from aizim.domain import canonical_json, sha256_file
+from aizim.domain import ControllerProviderId, canonical_json, sha256_file
 from aizim.domain.serialization import JsonValue
 from aizim.runtime.distribution import DistributionError
 from aizim.runtime.distribution import resolve_claude_executable as resolve_claude
@@ -23,7 +23,6 @@ from aizim.runtime.distribution import resolve_codex_executable as resolve_codex
 from . import controller_backend as cb
 from . import controller_process as process
 from .codex_controller import production_codex
-from .control_plane import ControllerProvider
 
 _SCHEMA_PATH: Final = Path(__file__).with_name("controller_decision.schema.json")
 _SCHEMA: Final = canonical_json(json.loads(_SCHEMA_PATH.read_text())).decode()
@@ -270,13 +269,11 @@ def production_claude(project: Path | None, model: str | None) -> ClaudeControll
 
 def production_controller(
     project: Path | None,
-    provider: ControllerProvider,
+    provider: ControllerProviderId,
     model: str | None,
 ) -> cb.ControllerBackend:
-    match provider:
-        case ControllerProvider.CODEX:
-            return production_codex(project, provider.value, model)
-        case ControllerProvider.CLAUDE:
-            return production_claude(project, model)
-        case unreachable:
-            assert_never(unreachable)
+    if provider.value == "codex":
+        return production_codex(project, provider.value, model)
+    if provider.value == "claude":
+        return production_claude(project, model)
+    raise ClaudeControllerError("CONTROLLER_PROVIDER_UNSUPPORTED")
