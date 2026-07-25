@@ -188,8 +188,13 @@ def launch_spec(tmp_path: Path, executable_path: Path) -> CodexLaunchSpec:
     (("stdout", "CODEX_STDOUT_LIMIT"), ("stderr", "CODEX_STDERR_LIMIT")),
 )
 async def test_launcher_kills_and_reaps_at_stream_limits(
-    tmp_path: Path, stream: str, reason: str
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stream: str,
+    reason: str,
 ) -> None:
+    if stream == "stdout":
+        monkeypatch.setattr(launcher, "_JSONL_LINE_LIMIT", 64 * 1024)
     pid_file = tmp_path / "pid"
     target = "sys.stdout.buffer" if stream == "stdout" else "sys.stderr.buffer"
     script = executable(
