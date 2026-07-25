@@ -45,6 +45,35 @@ def test_controller_provider_is_configurable_and_persistent(
     }
 
 
+@pytest.mark.parametrize(
+    ("provider", "message"),
+    (
+        ("../codex", "controller provider is invalid"),
+        ("future_provider-1", "controller provider is unsupported"),
+    ),
+)
+def test_controller_configuration_distinguishes_invalid_and_unsupported_provider(
+    tmp_path: Path,
+    provider: str,
+    message: str,
+) -> None:
+    root = initialized_project(tmp_path)
+
+    configured = run_cli(
+        "controller",
+        "configure",
+        "--project",
+        str(root),
+        "--provider",
+        provider,
+    )
+    shown = run_cli("controller", "show", "--project", str(root), "--json")
+
+    assert configured.returncode == 4
+    assert configured.stderr == f"aizim controller: {message}\n"
+    assert shown.returncode == 4
+
+
 def test_controller_assigns_versioned_tasks_to_persistent_workers(tmp_path: Path) -> None:
     # Given
     root = initialized_project(tmp_path)

@@ -6,8 +6,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .. import __version__
-from ..domain import AgentRole, ControllerProviderId
+from ..domain import AgentRole
 from ..gateway.sidecar import run_gateway_sidecar, scrub_session_arguments
+from ..orchestration.controller_providers import controller_provider_ids
 from ..orchestration.runner import run_autonomous_shared
 from .control_command import (
     run_controller_configure,
@@ -73,7 +74,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     controller_commands = controller.add_subparsers(dest="controller_command", required=True)
     configure = controller_commands.add_parser("configure")
     configure.add_argument("--project", type=Path, required=True)
-    configure.add_argument("--provider", type=ControllerProviderId, required=True)
+    providers = ",".join(controller_provider_ids())
+    configure.add_argument(
+        "--provider",
+        metavar=f"{{{providers}}}",
+        required=True,
+    )
     configure.add_argument("--model")
     show = controller_commands.add_parser("show")
     show.add_argument("--project", type=Path, default=Path.cwd())

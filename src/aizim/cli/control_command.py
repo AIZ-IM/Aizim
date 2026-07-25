@@ -5,9 +5,14 @@ import sys
 from pathlib import Path
 from typing import Final
 
-from aizim.domain import AgentRole, ControllerProviderId
+from aizim.domain import AgentRole
 from aizim.domain.serialization import JsonValue
 from aizim.orchestration.control_plane import ControlPlaneError
+from aizim.orchestration.controller_providers import (
+    ControllerProviderRegistryError,
+    controller_adapter,
+    parse_controller_provider,
+)
 from aizim.runtime.layout import LayoutError, ProjectLayout
 from aizim.state.service import StateServiceLifecycleError
 
@@ -21,6 +26,7 @@ from .state_client import (
 _MESSAGES: Final = {
     "CONTROLLER_NOT_CONFIGURED": "controller is not configured",
     "CONTROLLER_PROVIDER_INVALID": "controller provider is invalid",
+    "CONTROLLER_PROVIDER_UNSUPPORTED": "controller provider is unsupported",
     "CONTROLLER_MODEL_INVALID": "controller model is invalid",
     "WORKER_ALREADY_REGISTERED": "worker is already registered",
     "WORKER_NOT_REGISTERED": "worker is not registered",
@@ -33,25 +39,27 @@ _MESSAGES: Final = {
 
 def run_controller_configure(
     project: Path,
-    provider: ControllerProviderId,
+    provider: str,
     model: str | None,
 ) -> int:
     layout = _layout(project, "controller")
     if layout is None:
         return 2
     try:
+        provider_id = parse_controller_provider(provider)
+        controller_adapter(provider_id)
         call_control_operation(
             layout,
             "control.configure_controller",
-            {"provider": provider.value, "model": model},
+            {"provider": provider_id.value, "model": model},
         )
-    except ControlPlaneError as error:
+    except (ControlPlaneError, ControllerProviderRegistryError) as error:
         return _domain_failure("controller", error)
     except StateServiceLifecycleError:
         return _busy("controller")
     except (OSError, StateClientError):
         return _state_failure("controller")
-    print(f"Configured primary controller with {provider.value}")
+    print(f"Configured primary controller with {provider_id.value}")
     return 0
 
 
@@ -158,7 +166,10 @@ def _layout(project: Path, command: str) -> ProjectLayout | None:
         return None
 
 
-def _domain_failure(command: str, error: ControlPlaneError) -> int:
+def _domain_failure(
+    command: str,
+    error: ControlPlaneError | ControllerProviderRegistryError,
+) -> int:
     message = _MESSAGES.get(error.code, "control request failed")
     print(f"aizim {command}: {message}", file=sys.stderr)
     return 4

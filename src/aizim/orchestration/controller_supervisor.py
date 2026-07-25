@@ -20,7 +20,6 @@ from aizim.runtime.layout import ProjectLayout
 from aizim.runtime.state_process import StateProcessOwnership, acquire_state_process
 from aizim.state import StateDependencies, StateService, StateServiceConfig
 
-from .claude_controller import production_controller
 from .controller_backend import ControllerBackend
 from .controller_dispatcher import (
     ControllerDispatcher,
@@ -40,6 +39,7 @@ from .controller_lifecycle import (
     recover_unclean_controller,
     start_controller,
 )
+from .controller_providers import production_controller
 from .resources import ResourceGovernor
 
 

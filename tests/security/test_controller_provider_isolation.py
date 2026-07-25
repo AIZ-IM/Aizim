@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from integration.cli_control_support import initialized_project, run_cli
 
 from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
 from aizim.domain import AgentRole, ControllerProviderId
@@ -82,6 +83,32 @@ def controller_context(timeout: float = 5.0) -> ControllerContext:
         timeout,
         1,
     )
+
+
+def test_unregistered_provider_id_is_never_executed_from_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = initialized_project(tmp_path)
+    marker = tmp_path / "provider-executed"
+    command = tmp_path / "bin/future_provider-1"
+    command.parent.mkdir()
+    command.write_text(f"#!/bin/sh\n/usr/bin/touch {marker}\n")
+    command.chmod(0o755)
+    monkeypatch.setenv("PATH", str(command.parent))
+
+    configured = run_cli(
+        "controller",
+        "configure",
+        "--project",
+        str(root),
+        "--provider",
+        "future_provider-1",
+    )
+
+    assert configured.returncode == 4
+    assert configured.stderr == "aizim controller: controller provider is unsupported\n"
+    assert not marker.exists()
 
 
 async def test_backend_constructor_discovers_version_inside_running_loop(

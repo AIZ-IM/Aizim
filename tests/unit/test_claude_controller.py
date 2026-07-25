@@ -8,13 +8,12 @@ from pathlib import Path
 
 import pytest
 
-import aizim.orchestration.claude_controller as claude_module
+import aizim.orchestration.controller_providers as provider_module
 from aizim.agents.sandbox import SandboxLaunchSpec, SandboxRequest
 from aizim.domain import AgentRole, ControllerProviderId, canonical_json, sha256_file
 from aizim.orchestration.claude_controller import (
     ClaudeControllerBackend,
     ClaudeControllerError,
-    production_controller,
 )
 from aizim.orchestration.codex_controller import CodexControllerBackend
 from aizim.orchestration.controller_backend import (
@@ -27,6 +26,7 @@ from aizim.orchestration.controller_process import (
     ControllerLaunchOutcome,
     ControllerLaunchSpec,
 )
+from aizim.orchestration.controller_providers import production_controller
 
 type Captured = list[ControllerLaunchSpec]
 _CODEX_SCRIPT = "import sys\nprint('codex-cli 0.145.0'if'--version'in sys.argv else'')\n"
@@ -114,7 +114,13 @@ def test_production_factory_routes_claude(tmp_path: Path, monkeypatch: pytest.Mo
     project = tmp_path / "project"
     project.mkdir()
     backend = ClaudeControllerBackend(claude, None, project, environment, launcher([]))
-    monkeypatch.setattr(claude_module, "production_claude", lambda *_arguments: backend)
+    monkeypatch.setattr(
+        provider_module,
+        "ClaudeControllerBackend",
+        lambda *_arguments: backend,
+    )
+    monkeypatch.setenv("AIZIM_CODEX_EXECUTABLE", str(_codex))
+    monkeypatch.setenv("AIZIM_CLAUDE_EXECUTABLE", str(claude))
     assert production_controller(project, ControllerProviderId("claude"), None) is backend
 
 

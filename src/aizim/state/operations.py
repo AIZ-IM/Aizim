@@ -261,6 +261,7 @@ def _control(target: StateOperations, request: RpcRequest, trusted: bool) -> Rpc
         messages = {
             "CONTROLLER_NOT_CONFIGURED": "controller is not configured",
             "CONTROLLER_PROVIDER_INVALID": "controller provider is invalid",
+            "CONTROLLER_PROVIDER_UNSUPPORTED": "controller provider is unsupported",
             "CONTROLLER_MODEL_INVALID": "controller model is invalid",
             "WORKER_ALREADY_REGISTERED": "worker is already registered",
             "WORKER_NOT_REGISTERED": "worker is not registered",
@@ -292,9 +293,7 @@ _HANDLERS.update(
 )
 
 
-def dispatch_operation(
-    target: StateOperations, request: RpcRequest, trusted: bool
-) -> RpcResponse:
+def dispatch_operation(target: StateOperations, request: RpcRequest, trusted: bool) -> RpcResponse:
     handler = _HANDLERS.get(request.operation)
     if handler is None:
         return rpc_failure("UNKNOWN_OPERATION", "operation is not available")
