@@ -49,10 +49,9 @@ pub fn verify_executable(path: &Path) -> Result<PathBuf, LauncherError> {
     if !path.is_absolute() {
         return Err(LauncherError::configuration("ARGUMENTS_INVALID"));
     }
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|source| {
-            LauncherError::integrity("EXECUTABLE_INTEGRITY_FAILED").with_source(source)
-        })?;
+    let metadata = fs::symlink_metadata(path).map_err(|source| {
+        LauncherError::integrity("EXECUTABLE_INTEGRITY_FAILED").with_source(source)
+    })?;
     if !metadata.file_type().is_file() || metadata.permissions().mode() & 0o111 == 0 {
         return Err(LauncherError::integrity("EXECUTABLE_INTEGRITY_FAILED"));
     }
