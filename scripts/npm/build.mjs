@@ -36,8 +36,6 @@ import { writeNotices } from "./write-notices.mjs";
 
 const expected = Object.freeze({
   aizim: "0.1.0",
-  claude: "2.1.218",
-  codex: "0.145.0",
   node: "26.5.0",
   npm: "12.0.1",
   minimumNode: "22.22.2",
@@ -119,8 +117,8 @@ async function sourceVersions() {
   });
   if (
     meta.packageManager !== `npm@${expected.npm}` ||
-    meta.dependencies?.["@anthropic-ai/claude-code"] !== expected.claude ||
-    meta.dependencies?.["@openai/codex"] !== expected.codex ||
+    meta.dependencies !== undefined ||
+    meta.peerDependencies !== undefined ||
     !python.includes(`requires-python = "${expected.pythonRange}"`) ||
     !python.includes(`uv_build==${expected.uv}`) ||
     !cargo.includes(`rust-version = "${expected.rust}"`)
@@ -204,38 +202,18 @@ async function assembleArtifacts(target, uv) {
     chmod(packagedUv, 0o755),
   ]);
 
-  const distribution = {
-    schema_version: 2,
-    aizim_version: expected.aizim,
-    python_version: expected.python,
+  const documents = buildManifestDocuments(target, {
     wheel: await artifactRecord(wheel, `vendor/${wheelName}`),
-    runtime_requirements: await artifactRecord(
+    requirements: await artifactRecord(
       requirements,
       "vendor/runtime-requirements.txt",
     ),
-    codex_version: expected.codex,
-    claude_version: expected.claude,
-    minimum_node_version: expected.minimumNode,
-    platform_schema_version: 1,
-  };
-  const platform = {
-    schema_version: 1,
-    aizim_version: expected.aizim,
-    package_name: target.packageName,
-    target: target.id,
-    node_platform: process.platform,
-    node_arch: process.arch,
-    rust_target: target.rustTarget,
-    libc: target.id.startsWith("linux-") ? "glibc" : null,
-    launcher_version: expected.aizim,
-    uv_version: expected.uv,
     uv: await artifactRecord(packagedUv, "vendor/uv"),
-    distribution_schema_version: 2,
-  };
+  });
   const distributionPath = join(metaManifest, "distribution.json");
   const platformPath = join(platformManifest, "platform.json");
-  await writeJson(distributionPath, distribution);
-  await writeJson(platformPath, platform);
+  await writeJson(distributionPath, documents.distribution);
+  await writeJson(platformPath, documents.platform);
   return {
     distributionPath,
     launcher,
@@ -243,6 +221,37 @@ async function assembleArtifacts(target, uv) {
     requirements,
     uv: packagedUv,
     wheel,
+  };
+}
+
+export function buildManifestDocuments(
+  target,
+  { requirements, uv, wheel },
+) {
+  return {
+    distribution: {
+      schema_version: 3,
+      aizim_version: expected.aizim,
+      python_version: expected.python,
+      wheel,
+      runtime_requirements: requirements,
+      minimum_node_version: expected.minimumNode,
+      platform_schema_version: 1,
+    },
+    platform: {
+      schema_version: 1,
+      aizim_version: expected.aizim,
+      package_name: target.packageName,
+      target: target.id,
+      node_platform: process.platform,
+      node_arch: process.arch,
+      rust_target: target.rustTarget,
+      libc: target.id.startsWith("linux-") ? "glibc" : null,
+      launcher_version: expected.aizim,
+      uv_version: expected.uv,
+      uv,
+      distribution_schema_version: 3,
+    },
   };
 }
 

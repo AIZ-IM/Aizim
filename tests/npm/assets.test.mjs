@@ -73,56 +73,8 @@ function fixture({ missingPlatform = false, missingFile } = {}) {
     writeFileSync(platformManifest, "{}\n");
   }
 
-  const codexRoot = join(root, "node_modules", "@openai", "codex");
-  const codexNativeRoot = join(
-    codexRoot,
-    "node_modules",
-    "@openai",
-    "codex-darwin-arm64",
-  );
-  const codexExecutable = join(
-    codexNativeRoot,
-    "vendor",
-    "aarch64-apple-darwin",
-    "bin",
-    "codex",
-  );
-  mkdirSync(join(codexExecutable, ".."), { recursive: true });
-  writeFileSync(
-    join(codexRoot, "package.json"),
-    '{"name":"@openai/codex","version":"0.145.0"}\n',
-  );
-  writeFileSync(
-    join(codexNativeRoot, "package.json"),
-    '{"name":"@openai/codex-darwin-arm64","version":"0.145.0-darwin-arm64"}\n',
-  );
-  writeFileSync(codexExecutable, "#!/bin/sh\nexit 0\n");
-  chmodSync(codexExecutable, 0o755);
-
-  const claudeRoot = join(root, "node_modules", "@anthropic-ai", "claude-code");
-  const claudeNativeRoot = join(
-    claudeRoot,
-    "node_modules",
-    "@anthropic-ai",
-    "claude-code-darwin-arm64",
-  );
-  const claudeExecutable = join(claudeNativeRoot, "claude");
-  mkdirSync(claudeNativeRoot, { recursive: true });
-  writeFileSync(
-    join(claudeRoot, "package.json"),
-    '{"name":"@anthropic-ai/claude-code","version":"2.1.218"}\n',
-  );
-  writeFileSync(
-    join(claudeNativeRoot, "package.json"),
-    '{"name":"@anthropic-ai/claude-code-darwin-arm64","version":"2.1.218"}\n',
-  );
-  writeFileSync(claudeExecutable, "#!/bin/sh\necho '2.1.218 (Claude Code)'\n");
-  chmodSync(claudeExecutable, 0o755);
-
   return {
     cleanup: () => rmSync(root, { force: true, recursive: true }),
-    claudeExecutable,
-    codexExecutable,
     distributionManifest,
     launcher,
     metaRoot: root,
@@ -155,14 +107,12 @@ test("resolves the complete installed distribution from absolute paths", () => {
       realpathSync(tree.distributionManifest),
     );
     assert.equal(assets.vendorRoot, realpathSync(tree.vendorRoot));
-    assert.equal(
-      assets.codexExecutable,
-      realpathSync(tree.codexExecutable),
-    );
-    assert.equal(
-      assets.claudeExecutable,
-      realpathSync(tree.claudeExecutable),
-    );
+    assert.deepEqual(Object.keys(assets).sort(), [
+      "distributionManifest",
+      "launcher",
+      "platformManifest",
+      "vendorRoot",
+    ]);
     assert.equal(Object.isFrozen(assets), true);
   } finally {
     tree.cleanup();

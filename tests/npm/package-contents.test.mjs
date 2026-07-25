@@ -62,10 +62,6 @@ async function packageFixture(kind) {
           "THIRD_PARTY_NOTICES.md",
         ],
         publishConfig: { access: "public" },
-        dependencies: {
-          "@anthropic-ai/claude-code": "2.1.218",
-          "@openai/codex": "0.145.0",
-        },
         optionalDependencies,
       }
     : {
@@ -94,6 +90,11 @@ async function packageFixture(kind) {
   }
   return { allowlist, root };
 }
+
+test("meta package allowlist omits provider resolver modules", () => {
+  assert.equal(META_ALLOWLIST.includes("lib/claude.mjs"), false);
+  assert.equal(META_ALLOWLIST.includes("lib/codex.mjs"), false);
+});
 
 for (const kind of ["meta", "platform"]) {
   test(`npm packs the exact ${kind} package allowlist`, async () => {

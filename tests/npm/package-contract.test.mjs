@@ -20,7 +20,7 @@ const platforms = [
   ["linux-x64", ["linux"], ["x64"], ["glibc"]],
 ];
 
-test("uses one version and exact dependencies when manifests are loaded", () => {
+test("uses one version without owning provider packages", () => {
   // Given
   const meta = readJson("package.json");
   const pyproject = readText("pyproject.toml");
@@ -38,11 +38,8 @@ test("uses one version and exact dependencies when manifests are loaded", () => 
   assert.equal(meta.version, "0.1.0");
   assert.equal(meta.packageManager, "npm@12.0.1");
   assert.equal(meta.engines.node, ">=22.22.2");
-  assert.equal(
-    meta.dependencies["@anthropic-ai/claude-code"],
-    "2.1.218",
-  );
-  assert.equal(meta.dependencies["@openai/codex"], "0.145.0");
+  assert.equal(meta.dependencies, undefined);
+  assert.equal(meta.peerDependencies, undefined);
   assert.equal(meta.devDependencies.typescript, "6.0.2");
   assert.equal(pythonVersion, "3.14.6");
   assert.deepEqual(meta.workspaces, ["npm/platforms/*"]);
@@ -85,14 +82,14 @@ test("retains platform selectors when public package manifests are inspected", (
   }
 });
 
-test("maps exactly three native Claude packages without darwin x64", () => {
+test("maps exactly three Aizim-owned native targets", () => {
   const targets = [
-    ["darwin", "arm64", "@anthropic-ai/claude-code-darwin-arm64"],
-    ["linux", "arm64", "@anthropic-ai/claude-code-linux-arm64"],
-    ["linux", "x64", "@anthropic-ai/claude-code-linux-x64"],
+    ["darwin", "arm64", "darwin-arm64", "aarch64-apple-darwin"],
+    ["linux", "arm64", "linux-arm64", "aarch64-unknown-linux-gnu"],
+    ["linux", "x64", "linux-x64", "x86_64-unknown-linux-gnu"],
   ];
 
-  for (const [platform, arch, claudeAlias] of targets) {
+  for (const [platform, arch, id, rustTarget] of targets) {
     const target = detectTarget({
       platform,
       arch,
@@ -101,8 +98,11 @@ test("maps exactly three native Claude packages without darwin x64", () => {
           ? { header: { glibcVersionRuntime: "2.39" } }
           : undefined,
     });
-    assert.equal(target.claudeAlias, claudeAlias);
-    assert.equal(target.claudeVersion, "2.1.218");
+    assert.deepEqual(target, {
+      id,
+      packageName: `@aiz.im/aizim-${id}`,
+      rustTarget,
+    });
   }
   assert.throws(
     () => detectTarget({ platform: "darwin", arch: "x64" }),

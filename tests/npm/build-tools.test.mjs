@@ -20,6 +20,7 @@ import {
   sha256File,
 } from "../../scripts/npm/lib/hash.mjs";
 import {
+  buildManifestDocuments,
   detectBuildTarget,
   verifySourceVersions,
 } from "../../scripts/npm/build.mjs";
@@ -212,6 +213,28 @@ test("rejects a version mismatch across source manifests", () => {
       platforms: versions.platforms.map(() => "0.1.0"),
     }),
   );
+});
+
+test("builds schema 3 manifests without provider ownership fields", () => {
+  const target = detectTarget({ platform: "darwin", arch: "arm64" });
+  const wheel = { path: "vendor/aizim.whl", sha256: "a".repeat(64), size: 1 };
+  const requirements = {
+    path: "vendor/runtime-requirements.txt",
+    sha256: "b".repeat(64),
+    size: 2,
+  };
+  const uv = { path: "vendor/uv", sha256: "c".repeat(64), size: 3 };
+
+  const documents = buildManifestDocuments(target, {
+    requirements,
+    uv,
+    wheel,
+  });
+
+  assert.equal(documents.distribution.schema_version, 3);
+  assert.equal(documents.platform.distribution_schema_version, 3);
+  assert.equal("codex_version" in documents.distribution, false);
+  assert.equal("claude_version" in documents.distribution, false);
 });
 
 test("measures artifact size and digest from file content", async () => {
