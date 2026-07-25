@@ -11,7 +11,6 @@ use crate::cache::{
     CACHE_SCHEMA_VERSION, CacheKey, CacheLayout, ReadyMarker, ReadyRuntime, RuntimeLock,
 };
 use crate::error::LauncherError;
-use crate::integrity::verify_executable;
 use crate::process::{CommandRunner, CommandSpec};
 
 /// Verified artifacts and process context required to provision one runtime.
@@ -23,10 +22,6 @@ pub struct ProvisionRequest {
     pub wheel: PathBuf,
     /// Canonical hash-locked runtime requirements.
     pub runtime_requirements: PathBuf,
-    /// Canonical package-local Claude executable.
-    pub claude_executable: PathBuf,
-    /// Canonical package-local Codex executable.
-    pub codex_executable: PathBuf,
     /// Versioned cache layout.
     pub layout: CacheLayout,
     /// Immutable runtime identity.
@@ -99,14 +94,6 @@ pub fn build_exec_spec(
             OsString::from(&request.key.target),
         ),
         (
-            "AIZIM_CLAUDE_EXECUTABLE",
-            request.claude_executable.clone().into_os_string(),
-        ),
-        (
-            "AIZIM_CODEX_EXECUTABLE",
-            request.codex_executable.clone().into_os_string(),
-        ),
-        (
             "AIZIM_DISTRIBUTION_MANIFEST_SHA256",
             OsString::from(&request.distribution_manifest_sha256),
         ),
@@ -117,11 +104,6 @@ pub fn build_exec_spec(
     ] {
         environment.insert(OsString::from(key), value);
     }
-    let inherited_path = environment.get(OsStr::new("PATH")).map(OsString::as_os_str);
-    environment.insert(
-        OsString::from("PATH"),
-        runtime_path(request, inherited_path)?,
-    );
     if !request.cwd.is_absolute() {
         return Err(LauncherError::internal("WORKING_DIRECTORY_INVALID"));
     }
@@ -133,28 +115,6 @@ pub fn build_exec_spec(
         cwd: request.cwd.clone(),
         expected_stdout: None,
     })
-}
-
-fn runtime_path(
-    request: &ProvisionRequest,
-    inherited_path: Option<&OsStr>,
-) -> Result<OsString, LauncherError> {
-    let codex_root = request
-        .codex_executable
-        .parent()
-        .and_then(Path::parent)
-        .ok_or_else(|| LauncherError::integrity("CODEX_INTEGRITY_FAILED"))?;
-    let ripgrep = verify_executable(&codex_root.join("codex-path").join("rg"))?;
-    let codex_path = ripgrep
-        .parent()
-        .filter(|directory| directory.parent() == Some(codex_root))
-        .ok_or_else(|| LauncherError::integrity("CODEX_INTEGRITY_FAILED"))?;
-    let mut paths = vec![codex_path.to_path_buf()];
-    if let Some(value) = inherited_path {
-        paths.extend(std::env::split_paths(value));
-    }
-    std::env::join_paths(paths)
-        .map_err(|source| LauncherError::integrity("CODEX_INTEGRITY_FAILED").with_source(source))
 }
 
 fn provision_staging(
@@ -360,8 +320,6 @@ fn is_injection_variable(key: &OsStr) -> bool {
         || key.starts_with("PIP_")
         || matches!(key, "PYTHONPATH" | "PYTHONHOME" | "VIRTUAL_ENV")
         || key.starts_with("AIZIM_DISTRIBUTION_")
-        || key == "AIZIM_CLAUDE_EXECUTABLE"
-        || key == "AIZIM_CODEX_EXECUTABLE"
 }
 
 fn verify_staging_executable(staging: &Path, path: &Path) -> Result<(), LauncherError> {

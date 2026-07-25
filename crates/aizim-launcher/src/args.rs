@@ -12,10 +12,6 @@ pub struct LauncherArgs {
     pub distribution_manifest: PathBuf,
     /// Absolute platform-manifest path.
     pub platform_manifest: PathBuf,
-    /// Absolute package-local Claude executable path.
-    pub claude_executable: PathBuf,
-    /// Absolute package-local Codex executable path.
-    pub codex_executable: PathBuf,
     /// Arguments after the required separator, preserved as OS strings.
     pub user_args: Vec<OsString>,
 }
@@ -28,8 +24,6 @@ impl LauncherArgs {
     {
         let mut distribution_manifest = None;
         let mut platform_manifest = None;
-        let mut claude_executable = None;
-        let mut codex_executable = None;
         let mut user_args = Vec::new();
         let mut iterator = arguments.into_iter();
         let mut separated = false;
@@ -57,12 +51,6 @@ impl LauncherArgs {
                 Some("--platform-manifest") if platform_manifest.is_none() => {
                     platform_manifest = Some(path);
                 }
-                Some("--claude-executable") if claude_executable.is_none() => {
-                    claude_executable = Some(path);
-                }
-                Some("--codex-executable") if codex_executable.is_none() => {
-                    codex_executable = Some(path);
-                }
                 _ => return Err(invalid_arguments()),
             }
         }
@@ -73,8 +61,6 @@ impl LauncherArgs {
         Ok(Self {
             distribution_manifest: distribution_manifest.ok_or_else(invalid_arguments)?,
             platform_manifest: platform_manifest.ok_or_else(invalid_arguments)?,
-            claude_executable: claude_executable.ok_or_else(invalid_arguments)?,
-            codex_executable: codex_executable.ok_or_else(invalid_arguments)?,
             user_args,
         })
     }

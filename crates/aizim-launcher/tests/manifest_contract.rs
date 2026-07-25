@@ -97,8 +97,6 @@ fn fixture() -> TestResult<Fixture> {
         .join("aizim-0.1.0-py3-none-any.whl");
     let requirements = meta_root.join("vendor").join("runtime-requirements.txt");
     let uv = platform_root.join("vendor").join("uv");
-    let claude = temporary.path().join("claude");
-    let codex = temporary.path().join("codex");
     let distribution_manifest = meta_root.join("manifest").join("distribution.json");
     let platform_manifest = platform_root.join("manifest").join("platform.json");
 
@@ -106,16 +104,14 @@ fn fixture() -> TestResult<Fixture> {
     fs::create_dir_all(parent(&uv)?)?;
     fs::create_dir_all(parent(&distribution_manifest)?)?;
     fs::create_dir_all(parent(&platform_manifest)?)?;
-    for path in [&wheel, &requirements, &uv, &claude, &codex] {
+    for path in [&wheel, &requirements, &uv] {
         fs::write(path, b"test")?;
     }
     make_executable(&uv)?;
-    make_executable(&claude)?;
-    make_executable(&codex)?;
 
     let (target, node_platform, node_arch, rust_target, libc) = host_target()?;
     let distribution_json = json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "aizim_version": "0.1.0",
         "python_version": "3.14.6",
         "wheel": {
@@ -128,8 +124,6 @@ fn fixture() -> TestResult<Fixture> {
             "size": 4,
             "sha256": TEST_SHA256
         },
-        "codex_version": "0.145.0",
-        "claude_version": "2.1.218",
         "minimum_node_version": "22.22.2",
         "platform_schema_version": 1
     });
@@ -149,7 +143,7 @@ fn fixture() -> TestResult<Fixture> {
             "size": 4,
             "sha256": TEST_SHA256
         },
-        "distribution_schema_version": 2
+        "distribution_schema_version": 3
     });
     write_json(&distribution_manifest, &distribution_json)?;
     write_json(&platform_manifest, &platform_json)?;
@@ -159,8 +153,6 @@ fn fixture() -> TestResult<Fixture> {
         args: LauncherArgs {
             distribution_manifest,
             platform_manifest,
-            claude_executable: claude,
-            codex_executable: codex,
             user_args: Vec::new(),
         },
         distribution_json,
@@ -196,10 +188,6 @@ fn parses_closed_internal_arguments_and_preserves_user_bytes() -> TestResult {
         fixture.args.distribution_manifest.into_os_string(),
         OsString::from("--platform-manifest"),
         fixture.args.platform_manifest.into_os_string(),
-        OsString::from("--claude-executable"),
-        fixture.args.claude_executable.into_os_string(),
-        OsString::from("--codex-executable"),
-        fixture.args.codex_executable.into_os_string(),
         OsString::from("--"),
         opaque.clone(),
         OsString::from("--hostile"),
@@ -227,17 +215,13 @@ fn rejects_missing_duplicate_unknown_and_relative_internal_arguments() -> TestRe
         fixture.args.distribution_manifest.clone().into_os_string(),
         OsString::from("--platform-manifest"),
         fixture.args.platform_manifest.clone().into_os_string(),
-        OsString::from("--claude-executable"),
-        fixture.args.claude_executable.clone().into_os_string(),
-        OsString::from("--codex-executable"),
-        fixture.args.codex_executable.clone().into_os_string(),
     ];
     let no_separator = valid.clone();
     let duplicate = [
         valid.clone(),
         vec![
-            OsString::from("--codex-executable"),
-            fixture.args.codex_executable.clone().into_os_string(),
+            OsString::from("--platform-manifest"),
+            fixture.args.platform_manifest.clone().into_os_string(),
             OsString::from("--"),
         ],
     ]
@@ -253,10 +237,6 @@ fn rejects_missing_duplicate_unknown_and_relative_internal_arguments() -> TestRe
         OsString::from("relative.json"),
         OsString::from("--platform-manifest"),
         fixture.args.platform_manifest.into_os_string(),
-        OsString::from("--claude-executable"),
-        fixture.args.claude_executable.into_os_string(),
-        OsString::from("--codex-executable"),
-        fixture.args.codex_executable.into_os_string(),
         OsString::from("--"),
     ];
 
@@ -279,14 +259,6 @@ fn verifies_valid_manifests_and_returns_canonical_artifacts() -> TestResult {
         fs::canonicalize(fixture.requirements)?
     );
     assert_eq!(verified.uv, fs::canonicalize(fixture.uv)?);
-    assert_eq!(
-        verified.claude_executable,
-        fs::canonicalize(fixture.args.claude_executable)?
-    );
-    assert_eq!(
-        verified.codex_executable,
-        fs::canonicalize(fixture.args.codex_executable)?
-    );
     Ok(())
 }
 
@@ -311,9 +283,9 @@ fn rejects_unknown_manifest_fields() -> TestResult {
 #[test]
 fn rejects_schema_version_and_closed_target_mismatches() -> TestResult {
     for (document, field, value) in [
-        ("distribution", "schema_version", json!(1)),
-        ("distribution", "claude_version", json!("2.1.217")),
+        ("distribution", "schema_version", json!(2)),
         ("distribution", "aizim_version", json!("9.9.9")),
+        ("platform", "distribution_schema_version", json!(2)),
         ("platform", "package_name", json!("@aiz.im/wrong")),
         ("platform", "node_platform", json!("win32")),
         ("platform", "node_arch", json!("ia32")),

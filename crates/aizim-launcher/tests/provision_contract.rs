@@ -95,26 +95,9 @@ fn fixture() -> TestResult<RequestFixture> {
     let uv = artifact_root.join("uv");
     let wheel = artifact_root.join("aizim.whl");
     let requirements = artifact_root.join("runtime-requirements.txt");
-    let claude = artifact_root.join("claude");
-    let codex_root = artifact_root.join("codex-vendor");
-    let codex = codex_root.join("bin/codex");
-    let ripgrep = codex_root.join("codex-path/rg");
-    fs::create_dir_all(
-        codex
-            .parent()
-            .ok_or_else(|| test_error("missing Codex binary directory"))?,
-    )?;
-    fs::create_dir_all(
-        ripgrep
-            .parent()
-            .ok_or_else(|| test_error("missing Codex path directory"))?,
-    )?;
     make_executable(&uv)?;
     fs::write(&wheel, b"wheel")?;
     fs::write(&requirements, b"requirements")?;
-    make_executable(&claude)?;
-    make_executable(&codex)?;
-    make_executable(&ripgrep)?;
 
     let key = CacheKey {
         aizim_version: "0.1.0".to_owned(),
@@ -135,8 +118,6 @@ fn fixture() -> TestResult<RequestFixture> {
         uv,
         wheel,
         runtime_requirements: requirements,
-        claude_executable: claude,
-        codex_executable: codex,
         layout,
         key,
         distribution_manifest_sha256: "d".repeat(64),
@@ -159,6 +140,10 @@ fn fixture() -> TestResult<RequestFixture> {
             (
                 OsString::from("AIZIM_CLAUDE_EXECUTABLE"),
                 OsString::from("/inherited/claude"),
+            ),
+            (
+                OsString::from("AIZIM_CODEX_EXECUTABLE"),
+                OsString::from("/inherited/codex"),
             ),
         ],
         temporary_variable: "TMPDIR",
@@ -461,11 +446,11 @@ fn final_exec_preserves_opaque_args_and_sets_the_closed_distribution_context() -
     );
     assert_eq!(
         environment_value(&spec, "AIZIM_CLAUDE_EXECUTABLE"),
-        Some(fixture.request.claude_executable.as_os_str())
+        Some(OsStr::new("/inherited/claude"))
     );
     assert_eq!(
         environment_value(&spec, "AIZIM_CODEX_EXECUTABLE"),
-        Some(fixture.request.codex_executable.as_os_str())
+        Some(OsStr::new("/inherited/codex"))
     );
     assert_eq!(
         environment_value(&spec, "AIZIM_DISTRIBUTION_MANIFEST_SHA256"),
@@ -484,40 +469,20 @@ fn final_exec_preserves_opaque_args_and_sets_the_closed_distribution_context() -
     ] {
         assert!(environment_value(&spec, forbidden).is_none());
     }
-    let codex_path = fixture
-        .request
-        .codex_executable
-        .parent()
-        .and_then(Path::parent)
-        .ok_or_else(|| test_error("missing Codex vendor root"))?
-        .join("codex-path");
-    let expected_path = std::env::join_paths([codex_path.as_os_str(), OsStr::new("/usr/bin")])?;
     assert_eq!(
         environment_value(&spec, "PATH"),
-        Some(expected_path.as_os_str())
+        Some(OsStr::new("/usr/bin"))
     );
     Ok(())
 }
 
 #[test]
-fn final_exec_rejects_a_missing_bundled_ripgrep() -> TestResult {
+fn final_exec_does_not_require_bundled_provider_artifacts() -> TestResult {
     let fixture = fixture()?;
     let mut runner = FakeRunner::default();
     let ready = ensure_runtime(&fixture.request, &mut runner, &mut Vec::new())?;
-    let ripgrep = fixture
-        .request
-        .codex_executable
-        .parent()
-        .and_then(Path::parent)
-        .ok_or_else(|| test_error("missing Codex vendor root"))?
-        .join("codex-path/rg");
-    fs::remove_file(ripgrep)?;
 
-    let error = build_exec_spec(&fixture.request, &ready, &[])
-        .err()
-        .ok_or_else(|| test_error("missing ripgrep must fail closed"))?;
-
-    assert_eq!(error.kind, ErrorKind::Integrity);
-    assert_eq!(error.exit_code(), 74);
+    let spec = build_exec_spec(&fixture.request, &ready, &[])?;
+    assert_eq!(spec.program, ready.aizim);
     Ok(())
 }
