@@ -21,10 +21,13 @@ jobs:
         include:
           - target: darwin-arm64
             runner: macos-15
+            sandbox_marker: macos_sandbox
           - target: linux-arm64
             runner: ubuntu-24.04-arm
+            sandbox_marker: linux_sandbox
           - target: linux-x64
             runner: ubuntu-24.04
+            sandbox_marker: linux_sandbox
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     env:
@@ -78,6 +81,12 @@ jobs:
           tests/unit/test_provider_executables.py
           -m "not macos_sandbox"
           -q
+      - name: Verify platform sandbox boundary without credentials
+        run: >-
+          uv run pytest
+          tests/security
+          -m "${{ matrix.sandbox_marker }}"
+          -q
 
   provider-contract-claude:
     name: Claude provider contract ${{ matrix.target }}
@@ -87,10 +96,13 @@ jobs:
         include:
           - target: darwin-arm64
             runner: macos-15
+            sandbox_marker: macos_sandbox
           - target: linux-arm64
             runner: ubuntu-24.04-arm
+            sandbox_marker: linux_sandbox
           - target: linux-x64
             runner: ubuntu-24.04
+            sandbox_marker: linux_sandbox
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     env:
@@ -147,4 +159,10 @@ jobs:
           tests/security/test_controller_provider_isolation.py
           tests/unit/test_provider_executables.py
           -m "not macos_sandbox"
+          -q
+      - name: Verify platform sandbox boundary without credentials
+        run: >-
+          uv run pytest
+          tests/security
+          -m "${{ matrix.sandbox_marker }}"
           -q

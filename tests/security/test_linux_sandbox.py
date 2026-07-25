@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import asyncio
+import asyncio  # noqa: ANYIO_OK - exercises the asyncio Linux sandbox adapter
 import hashlib
 import os
-import platform
 import shutil
 import socket
 import sys
@@ -16,10 +15,10 @@ from aizim.agents.linux_sandbox import LinuxSandboxAdapter
 from aizim.agents.sandbox import ProbeOperation, ProbeRequest
 from aizim.agents.workspace_view import ViewSource, WorkspaceViewBuilder
 from aizim.runtime.layout import ProjectLayout
+from aizim.runtime.provider_executables import codex_runtime_root, resolve_codex
 from aizim.state import StateService, StateServiceConfig
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "attack_probe_project"
-REPOSITORY_ROOT = Path(__file__).parents[2]
 
 
 def sha256(path: Path) -> str:
@@ -42,26 +41,6 @@ def accepted(server: socket.socket) -> bool:
         return False
     connection.close()
     return True
-
-
-def packaged_codex() -> Path:
-    target = {
-        "x86_64": ("linux-x64", "x86_64-unknown-linux-musl"),
-        "aarch64": ("linux-arm64", "aarch64-unknown-linux-musl"),
-    }.get(platform.machine())
-    if target is None:
-        raise RuntimeError("unsupported Linux architecture")
-    package, triple = target
-    return (
-        REPOSITORY_ROOT
-        / "node_modules"
-        / "@openai"
-        / f"codex-{package}"
-        / "vendor"
-        / triple
-        / "bin"
-        / "codex"
-    ).resolve(strict=True)
 
 
 @pytest.mark.linux_sandbox
@@ -87,7 +66,7 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
         gateway_path = private_root / "gateway.sock"
         gateway = listener(gateway_path)
         secret = "linux-sandbox-secret-must-not-appear"
-        codex = packaged_codex()
+        codex = resolve_codex(os.environ).path
         try:
             with StateService(StateServiceConfig(root, "linux-sandbox-test")) as state:
                 shared = layout.artifact_root / "shared.txt"
@@ -115,7 +94,7 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
                             parent_env=dict(os.environ, AIZIM_ATTACK_SECRET=secret),
                             event_sink=state,
                             timeout_seconds=20.0,
-                            runtime_read_roots=(codex.parents[2].resolve(strict=True),),
+                            runtime_read_roots=(codex_runtime_root(codex),),
                         )
                     )
                 )

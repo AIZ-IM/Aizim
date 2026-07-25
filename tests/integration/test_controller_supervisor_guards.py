@@ -218,9 +218,8 @@ async def test_guards_precede_claim_and_cleanup(
         monkeypatch.delenv("AIZIM_MODEL")
     elif guard == "worker_preflight":
         injected = replace(
-            _default_dependencies(),
-            controller_backend=injected.controller_backend,
-            worker_backend=injected.worker_backend,
+            injected,
+            worker_preflight=_default_dependencies().worker_preflight,
         )
         monkeypatch.setattr(
             cleanup_module,

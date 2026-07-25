@@ -330,6 +330,7 @@ test("CI isolates external provider contracts from provider-free package lanes",
     "kernel.apparmor_restrict_unprivileged_userns=0",
     'npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1',
     'echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"',
+    "sudo apt-get install --yes ripgrep",
   ]) {
     assert.ok(workflow.includes(value), `missing CI contract: ${value}`);
   }
@@ -373,6 +374,8 @@ test("CI isolates external provider contracts from provider-free package lanes",
     "tests/integration/test_provider_contract.py",
     "tests/security/test_controller_provider_isolation.py",
     "tests/unit/test_provider_executables.py",
+    "tests/security",
+    "${{ matrix.sandbox_marker }}",
   ]) {
     assert.ok(
       providerWorkflow.includes(value),
@@ -407,6 +410,14 @@ test("CI isolates external provider contracts from provider-free package lanes",
   );
   assert.match(codexJob, /AIZIM_PROVIDER_CONTRACT_PROVIDER: codex/u);
   assert.match(claudeJob, /AIZIM_PROVIDER_CONTRACT_PROVIDER: claude/u);
+  assert.equal(
+    providerWorkflow.match(/sandbox_marker: macos_sandbox/gu)?.length,
+    2,
+  );
+  assert.equal(
+    providerWorkflow.match(/sandbox_marker: linux_sandbox/gu)?.length,
+    4,
+  );
   assert.doesNotMatch(
     `${workflow}\n${registryWorkflow}\n${releaseWorkflow}`,
     /@openai\/codex|@anthropic-ai\/claude-code|AIZIM_PROVIDER_CONTRACT/u,
