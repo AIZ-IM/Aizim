@@ -1,0 +1,8 @@
+{
+  "name": "@anthropic-ai/claude-code",
+  "version": "2.1.218",
+  "private": true,
+  "bin": {
+    "claude": "package.json"
+  }
+}

@@ -12,19 +12,21 @@ import {
   rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import {
   basename,
+  delimiter,
   dirname,
   isAbsolute,
   join,
   relative,
   resolve,
 } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { capture } from "./lib/command.mjs";
 import { sha256File } from "./lib/hash.mjs";
@@ -49,6 +51,29 @@ const sharedTemporaryRoots = [
   "/var/tmp",
   "/private/var/tmp",
 ];
+const agentPackages = Object.freeze([
+  "@openai/codex",
+  "@anthropic-ai/claude-code",
+]);
+const agentCommands = Object.freeze(["codex", "claude"]);
+export const DOCTOR_CHECK_IDS = Object.freeze([
+  "python",
+  "uv",
+  "lean",
+  "lake",
+  "lean_project",
+  "disk_floor",
+  "runtime_mode",
+  "controller_configuration",
+  "controller_provider",
+  "controller_executable",
+  "controller_auth",
+  "worker_codex",
+  "sandbox_exec",
+  "lean_lsp_mcp",
+  "leanclient",
+  "state_service",
+]);
 
 export function createSmokeLayout(root) {
   const child = (name) => join(root, name);
@@ -62,9 +87,14 @@ export function createSmokeLayout(root) {
     runProject: child("run-project"),
     home: child("home"),
     cache: child("cache"),
+    tools: child("tools"),
     npmPrefix,
     metaOnly: child("meta-only-consumer"),
     corrupt: child("corrupt-consumer"),
+    upgrade: child("upgrade-consumer"),
+    upgradeProject: child("upgrade-project"),
+    upgradePackages: child("upgrade-packages"),
+    upgradeCache: child("upgrade-cache"),
     temporary: child("tmp"),
     localBinary: join(local, "node_modules", ".bin", "aizim"),
     globalBinary: join(npmPrefix, "bin", "aizim"),
@@ -96,7 +126,7 @@ export function consumerEnvironment(layout, source, pathEntries) {
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
     npm_config_prefix: layout.npmPrefix,
-    PATH: [...new Set(pathEntries)].join(":"),
+    PATH: [...new Set(pathEntries)].join(delimiter),
   };
 }
 
@@ -165,54 +195,84 @@ async function requireSuccess(program, arguments_, options, label) {
   return result;
 }
 
-export function doctorDocument(result, label) {
+function parsedDoctor(result, label) {
   let document;
   try {
     document = JSON.parse(result.stdout);
   } catch {
     throw new Error(`${label} returned invalid JSON`);
   }
-  const failures = document.checks
-    ?.filter?.((check) => check.status === "FAIL")
-    .map((check) => check.id);
+  const ids = document.checks?.map?.((check) => check.id);
   if (
-    result.code !== 0 ||
-    result.signal !== null ||
-    document.ready !== true
+    !Array.isArray(ids) ||
+    ids.length !== DOCTOR_CHECK_IDS.length ||
+    ids.some((id, index) => id !== DOCTOR_CHECK_IDS[index])
   ) {
-    throw new Error(
-      `${label} failed checks (${failures?.join(",") || "unknown"})`,
-    );
+    throw new Error(`${label} check set mismatch`);
   }
   return document;
 }
 
-function requireCodexDoctor(document, label) {
-  const codex = document.checks?.find?.((check) => check.id === "codex");
+export function doctorFailureDocument(result, label) {
+  const document = parsedDoctor(result, label);
+  const statuses = Object.fromEntries(
+    document.checks.map((check) => [check.id, check.status]),
+  );
+  const expectedStatuses = {
+    controller_configuration: "FAIL",
+    controller_provider: "SKIP",
+    controller_executable: "SKIP",
+    controller_auth: "SKIP",
+    worker_codex: "FAIL",
+    sandbox_exec: "SKIP",
+  };
   if (
-    codex?.status !== "PASS" ||
-    !codex.detail.includes("0.145.0")
+    result.code !== 3 ||
+    result.signal !== null ||
+    document.ready !== false ||
+    DOCTOR_CHECK_IDS.some(
+      (id) => statuses[id] !== (expectedStatuses[id] ?? "PASS"),
+    )
   ) {
-    throw new Error(`${label} did not resolve Codex 0.145.0`);
+    throw new Error(`${label} did not fail closed by role`);
   }
+  return document;
 }
 
-function requireClaudeDoctor(document, label) {
-  const claude = document.checks?.find?.((check) => check.id === "claude");
+export function validateProviderFreeCliEvidence(
+  { version, help, doctor },
+  label = "provider-free CLI",
+  expectedVersion = "0.1.0",
+) {
   if (
-    claude?.status !== "PASS" ||
-    !claude.detail.includes("2.1.218 (Claude Code)")
+    version.code !== 0 ||
+    version.signal !== null ||
+    version.stdout.trim() !== `aizim ${expectedVersion}`
   ) {
-    throw new Error(`${label} did not resolve Claude Code 2.1.218`);
+    throw new Error(`${label} version mismatch`);
   }
+  if (
+    help.code !== 0 ||
+    help.signal !== null ||
+    !help.stdout.startsWith("usage: aizim ")
+  ) {
+    throw new Error(`${label} help mismatch`);
+  }
+  doctorFailureDocument(doctor, `${label} doctor`);
 }
 
-async function installedClaudeExecutable(metaRoot) {
-  const [{ resolveClaudeExecutable }, { detectTarget }] = await Promise.all([
-    import(pathToFileURL(join(metaRoot, "lib", "claude.mjs"))),
-    import(pathToFileURL(join(metaRoot, "lib", "platform.mjs"))),
-  ]);
-  return resolveClaudeExecutable(detectTarget());
+export function assertNoAgentDependencies(document, label = "package") {
+  for (const dependencyClass of [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies",
+  ]) {
+    const dependencies = document[dependencyClass] ?? {};
+    if (agentPackages.some((name) => Object.hasOwn(dependencies, name))) {
+      throw new Error(`${label} contains an agent dependency`);
+    }
+  }
 }
 
 async function writeConsumer(path) {
@@ -240,13 +300,24 @@ async function findExecutable(name) {
   throw new Error(`required ${name} executable is unavailable`);
 }
 
-async function toolPath() {
-  return [
-    dirname(process.execPath),
-    dirname(await findExecutable("lake")),
-    "/usr/bin",
-    "/bin",
-  ];
+async function toolPath(layout) {
+  await mkdir(layout.tools, { mode: 0o700 });
+  await symlink(process.execPath, join(layout.tools, "node"));
+  for (const name of ["lake", "lean", "rg"]) {
+    await symlink(await findExecutable(name), join(layout.tools, name));
+  }
+  const paths = [layout.tools, "/usr/bin", "/bin"];
+  for (const name of agentCommands) {
+    for (const directory of paths) {
+      try {
+        await access(join(directory, name), constants.X_OK);
+      } catch {
+        continue;
+      }
+      throw new Error(`provider-free PATH exposes ${name}`);
+    }
+  }
+  return paths;
 }
 
 async function readyMarkers(root) {
@@ -324,6 +395,240 @@ async function packageInputs() {
   return { meta, platform, summary };
 }
 
+async function readPackageDocument(root) {
+  return JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+}
+
+async function pathExists(path) {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function packUpgradeFixture(npm, layout, name, environment) {
+  const fixture = join(
+    repositoryRoot,
+    "tests",
+    "fixtures",
+    "npm-bundled-agent-upgrade",
+    name,
+  );
+  const result = await requireSuccess(
+    ...npm(
+      "pack",
+      "--ignore-scripts",
+      "--json",
+      "--pack-destination",
+      layout.upgradePackages,
+      fixture,
+    ),
+    { cwd: layout.upgrade, env: environment },
+    `pack legacy ${name} fixture`,
+  );
+  const parsed = JSON.parse(result.stdout);
+  const records = Array.isArray(parsed) ? parsed : Object.values(parsed);
+  const filename = records?.[0]?.filename;
+  if (
+    records.length !== 1 ||
+    typeof filename !== "string" ||
+    basename(filename) !== filename
+  ) {
+    throw new Error(`legacy ${name} fixture pack mismatch`);
+  }
+  return join(layout.upgradePackages, filename);
+}
+
+function requireConfiguredCodexFailure(result) {
+  const document = parsedDoctor(result, "configured Codex upgrade doctor");
+  const statuses = Object.fromEntries(
+    document.checks.map((check) => [check.id, check.status]),
+  );
+  if (
+    result.code !== 3 ||
+    result.signal !== null ||
+    document.ready !== false ||
+    statuses.controller_configuration !== "PASS" ||
+    statuses.controller_provider !== "PASS" ||
+    statuses.controller_executable !== "FAIL" ||
+    statuses.controller_auth !== "SKIP" ||
+    statuses.worker_codex !== "FAIL" ||
+    statuses.sandbox_exec !== "SKIP"
+  ) {
+    throw new Error("configured Codex upgrade doctor did not fail closed");
+  }
+}
+
+async function bundledAgentUpgrade({
+  environment,
+  initializer,
+  layout,
+  npm,
+  packages,
+}) {
+  const [legacy, codex, claude] = await Promise.all([
+    packUpgradeFixture(npm, layout, "aizim", environment),
+    packUpgradeFixture(npm, layout, "codex", environment),
+    packUpgradeFixture(npm, layout, "claude", environment),
+  ]);
+  await writeFile(
+    join(layout.upgrade, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "aizim-bundled-agent-upgrade",
+        version: "0.0.0",
+        private: true,
+        dependencies: { "@aiz.im/aizim": `file:${legacy}` },
+        overrides: {
+          "@openai/codex": `file:${codex}`,
+          "@anthropic-ai/claude-code": `file:${claude}`,
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+  await requireSuccess(
+    ...npm(
+      "install",
+      "--ignore-scripts",
+      "--offline",
+      "--cache",
+      layout.upgradeCache,
+      "--no-audit",
+      "--no-fund",
+    ),
+    { cwd: layout.upgrade, env: environment },
+    "legacy bundled-agent install",
+  );
+  const legacyRoot = join(
+    layout.upgrade,
+    "node_modules",
+    "@aiz.im",
+    "aizim",
+  );
+  const legacyDocument = await readPackageDocument(legacyRoot);
+  if (
+    legacyDocument.dependencies?.["@openai/codex"] !== "0.145.0" ||
+    legacyDocument.dependencies?.["@anthropic-ai/claude-code"] !== "2.1.218"
+  ) {
+    throw new Error("legacy bundled-agent dependency mismatch");
+  }
+  for (const name of agentCommands) {
+    if (!(await pathExists(join(layout.upgrade, "node_modules", ".bin", name)))) {
+      throw new Error(`legacy ${name} fixture is unavailable`);
+    }
+  }
+
+  await copyFixture(layout.upgradeProject);
+  await requireSuccess(
+    initializer,
+    ["init", layout.upgradeProject],
+    { cwd: layout.local, env: environment },
+    "upgrade project init",
+  );
+  const stateDatabase = join(
+    layout.upgradeProject,
+    ".aizim",
+    "state.sqlite3",
+  );
+  const credentialSentinels = [
+    join(layout.home, ".codex", "upgrade-credential-sentinel"),
+    join(layout.home, ".claude", "upgrade-credential-sentinel"),
+  ];
+  for (const [index, sentinel] of credentialSentinels.entries()) {
+    await mkdir(dirname(sentinel), { mode: 0o700, recursive: true });
+    await writeFile(sentinel, `credential-${index}\n`, { mode: 0o600 });
+  }
+  const before = await Promise.all(
+    [stateDatabase, ...credentialSentinels].map(sha256File),
+  );
+
+  await requireSuccess(
+    ...npm(
+      "install",
+      "--ignore-scripts",
+      "--offline",
+      "--cache",
+      layout.upgradeCache,
+      "--no-audit",
+      "--no-fund",
+      packages.platform.path,
+      packages.meta.path,
+    ),
+    { cwd: layout.upgrade, env: environment },
+    "provider-free upgrade install",
+  );
+  const after = await Promise.all(
+    [stateDatabase, ...credentialSentinels].map(sha256File),
+  );
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    throw new Error("provider-free upgrade changed state or credentials");
+  }
+  const upgradedRoot = join(
+    layout.upgrade,
+    "node_modules",
+    "@aiz.im",
+    "aizim",
+  );
+  assertNoAgentDependencies(
+    await readPackageDocument(upgradedRoot),
+    "upgraded package",
+  );
+  for (const name of [...agentCommands, ...agentPackages]) {
+    const path = name.startsWith("@")
+      ? join(layout.upgrade, "node_modules", ...name.split("/"))
+      : join(layout.upgrade, "node_modules", ".bin", name);
+    if (await pathExists(path)) {
+      throw new Error(`upgrade retained legacy provider ${name}`);
+    }
+  }
+
+  const binary = join(layout.upgrade, "node_modules", ".bin", "aizim");
+  const version = await execute(binary, ["--version"], {
+    cwd: layout.upgrade,
+    env: environment,
+  });
+  const help = await execute(binary, ["--help"], {
+    cwd: layout.upgrade,
+    env: environment,
+  });
+  if (
+    version.code !== 0 ||
+    version.stdout.trim() !== "aizim 0.1.0" ||
+    help.code !== 0 ||
+    !help.stdout.startsWith("usage: aizim ")
+  ) {
+    throw new Error("upgraded provider-free CLI mismatch");
+  }
+  await requireSuccess(
+    binary,
+    [
+      "controller",
+      "configure",
+      "--project",
+      layout.upgradeProject,
+      "--provider",
+      "codex",
+    ],
+    { cwd: layout.upgrade, env: environment },
+    "upgrade Codex controller configure",
+  );
+  requireConfiguredCodexFailure(
+    await execute(
+      binary,
+      ["doctor", "--project", layout.upgradeProject, "--json"],
+      { cwd: layout.upgrade, env: environment },
+    ),
+  );
+}
+
 async function copyFixture(destination) {
   await cp(
     join(repositoryRoot, "tests", "fixtures", "attack_probe_project"),
@@ -365,6 +670,10 @@ export async function installSmoke() {
       layout.npmPrefix,
       layout.project,
       layout.runProject,
+      layout.upgrade,
+      layout.upgradeProject,
+      layout.upgradePackages,
+      layout.upgradeCache,
       layout.temporary,
     ]) {
       await mkdir(path, { mode: 0o700, recursive: true });
@@ -376,7 +685,7 @@ export async function installSmoke() {
     const environment = consumerEnvironment(
       layout,
       process.env,
-      await toolPath(),
+      await toolPath(layout),
     );
     environment.TMPDIR = layout.temporary;
     const npm = (...arguments_) => npmArguments(...arguments_);
@@ -388,17 +697,12 @@ export async function installSmoke() {
       cwd: layout.local,
       env: environment,
     }, "local install");
-    const localClaude = await requireSuccess(
-      await installedClaudeExecutable(
+    assertNoAgentDependencies(
+      await readPackageDocument(
         join(layout.local, "node_modules", "@aiz.im", "aizim"),
       ),
-      ["--version"],
-      { cwd: layout.local, env: environment },
-      "local Claude version",
+      "local package",
     );
-    if (localClaude.stdout.trim() !== "2.1.218 (Claude Code)") {
-      throw new Error("local Claude version mismatch");
-    }
 
     const version = await requireSuccess(
       layout.localBinary,
@@ -409,6 +713,12 @@ export async function installSmoke() {
     if (version.stdout.trim() !== "aizim 0.1.0") {
       throw new Error("local version mismatch");
     }
+    const help = await requireSuccess(
+      layout.localBinary,
+      ["--help"],
+      { cwd: layout.local, env: environment },
+      "local help",
+    );
     const markers = await readyMarkers(layout.cache);
     if (markers.length !== 1) {
       throw new Error("runtime ready marker mismatch");
@@ -444,39 +754,15 @@ export async function installSmoke() {
       { cwd: layout.local, env: environment },
       "npm init",
     );
-    const doctor = await requireSuccess(
-      layout.localBinary,
-      ["doctor", "--project", layout.project],
-      { cwd: layout.local, env: environment },
-      "npm doctor",
-    );
-    if (!doctor.stdout.split(/\r?\n/u).includes("READY")) {
-      throw new Error("npm doctor did not report READY");
-    }
     const localDoctorResult = await execute(
       layout.localBinary,
       ["doctor", "--project", layout.project, "--json"],
       { cwd: layout.local, env: environment },
     );
-    const localDoctor = doctorDocument(localDoctorResult, "npm doctor");
-    requireCodexDoctor(localDoctor, "npm doctor");
-    requireClaudeDoctor(localDoctor, "npm doctor");
-    const gate = await requireSuccess(
-      layout.localBinary,
-      [
-        "security-probe",
-        "--project",
-        layout.project,
-        "--backend",
-        "codex",
-        "--no-model",
-      ],
-      { cwd: layout.local, env: environment },
-      "npm security gate",
+    validateProviderFreeCliEvidence(
+      { version, help, doctor: localDoctorResult },
+      "local provider-free CLI",
     );
-    if (!gate.stdout.startsWith("SECURITY GATE PASS\n")) {
-      throw new Error("npm security gate mismatch");
-    }
     await copyRunFixture(layout.runProject);
     await requireSuccess(
       await findExecutable("lake"),
@@ -514,6 +800,13 @@ export async function installSmoke() {
       "npm controller loop",
     );
     requireControllerSmokeOutput(controllerSmoke);
+    await bundledAgentUpgrade({
+      environment,
+      initializer: layout.localBinary,
+      layout,
+      npm,
+      packages,
+    });
 
     const sentinel = join(layout.cache, "unrelated-sentinel");
     await writeFile(sentinel, "preserve\n", { mode: 0o600 });
@@ -565,8 +858,14 @@ export async function installSmoke() {
     if (globalVersion.stdout.trim() !== "aizim 0.1.0") {
       throw new Error("global version mismatch");
     }
-    const globalClaude = await requireSuccess(
-      await installedClaudeExecutable(
+    const globalHelp = await requireSuccess(
+      layout.globalBinary,
+      ["--help"],
+      { cwd: layout.global, env: environment },
+      "global help",
+    );
+    assertNoAgentDependencies(
+      await readPackageDocument(
         join(
           layout.npmPrefix,
           "lib",
@@ -575,24 +874,21 @@ export async function installSmoke() {
           "aizim",
         ),
       ),
-      ["--version"],
-      { cwd: layout.global, env: environment },
-      "global Claude version",
+      "global package",
     );
-    if (globalClaude.stdout.trim() !== "2.1.218 (Claude Code)") {
-      throw new Error("global Claude version mismatch");
-    }
     const globalDoctorResult = await execute(
       layout.globalBinary,
       ["doctor", "--project", layout.project, "--json"],
       { cwd: layout.global, env: environment },
     );
-    const globalDoctor = doctorDocument(
-      globalDoctorResult,
-      "global npm doctor",
+    validateProviderFreeCliEvidence(
+      {
+        version: globalVersion,
+        help: globalHelp,
+        doctor: globalDoctorResult,
+      },
+      "global provider-free CLI",
     );
-    requireCodexDoctor(globalDoctor, "global npm doctor");
-    requireClaudeDoctor(globalDoctor, "global npm doctor");
 
     command = npm(
       "install",
@@ -662,26 +958,24 @@ export async function installSmoke() {
         reused: true,
       },
       checks: {
-        local_install: true,
-        global_install: true,
-        npx_no_install: true,
+        provider_free_local_install: true,
+        provider_free_global_install: true,
+        provider_free_version: true,
+        provider_free_help: true,
+        provider_free_doctor_fails_closed: true,
+        no_agent_dependencies: true,
         python_314_bootstrap: true,
         cache_reused: true,
         uninstall_preserved_cache: true,
-        local_codex_01450: true,
-        global_codex_01450: true,
-        local_claude_21218: true,
-        global_claude_21218: true,
-        ready: true,
-        security_gate: true,
         aizim_run: true,
         controller_loop: true,
+        bundled_agent_upgrade_preserved_state_credentials: true,
         missing_platform_exit_78: true,
         integrity_failure_exit_74: true,
       },
     });
     process.stdout.write(
-      "aizim 0.1.0\nREADY\nSECURITY GATE PASS\nAIZIM RUN PASS\n" +
+      "aizim 0.1.0\nEXPECTED DOCTOR FAILURE\nAIZIM RUN PASS\n" +
       controllerSmoke.stdout,
     );
   } finally {

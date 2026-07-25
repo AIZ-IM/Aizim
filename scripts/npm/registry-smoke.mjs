@@ -12,6 +12,7 @@ import {
   rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -27,11 +28,22 @@ import {
 import { fileURLToPath } from "node:url";
 
 import { detectTarget } from "../../lib/platform.mjs";
+import {
+  assertNoAgentDependencies,
+  validateProviderFreeCliEvidence,
+} from "./install-smoke.mjs";
 import { repositoryRoot } from "./lib/paths.mjs";
 import { CI_TARGETS } from "./verify-ci-evidence.mjs";
 
 const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
-const checkNames = ["ready", "security_gate", "aizim_run"];
+const checkNames = [
+  "provider_free_install",
+  "provider_free_cli",
+  "expected_doctor_failure",
+  "cache_reused",
+  "lean_build",
+  "aizim_run",
+];
 const preservedEnvironment = new Set([
   "HTTP_PROXY",
   "HTTPS_PROXY",
@@ -126,7 +138,26 @@ async function copyFixture(source, destination) {
   });
 }
 
-function consumerEnvironment(layout, lake) {
+async function providerFreeTools(layout, lake) {
+  await mkdir(layout.tools, { mode: 0o700 });
+  await symlink(process.execPath, join(layout.tools, "node"));
+  await symlink(lake, join(layout.tools, "lake"));
+  for (const name of ["lean", "rg"]) {
+    await symlink(await findExecutable(name), join(layout.tools, name));
+  }
+  for (const name of ["codex", "claude"]) {
+    for (const directory of [layout.tools, "/usr/bin", "/bin"]) {
+      try {
+        await access(join(directory, name), constants.X_OK);
+      } catch {
+        continue;
+      }
+      throw new Error(`provider-free PATH exposes ${name}`);
+    }
+  }
+}
+
+function consumerEnvironment(layout) {
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(([name]) =>
       preservedEnvironment.has(name),
@@ -144,8 +175,7 @@ function consumerEnvironment(layout, lake) {
     LC_ALL: "C.UTF-8",
     npm_config_prefix: layout.prefix,
     PATH: [
-      dirname(process.execPath),
-      dirname(lake),
+      layout.tools,
       "/usr/bin",
       "/bin",
     ].join(delimiter),
@@ -214,8 +244,11 @@ export function createRegistrySmokeAggregate(documents, version) {
     version,
     targets,
     checks: {
-      ready: true,
-      security_gate: true,
+      provider_free_install: true,
+      provider_free_cli: true,
+      expected_doctor_failure: true,
+      cache_reused: true,
+      lean_build: true,
       aizim_run: true,
     },
   };
@@ -245,6 +278,7 @@ export async function registrySmoke({ version, output }) {
     home: join(generated, "home"),
     project: join(generated, "project"),
     runProject: join(generated, "run-project"),
+    tools: join(generated, "tools"),
     temporary: join(generated, "tmp"),
   };
   try {
@@ -263,7 +297,8 @@ export async function registrySmoke({ version, output }) {
       { mode: 0o600 },
     );
     const lake = await findExecutable("lake");
-    const environment = consumerEnvironment(layout, lake);
+    await providerFreeTools(layout, lake);
+    const environment = consumerEnvironment(layout);
     const npm = join(dirname(process.execPath), "npm");
     const packageSpec = `@aiz.im/aizim@${version}`;
     await requireSuccess(
@@ -294,6 +329,27 @@ export async function registrySmoke({ version, output }) {
     if (firstVersion.stdout.trim() !== `aizim ${version}`) {
       throw new Error("registry version mismatch");
     }
+    const localHelp = await requireSuccess(
+      localBinary,
+      ["--help"],
+      { cwd: layout.local, env: environment },
+      "local registry help",
+    );
+    assertNoAgentDependencies(
+      JSON.parse(
+        await readFile(
+          join(
+            layout.local,
+            "node_modules",
+            "@aiz.im",
+            "aizim",
+            "package.json",
+          ),
+          "utf8",
+        ),
+      ),
+      "registry package",
+    );
     const markers = await readyFiles(layout.cache);
     if (markers.length !== 1) {
       throw new Error("registry runtime readiness mismatch");
@@ -336,6 +392,12 @@ export async function registrySmoke({ version, output }) {
     if (globalVersion.stdout.trim() !== `aizim ${version}`) {
       throw new Error("global registry version mismatch");
     }
+    const globalHelp = await requireSuccess(
+      join(layout.prefix, "bin", "aizim"),
+      ["--help"],
+      { cwd: layout.root, env: environment },
+      "global registry help",
+    );
 
     await copyFixture(
       join(repositoryRoot, "tests", "fixtures", "attack_probe_project"),
@@ -347,31 +409,29 @@ export async function registrySmoke({ version, output }) {
       { cwd: layout.local, env: environment },
       "registry project init",
     );
-    const doctor = await requireSuccess(
+    const localDoctor = await execute(
       localBinary,
-      ["doctor", "--project", layout.project],
+      ["doctor", "--project", layout.project, "--json"],
       { cwd: layout.local, env: environment },
-      "registry doctor",
     );
-    if (!doctor.stdout.split(/\r?\n/u).includes("READY")) {
-      throw new Error("registry doctor mismatch");
-    }
-    const gate = await requireSuccess(
-      localBinary,
-      [
-        "security-probe",
-        "--project",
-        layout.project,
-        "--backend",
-        "codex",
-        "--no-model",
-      ],
-      { cwd: layout.local, env: environment },
-      "registry security gate",
+    validateProviderFreeCliEvidence(
+      { version: firstVersion, help: localHelp, doctor: localDoctor },
+      "local registry provider-free CLI",
+      version,
     );
-    if (!gate.stdout.startsWith("SECURITY GATE PASS\n")) {
-      throw new Error("registry security gate mismatch");
-    }
+    validateProviderFreeCliEvidence(
+      {
+        version: globalVersion,
+        help: globalHelp,
+        doctor: await execute(
+          join(layout.prefix, "bin", "aizim"),
+          ["doctor", "--project", layout.project, "--json"],
+          { cwd: layout.root, env: environment },
+        ),
+      },
+      "global registry provider-free CLI",
+      version,
+    );
 
     await copyFixture(
       join(repositoryRoot, "examples", "smoke_lean"),
@@ -412,8 +472,11 @@ export async function registrySmoke({ version, output }) {
       version,
       target,
       checks: {
-        ready: true,
-        security_gate: true,
+        provider_free_install: true,
+        provider_free_cli: true,
+        expected_doctor_failure: true,
+        cache_reused: true,
+        lean_build: true,
         aizim_run: true,
       },
     };

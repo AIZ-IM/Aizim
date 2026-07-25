@@ -1,0 +1,9 @@
+{
+  "name": "@aiz.im/aizim",
+  "version": "0.0.0-legacy",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.218",
+    "@openai/codex": "0.145.0"
+  }
+}

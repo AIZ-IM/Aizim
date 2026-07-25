@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DOCTOR_CHECK_IDS,
+  assertNoAgentDependencies,
   consumerEnvironment,
   createSmokeLayout,
-  doctorDocument,
+  doctorFailureDocument,
   installArguments,
+  validateProviderFreeCliEvidence,
   validatePrivateRoot,
 } from "../../scripts/npm/install-smoke.mjs";
 import * as installSmokeModule from "../../scripts/npm/install-smoke.mjs";
@@ -104,22 +107,60 @@ test("consumer environment is minimal and removes injection variables", () => {
   });
 });
 
-test("doctor failures name the exact failed checks", () => {
-  const result = {
+test("provider-free CLI evidence requires version, help, and stable doctor failure", () => {
+  const checks = DOCTOR_CHECK_IDS.map((id) => ({
+    id,
+    status: {
+      controller_configuration: "FAIL",
+      controller_provider: "SKIP",
+      controller_executable: "SKIP",
+      controller_auth: "SKIP",
+      worker_codex: "FAIL",
+      sandbox_exec: "SKIP",
+    }[id] ?? "PASS",
+  }));
+  const doctor = {
     code: 3,
     signal: null,
     stdout: JSON.stringify({
       ready: false,
-      checks: [
-        { id: "disk_floor", status: "FAIL" },
-        { id: "codex", status: "PASS" },
-      ],
+      checks,
     }),
   };
 
+  assert.deepEqual(
+    doctorFailureDocument(doctor, "provider-free doctor").checks,
+    checks,
+  );
+  assert.doesNotThrow(() =>
+    validateProviderFreeCliEvidence({
+      version: { code: 0, signal: null, stdout: "aizim 0.1.0\n" },
+      help: { code: 0, signal: null, stdout: "usage: aizim [-h]\n" },
+      doctor,
+    }),
+  );
+});
+
+test("provider-free metadata has no agent dependency in any dependency class", () => {
+  assert.doesNotThrow(() =>
+    assertNoAgentDependencies({
+      dependencies: { "ordinary-package": "1.0.0" },
+      optionalDependencies: { "@aiz.im/aizim-linux-x64": "0.1.0" },
+    }),
+  );
   assert.throws(
-    () => doctorDocument(result, "global npm doctor"),
-    /global npm doctor failed checks \(disk_floor\)/u,
+    () =>
+      assertNoAgentDependencies({
+        dependencies: { "@openai/codex": "0.145.0" },
+      }),
+    /agent dependency/u,
+  );
+  assert.throws(
+    () =>
+      assertNoAgentDependencies({
+        peerDependencies: { "@anthropic-ai/claude-code": "2.1.218" },
+      }),
+    /agent dependency/u,
   );
 });
 

@@ -223,20 +223,23 @@ test("registry wait mode stops after twelve 404 attempts at five-second interval
   assert.deepEqual(delays, Array(11).fill(5_000));
 });
 
-test("registry smoke aggregate requires READY, Gate B, and a run on all targets", () => {
+test("registry smoke aggregate requires provider-free readiness and a run on all targets", () => {
   const documents = Object.keys(CI_TARGETS).map((target) => ({
     schema_version: 1,
     version,
     target,
     checks: {
-      ready: true,
-      security_gate: true,
+      provider_free_install: true,
+      provider_free_cli: true,
+      expected_doctor_failure: true,
+      cache_reused: true,
+      lean_build: true,
       aizim_run: true,
     },
   }));
   const aggregate = createRegistrySmokeAggregate(documents, version);
   assert.deepEqual(aggregate.targets, Object.keys(CI_TARGETS).sort());
-  documents[0].checks.ready = false;
+  documents[0].checks.provider_free_cli = false;
   assert.throws(
     () => createRegistrySmokeAggregate(documents, version),
     /registry smoke checks/u,

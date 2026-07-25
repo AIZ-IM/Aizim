@@ -25,20 +25,18 @@ const targetRecords = {
   "linux-x64": { os: "linux", arch: "x64", libc: "glibc" },
 };
 const installChecks = {
-  local_install: true,
-  global_install: true,
-  npx_no_install: true,
+  provider_free_local_install: true,
+  provider_free_global_install: true,
+  provider_free_version: true,
+  provider_free_help: true,
+  provider_free_doctor_fails_closed: true,
+  no_agent_dependencies: true,
   python_314_bootstrap: true,
   cache_reused: true,
   uninstall_preserved_cache: true,
-  local_codex_01450: true,
-  global_codex_01450: true,
-  local_claude_21218: true,
-  global_claude_21218: true,
-  ready: true,
-  security_gate: true,
   aizim_run: true,
   controller_loop: true,
+  bundled_agent_upgrade_preserved_state_credentials: true,
   missing_platform_exit_78: true,
   integrity_failure_exit_74: true,
 };
@@ -191,9 +189,9 @@ function installEvidenceDocument() {
 test("requires every install observation before composing native evidence", async (context) => {
   for (const [name, mutate, pattern] of [
     [
-      "failed security gate",
+      "failed provider-free doctor contract",
       (document) => {
-        document.checks.security_gate = false;
+        document.checks.provider_free_doctor_fails_closed = false;
       },
       /install checks/,
     ],
@@ -205,9 +203,9 @@ test("requires every install observation before composing native evidence", asyn
       /ready evidence/,
     ],
     [
-      "missing global Codex resolution",
+      "missing provider-free global install",
       (document) => {
-        delete document.checks.global_codex_01450;
+        delete document.checks.provider_free_global_install;
       },
       /install checks/,
     ],
@@ -222,6 +220,13 @@ test("requires every install observation before composing native evidence", asyn
       "missing controller loop smoke",
       (document) => {
         delete document.checks.controller_loop;
+      },
+      /install checks/,
+    ],
+    [
+      "missing bundled-agent upgrade evidence",
+      (document) => {
+        delete document.checks.bundled_agent_upgrade_preserved_state_credentials;
       },
       /install checks/,
     ],
@@ -381,7 +386,7 @@ test("rejects unknown fields, false checks, and target ABI mismatches", async (c
     [
       "false check",
       (document) => {
-        document.checks.security_gate = false;
+        document.checks.provider_free_doctor_fails_closed = false;
       },
       /evidence checks/,
     ],

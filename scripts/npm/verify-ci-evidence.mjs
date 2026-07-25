@@ -37,20 +37,18 @@ export const CI_TARGETS = Object.freeze({
 });
 
 export const INSTALL_CHECK_NAMES = Object.freeze([
-  "local_install",
-  "global_install",
-  "npx_no_install",
+  "provider_free_local_install",
+  "provider_free_global_install",
+  "provider_free_version",
+  "provider_free_help",
+  "provider_free_doctor_fails_closed",
+  "no_agent_dependencies",
   "python_314_bootstrap",
   "cache_reused",
   "uninstall_preserved_cache",
-  "local_codex_01450",
-  "global_codex_01450",
-  "local_claude_21218",
-  "global_claude_21218",
-  "ready",
-  "security_gate",
   "aizim_run",
   "controller_loop",
+  "bundled_agent_upgrade_preserved_state_credentials",
   "missing_platform_exit_78",
   "integrity_failure_exit_74",
 ]);
