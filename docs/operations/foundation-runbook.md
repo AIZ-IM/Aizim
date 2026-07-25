@@ -21,6 +21,7 @@ open-problem result, novelty, or general autonomous proving capability.
 | Python | 3.12–3.14 |
 | uv | 0.11.31 |
 | Codex CLI | 0.145.0 |
+| Claude Code | 2.1.218 when using a Claude Controller |
 | Lean | 4.32.1 |
 | Lean toolchain | `leanprover/lean4:v4.32.1` |
 | lean-lsp-mcp | 0.28.1 |
@@ -29,15 +30,18 @@ open-problem result, novelty, or general autonomous proving capability.
 | Free disk floor | 2,147,483,648 bytes (2 GiB) |
 | Lake imports | `Std` only; no Mathlib, Batteries, REPL, or Loogle index |
 
-These global `uv` and Codex prerequisites apply only to the uv-native source workflow in this
-runbook. The npm distribution carries uv and resolves Codex from its package-local dependency; it
-does not use global Python, uv, or Codex. For uv-native development, install `uv` 0.11.31 with the
-organization's managed Python tooling, install `elan` and Node.js, then install the executable
-pins:
+Global `uv` is required only for the uv-native source workflow. The external Codex prerequisite
+applies to both source and npm operation: Aizim does not install Codex or Claude. Codex is always
+required for Worker and sandbox readiness. Claude is required only when `claude` is the selected
+Controller. Install `uv` 0.11.31 with the organization's managed Python tooling, install `elan`,
+Node.js, and `rg`, then install the agent pins you need:
 
 ```sh
 elan toolchain install leanprover/lean4:v4.32.1
 npm install --global @openai/codex@0.145.0
+# Only for a Claude Controller:
+npm install --global --allow-scripts=@anthropic-ai/claude-code \
+  @anthropic-ai/claude-code@2.1.218
 uv sync --frozen
 ```
 
@@ -46,13 +50,23 @@ Verify rather than assuming the active tools:
 ```sh
 uv --version
 codex --version
+# Only for a Claude Controller:
+claude --version
 (cd examples/smoke_lean && lake env lean --version)
 (cd examples/smoke_lean && lake --version)
 uv run python -c 'import importlib.metadata as m; print(m.version("lean-lsp-mcp"), m.version("leanclient"), m.version("mcp"))'
 ```
 
-Expected pins are `uv 0.11.31`, `codex-cli 0.145.0`, Lean `4.32.1`, and Python package versions
-`0.28.1 0.12.1 1.28.1`.
+Expected pins are `uv 0.11.31`, `codex-cli 0.145.0`, optional `2.1.218 (Claude Code)`, Lean
+`4.32.1`, and Python package versions `0.28.1 0.12.1 1.28.1`.
+
+Codex resolves `AIZIM_CODEX_EXECUTABLE` before `codex` on `PATH`; Claude independently resolves
+`AIZIM_CLAUDE_EXECUTABLE` before `claude` on `PATH`. Unsupported-version diagnostics include
+`observed=...; supported=...`; install a supported side-by-side CLI and set the corresponding
+override to its absolute path. For each Controller-start operation, Aizim records the canonical
+path, exact version, and SHA-256 as trust on first use, then revalidates it before every launch.
+That protects one operation from image replacement but does not verify user-owned provider
+provenance.
 
 ## Initialize a Lean project
 
@@ -85,6 +99,8 @@ rsync -a --exclude '.aizim' --exclude '.lake' examples/smoke_lean/ "$AIZIM_FAKE_
 rsync -a --exclude '.aizim' --exclude '.lake' examples/smoke_lean/ "$AIZIM_REAL_ROOT/"
 uv run aizim init "$AIZIM_FAKE_ROOT"
 uv run aizim init "$AIZIM_REAL_ROOT"
+uv run aizim controller configure --project "$AIZIM_FAKE_ROOT" --provider codex
+uv run aizim controller configure --project "$AIZIM_REAL_ROOT" --provider codex
 ```
 
 ## Readiness and Gate B

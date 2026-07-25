@@ -15,7 +15,7 @@ acceptance platform for these slices.
 ## Install from npm
 
 The public npm distribution supports macOS arm64 and glibc-based Linux on arm64 and x64. It
-requires Node.js 22.22.2 or newer and an external Lean 4 installation managed by `elan`.
+requires Node.js 22.22.2 or newer, `rg`, and an external Lean 4 installation managed by `elan`.
 
 Install the command globally:
 
@@ -31,10 +31,22 @@ npm install --save-dev @aiz.im/aizim
 npx --no-install aizim --version
 ```
 
-The first command may download and prepare a managed CPython 3.14.6 runtime in the Aizim cache.
-The npm package uses its own Codex CLI 0.145.0, Claude Code 2.1.218, and bundled uv 0.11.31. It
-never depends on a global Python, uv, Codex, or Claude installation. Removing the npm package
-does not remove Lean projects or Aizim runtime caches.
+The first command may download and prepare a managed CPython 3.14.6 runtime in the Aizim cache
+through bundled uv 0.11.31. Aizim does not install Codex or Claude. Install Codex CLI 0.145.0
+independently for every operational configuration; install Claude Code 2.1.218 only when selecting
+a Claude Controller:
+
+```sh
+npm install --global @openai/codex@0.145.0
+npm install --global --allow-scripts=@anthropic-ai/claude-code \
+  @anthropic-ai/claude-code@2.1.218
+```
+
+Codex remains the fixed Worker and sandbox runtime. Controller selection is explicit and may use
+Codex or Claude. Provider executables are user-owned: Aizim resolves an explicit override before
+`PATH`, records the canonical path, exact version, and SHA-256 as trust-on-first-use evidence, and
+revalidates that image before each launch. Removing or upgrading the Aizim package does not remove
+Lean projects, credentials, or Aizim runtime caches.
 
 ## Build from source
 
@@ -47,8 +59,8 @@ uv run python -m aizim --version
 uv run pytest tests/unit/test_package.py -q
 ```
 
-For the complete current-host npm distribution, including the Rust launcher, Python wheel,
-bundled uv, and package-local Codex:
+For the complete current-host npm distribution, including the Rust launcher, Python wheel, and
+bundled uv:
 
 ```sh
 npm install --ignore-scripts
@@ -105,6 +117,8 @@ model from `AIZIM_MODEL` or the project configuration. The foreground controller
 state writer, executes each durable assignment at most once, and records runtime and execution
 status for `controller show` and `worker list`. Configuration, registration, assignments, and
 terminal execution status survive restarts; terminal assignments are not dispatched again.
+Codex CLI 0.145.0 is required for either Controller choice; Claude Code 2.1.218 is additionally
+required only for the Claude Controller.
 
 Slices 1–2 are engineering smoke tests only. They make no open-problem, novelty, or
 general proof-capability claim.
@@ -123,6 +137,7 @@ esac
 AIZIM_REAL_ROOT="$(mktemp -d "${TMPDIR%/}/aizim-real.XXXXXX")"
 rsync -a --exclude '.aizim' --exclude '.lake' examples/smoke_lean/ "$AIZIM_REAL_ROOT/"
 uv run aizim init "$AIZIM_REAL_ROOT"
+uv run aizim controller configure --project "$AIZIM_REAL_ROOT" --provider codex
 uv run aizim doctor --project "$AIZIM_REAL_ROOT"
 uv run aizim security-probe --project "$AIZIM_REAL_ROOT" --backend codex --no-model
 ```
@@ -145,6 +160,7 @@ different fresh copy from the real gate:
 AIZIM_FAKE_ROOT="$(mktemp -d "${TMPDIR%/}/aizim-fake.XXXXXX")"
 rsync -a --exclude '.aizim' --exclude '.lake' examples/smoke_lean/ "$AIZIM_FAKE_ROOT/"
 uv run aizim init "$AIZIM_FAKE_ROOT"
+uv run aizim controller configure --project "$AIZIM_FAKE_ROOT" --provider codex
 uv run aizim security-probe --project "$AIZIM_FAKE_ROOT" --backend codex --no-model
 uv run aizim run --project "$AIZIM_FAKE_ROOT" --profile autonomous-shared --backend fake
 ```

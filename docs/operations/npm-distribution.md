@@ -14,13 +14,15 @@ The distribution supports:
 | `linux-arm64` | Linux arm64 with glibc |
 | `linux-x64` | Linux x64 with glibc |
 
-Consumers need Node.js 22.22.2 or newer and an external Lean toolchain managed by `elan`. The npm
-package supplies Codex CLI 0.145.0, Claude Code 2.1.218, uv 0.11.31, and a managed CPython 3.14.6
-runtime. It does not consult global Python, uv, Codex, or Claude installations. musl Linux and
-Windows are unsupported.
+Consumers need Node.js 22.22.2 or newer, `rg`, and an external Lean toolchain managed by `elan`.
+The npm package supplies uv 0.11.31 and a managed CPython 3.14.6 runtime.
+It does not install Codex or Claude.
+Codex CLI 0.145.0 is always required for Worker and sandbox readiness. Claude Code 2.1.218 is
+required only when `claude` is the selected Controller. musl Linux and Windows are unsupported.
 Intel macOS is unsupported; macOS packages target Apple silicon only.
-Linux hosts must permit unprivileged user namespaces for Codex's package-local bubblewrap sandbox;
-on Ubuntu 24.04, grant that permission with an AppArmor profile for the installed executable.
+Linux hosts must permit unprivileged user namespaces for the supported external Codex
+bubblewrap sandbox; on Ubuntu 24.04, grant that permission with an AppArmor profile for the
+installed executable.
 
 ## Install as a consumer
 
@@ -41,6 +43,40 @@ npx --no-install aizim --version
 The first invocation may download and assemble CPython 3.14.6 below the Aizim runtime cache. A
 successful second invocation reuses the same verified `READY.json` record. Uninstalling the npm
 package never removes a Lean project or the runtime cache.
+
+## Install and resolve external agents
+
+Install the exact supported Codex independently. Install Claude only for a Claude Controller:
+
+```sh
+npm install --global @openai/codex@0.145.0
+npm install --global --allow-scripts=@anthropic-ai/claude-code \
+  @anthropic-ai/claude-code@2.1.218
+```
+
+Resolution is independent by role and has no autodetection of the Controller provider:
+
+- Codex resolves `AIZIM_CODEX_EXECUTABLE` before `codex` on `PATH`.
+- Claude resolves `AIZIM_CLAUDE_EXECUTABLE` before `claude` on `PATH`.
+- An empty override falls through to `PATH`; a non-empty override must be an absolute executable
+  path and never falls back after an error.
+
+The external executable is outside Aizim's distribution-signing boundary. At each Controller
+start, Aizim establishes trust on first use by recording the canonical path, exact version, and
+SHA-256. It revalidates all three before every provider launch. This detects replacement during
+the operation, but it does not attest user-owned provider provenance. Users and their package
+manager remain responsible for that provenance.
+
+Version compatibility is exact: `codex --version` must print `codex-cli 0.145.0`, and
+`claude --version` must print `2.1.218 (Claude Code)`. A rejection reports
+`observed=...; supported=...` and names the matching override. Install a supported side-by-side
+CLI and set that override to its absolute path instead of downgrading an unrelated default CLI.
+
+Upgrading from a release that bundled agent packages preserves project state and credentials.
+The new package removes its old dependency edges and does not use the old nested agent packages.
+Before starting a Controller after upgrade, expose a supported external Codex and, for a Claude
+Controller, a supported external Claude. Aizim does not delete `~/.codex/`, `~/.claude/`, project
+state, or runtime caches.
 
 ## Build the current host from source
 
@@ -99,11 +135,13 @@ npm install --global --ignore-scripts --prefix "$AIZIM_NPM_PREFIX" \
 "$AIZIM_NPM_PREFIX/bin/aizim" --version
 ```
 
-Use `node scripts/npm/install-smoke.mjs` for the automated local/global, cache reuse, readiness,
-Gate B, deterministic run, deterministic controller-loop, missing-platform, and corrupt-integrity
-scenarios. The controller smoke runs `scripts/qa/controller_smoke.py` with the provisioned
-runtime's own `venv/bin/python`; imports therefore come from the wheel installed in that runtime,
-not repository uv, a repository virtual environment, or global Python.
+Use `node scripts/npm/install-smoke.mjs` for the automated provider-free local/global install,
+version/help, expected role-aware doctor failure, cache reuse, deterministic run, deterministic
+controller-loop, bundled-agent upgrade, missing-platform, and corrupt-integrity scenarios. The
+upgrade path proves project-state and credential-sentinel digests stay byte-identical. The
+controller smoke runs `scripts/qa/controller_smoke.py` with the provisioned runtime's own
+`venv/bin/python`; imports therefore come from the wheel installed in that runtime, not repository
+uv, a repository virtual environment, or global Python.
 
 ## Operate the foreground controller
 
@@ -132,26 +170,31 @@ For Claude planning, repeat configuration with `--provider claude --model
 claude-opus-4-6`, then start with the same `AIZIM_MODEL` worker setting. The provider changes only
 the controller backend; workers remain Codex-backed. `controller show` exposes the validated
 runtime state, and `worker list` exposes the current assignment's validated execution state.
+Codex is always required for Worker and sandbox readiness. Claude is required only when `claude`
+is the selected Controller.
 
 ## Stable failure codes
 
 | Exit code | Meaning |
 | --- | --- |
+| 3 | Role readiness failed; inspect `doctor --json` |
 | 64 | CLI usage error |
 | 69 | Required child service unavailable |
 | 70 | Internal software failure |
 | 74 | Distribution or cached artifact integrity failure |
 | 78 | Unsupported host, missing platform package, or invalid configuration |
 
-An integrity or platform failure is fail-closed. Do not bypass it by putting a global Codex,
-Python, or uv first on `PATH`.
+An Aizim artifact integrity or platform failure is fail-closed. Do not bypass it with a different
+Python or uv. Provider compatibility failures are also fail-closed; use a supported side-by-side
+CLI through the explicit override rather than changing Aizim-owned manifests.
 
 ## Three-platform evidence
 
 `.github/workflows/ci.yml` builds the exact three targets without restored npm, Cargo, uv, Python,
 or build caches. Every target runs source build, full tests, pack, local/global tarball
-installation, managed Python preparation, cache reuse, Gate B, deterministic fake execution,
-deterministic controller restart behavior, and negative integrity/platform checks. A separate
+installation with no provider on `PATH`, managed Python preparation, cache reuse, expected
+role-aware doctor failure, deterministic fake execution, deterministic controller restart
+behavior, bundled-agent upgrade preservation, and negative integrity/platform checks. A separate
 Node 22.22.2 job verifies the minimum runtime.
 
 Each target emits a path-free native evidence document bound to the full Git SHA, package version,
@@ -171,8 +214,9 @@ receives no npm or model credential, and contains no publish job. Its bundle is 
 days.
 
 `.github/workflows/npm-registry-smoke.yml` is also manual-only and read-only. After a separately
-authorized publication, it installs one exact public version on all three targets and requires
-`READY`, `SECURITY GATE PASS`, and `AIZIM RUN PASS`. It never writes to the registry.
+authorized publication, it installs one exact public version on all three targets without agent
+packages and requires version/help success, the expected doctor failure, cache reuse, a Lean
+build, and `AIZIM RUN PASS`. It never writes to the registry.
 
 ## First-publication procedure
 

@@ -256,9 +256,6 @@ as `--version`, `--help`, project initialization, and configuration remain
 available. `doctor` reports the missing Controller configuration and
 `controller start` fails with `CONTROLLER_NOT_CONFIGURED`.
 
-There is no interactive guess, install-time choice, `PATH`-based choice, or
-implicit Codex default.
-
 ## 8. Executable resolution
 
 Executable resolution is provider-owned but follows one shared security

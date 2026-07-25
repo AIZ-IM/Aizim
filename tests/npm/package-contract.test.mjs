@@ -143,3 +143,47 @@ test("commits a dependency-free Lake manifest for the smoke project", () => {
   assert.equal(manifest.name, "aizimSmoke");
   assert.deepEqual(manifest.packages, []);
 });
+
+test("documents external agent ownership, compatibility, and upgrade recovery", () => {
+  const readme = readText("README.md");
+  const npmReadme = readText("npm/README.md");
+  const distribution = readText("docs/operations/npm-distribution.md");
+  const foundation = readText("docs/operations/foundation-runbook.md");
+
+  for (const document of [readme, npmReadme, distribution]) {
+    assert.match(document, /does not install Codex or Claude/u);
+    assert.match(document, /Codex CLI 0\.145\.0/u);
+    assert.match(document, /Claude Code 2\.1\.218/u);
+  }
+  const operations = `${distribution}\n${foundation}`;
+  assert.match(
+    operations,
+    /Codex is always required for Worker and sandbox readiness/u,
+  );
+  assert.match(
+    operations,
+    /Claude is required only when `claude`\s+is the selected Controller/u,
+  );
+  assert.match(
+    operations,
+    /`AIZIM_CODEX_EXECUTABLE` before `codex` on `PATH`/u,
+  );
+  assert.match(
+    operations,
+    /`AIZIM_CLAUDE_EXECUTABLE` before `claude` on `PATH`/u,
+  );
+  assert.match(operations, /observed=.*supported=/u);
+  assert.match(operations, /supported side-by-side CLI/u);
+  assert.match(operations, /trust on first use/u);
+  assert.match(operations, /canonical path, exact version, and\s+SHA-256/u);
+  assert.match(operations, /user-owned provider provenance/u);
+  assert.match(operations, /preserves project state and credentials/u);
+  assert.match(operations, /does not use the old nested agent packages/u);
+
+  for (const document of [readme, npmReadme, distribution, foundation]) {
+    assert.doesNotMatch(
+      document,
+      /package-local (?:Codex|Claude)|supplies Codex|bundled Codex/u,
+    );
+  }
+});
