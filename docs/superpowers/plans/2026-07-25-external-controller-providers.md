@@ -68,6 +68,9 @@
     layout coverage.
 - `tests/integration/test_provider_contract.py`
   - no-credential real-CLI contract driver used by provider CI jobs.
+- `tests/fixtures/npm-bundled-agent-upgrade/`
+  - inert local packages reproducing the preceding Aizim meta package's hard
+    Codex/Claude dependency shape for an offline upgrade test.
 - `.github/workflows/provider-contract.yml`
   - required Codex and Claude provider contract jobs on the supported native
     matrix.
@@ -82,6 +85,7 @@
 - `src/aizim/orchestration/codex_controller.py`
 - `src/aizim/orchestration/claude_controller.py`
 - `src/aizim/orchestration/codex_worker.py`
+- `src/aizim/orchestration/runner.py`
 - `src/aizim/agents/codex_backend.py`
 - `src/aizim/agents/linux_sandbox.py`
 - `src/aizim/cli/main.py`
@@ -423,6 +427,7 @@ responsibility is intentionally removed rather than left unreachable.
 - Modify: `src/aizim/orchestration/codex_worker.py`
 - Modify: `src/aizim/agents/codex_backend.py`
 - Modify: `src/aizim/orchestration/controller_supervisor.py`
+- Modify: `src/aizim/orchestration/runner.py`
 - Modify: `src/aizim/security_gate.py`
 - Test: `tests/unit/test_codex_controller.py`
 - Test: `tests/unit/test_claude_controller.py`
@@ -430,7 +435,9 @@ responsibility is intentionally removed rather than left unreachable.
 - Test: `tests/integration/test_controller_supervisor.py`
 - Test: `tests/integration/test_controller_supervisor_guards.py`
 - Test: `tests/integration/test_cli_controller_start.py`
+- Test: `tests/unit/test_run_exit_codes.py`
 - Test: `tests/security/test_controller_provider_isolation.py`
+- Test: `tests/security/test_authority_gate.py`
 
 - [ ] Add failing tests that inject one runtime object and assert object/value
   identity reaches Controller construction, Worker construction, Worker
@@ -502,6 +509,19 @@ responsibility is intentionally removed rather than left unreachable.
 - [ ] Make `security-probe` create one Codex descriptor and revalidate that
   descriptor after its probe rather than resolving Codex twice.
 
+- [ ] Update the direct autonomous Codex path in
+  `orchestration/runner.py`. One `aizim run --backend codex` operation resolves
+  one Codex descriptor from the invocation environment, passes it to
+  `create_codex_backend`, and never calls the path resolver from inside the
+  Worker factory. Add a unit seam in `tests/unit/test_run_exit_codes.py` that
+  injects a descriptor, makes ambient resolution raise after the first call,
+  and proves the runner supplies that descriptor to the backend factory.
+
+- [ ] Add an isolated `tests/security/test_authority_gate.py` regression that
+  injects one descriptor, replaces the executable after probe construction,
+  and observes the existing image-change failure before successful gate
+  evidence can be recorded.
+
 - [ ] Run:
 
   ```sh
@@ -512,7 +532,9 @@ responsibility is intentionally removed rather than left unreachable.
     tests/integration/test_controller_supervisor.py \
     tests/integration/test_controller_supervisor_guards.py \
     tests/integration/test_cli_controller_start.py \
-    tests/security/test_controller_provider_isolation.py -q
+    tests/unit/test_run_exit_codes.py \
+    tests/security/test_controller_provider_isolation.py \
+    tests/security/test_authority_gate.py -q
   ```
 
 - [ ] Commit:
@@ -744,6 +766,9 @@ responsibility is intentionally removed rather than left unreachable.
 - Modify: `tests/npm/install-smoke.test.mjs`
 - Modify: `tests/npm/ci-evidence.test.mjs`
 - Modify: `tests/npm/release-tools.test.mjs`
+- Create: `tests/fixtures/npm-bundled-agent-upgrade/aizim/package.json`
+- Create: `tests/fixtures/npm-bundled-agent-upgrade/codex/package.json`
+- Create: `tests/fixtures/npm-bundled-agent-upgrade/claude/package.json`
 
 - [ ] Replace install evidence names for bundled agents with:
 
@@ -765,6 +790,28 @@ responsibility is intentionally removed rather than left unreachable.
   `--help` succeed, and unconfigured `doctor --json` exits 3 with the stable
   role check set.
 
+- [ ] Add an offline upgrade fixture that reproduces the preceding meta
+  package's exact hard dependencies on `@openai/codex@0.145.0` and
+  `@anthropic-ai/claude-code@2.1.218` using inert local packages, so the core
+  lane does not download or execute either real provider. The upgrade scenario
+  must:
+
+  1. install the legacy fixture into a private consumer;
+  2. initialize a Lean project and record the state database digest;
+  3. write credential sentinels under the consumer's private
+     `HOME/.codex/` and `HOME/.claude/` and record their digests;
+  4. install the newly packed Aizim meta/platform tarballs over the legacy
+     package with `--ignore-scripts`;
+  5. prove project state and both credential sentinels are byte-identical;
+  6. prove the new package metadata has no agent dependency and does not
+     resolve the legacy nested fake executables;
+  7. run `--version` and `--help` successfully with a provider-free `PATH`;
+  8. configure a Codex Controller and prove `doctor --json` fails
+     `worker_codex` until a supported external Codex is explicitly available.
+
+  Record this as a separate exact evidence key
+  `bundled_agent_upgrade_preserved_state_credentials`.
+
 - [ ] Remove packaged Claude discovery, bundled provider doctor success, and
   security-gate success from the core install smoke. Provider/sandbox reality
   belongs to the dedicated provider jobs in Task 10.
@@ -784,6 +831,7 @@ responsibility is intentionally removed rather than left unreachable.
     tests/npm/install-smoke.test.mjs \
     tests/npm/ci-evidence.test.mjs \
     tests/npm/release-tools.test.mjs
+  node scripts/npm/install-smoke.mjs
   ```
 
 - [ ] Commit:
@@ -791,7 +839,7 @@ responsibility is intentionally removed rather than left unreachable.
   ```sh
   git add scripts/npm/install-smoke.mjs scripts/npm/registry-smoke.mjs \
     scripts/npm/verify-ci-evidence.mjs scripts/npm/write-ci-evidence.mjs \
-    tests/npm
+    tests/npm tests/fixtures/npm-bundled-agent-upgrade
   git commit -m "Verify provider-free package installs"
   ```
 
