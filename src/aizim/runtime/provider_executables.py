@@ -204,7 +204,6 @@ def _canonical_executable(path: Path, code: str) -> Path:
     if (
         stat.S_ISLNK(metadata.st_mode)
         or not stat.S_ISREG(metadata.st_mode)
-        or metadata.st_nlink != 1
         or not os.access(resolved, os.X_OK)
     ):
         raise ProviderExecutableError(code)

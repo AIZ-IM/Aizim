@@ -16,6 +16,7 @@ from aizim.runtime.provider_executables import (
     codex_runtime_root,
     resolve_claude,
     resolve_codex,
+    revalidate_claude,
     revalidate_codex,
 )
 
@@ -25,6 +26,24 @@ def executable(path: Path, version: str) -> Path:
     path.write_text(f"#!/bin/sh\nprintf '%s\\n' '{version}'\n")
     path.chmod(0o755)
     return path
+
+
+def hardlinked_claude(tmp_path: Path) -> tuple[Path, Path]:
+    target = executable(
+        tmp_path / "lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+        "2.1.218 (Claude Code)",
+    )
+    native = (
+        tmp_path
+        / "lib/node_modules/@anthropic-ai/claude-code/node_modules"
+        / "@anthropic-ai/claude-code-test/claude"
+    )
+    native.parent.mkdir(parents=True)
+    native.hardlink_to(target)
+    command = tmp_path / "bin/claude"
+    command.parent.mkdir()
+    command.symlink_to(target)
+    return command, native
 
 
 def test_resolvers_use_non_empty_override_before_path_and_remain_independent(
@@ -82,6 +101,28 @@ def test_descriptor_contains_canonical_path_version_and_post_probe_digest(
     assert descriptor.sha256 == sha256_file(target)
     assert frozenset({"codex-cli 0.145.0"}) == CODEX_VERSIONS
     assert frozenset({"2.1.218 (Claude Code)"}) == CLAUDE_VERSIONS
+
+
+def test_claude_resolver_accepts_official_npm_hardlink_layout(tmp_path: Path) -> None:
+    command, _native = hardlinked_claude(tmp_path)
+
+    descriptor = resolve_claude({"PATH": str(command.parent)})
+
+    assert descriptor.path == command.resolve()
+    assert descriptor.version == "2.1.218 (Claude Code)"
+    assert descriptor.sha256 == sha256_file(command.resolve())
+
+
+def test_claude_revalidation_detects_hardlink_alias_mutation(tmp_path: Path) -> None:
+    command, native = hardlinked_claude(tmp_path)
+    environment = {"PATH": str(command.parent)}
+    descriptor = resolve_claude(environment)
+    native.write_text("#!/bin/sh\nprintf '%s\\n' '2.1.218 (Claude Code)'\n# changed\n")
+
+    with pytest.raises(ProviderExecutableError) as caught:
+        revalidate_claude(descriptor, environment)
+
+    assert caught.value.code == "CONTROLLER_IMAGE_CHANGED"
 
 
 def test_relative_override_fails_without_path_fallback(tmp_path: Path) -> None:
