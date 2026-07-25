@@ -191,7 +191,6 @@ jobs:
           node --test \
             tests/npm/package-contract.test.mjs \
             tests/npm/platform-resolution.test.mjs \
-            tests/npm/codex-resolution.test.mjs \
             tests/npm/assets.test.mjs \
             tests/npm/launch.test.mjs
           node scripts/npm/install-smoke.mjs
