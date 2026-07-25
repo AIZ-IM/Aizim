@@ -339,6 +339,10 @@ test("CI isolates external provider contracts from provider-free package lanes",
     /npm publish|NODE_AUTH_TOKEN|NPM_TOKEN|id-token:\s*write/u,
   );
   assert.doesNotMatch(workflow, /tests\/npm\/codex-resolution\.test\.mjs/u);
+  const nativeJob = workflowJob(workflow, "native");
+  assert.match(nativeJob, /sudo apt-get install --yes ripgrep/u);
+  assert.match(nativeJob, /brew install ripgrep/u);
+  assert.match(nativeJob, /rg --version/u);
   for (const value of [
     "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
     "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
