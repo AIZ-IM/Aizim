@@ -54,12 +54,17 @@ def resolve_claude(environ: Mapping[str, str]) -> ResolvedExecutable:
 
 
 def discover_codex_executable(environ: Mapping[str, str]) -> Path:
-    return _discover(
+    executable = _discover(
         environ,
         override_name="AIZIM_CODEX_EXECUTABLE",
         command="codex",
         unavailable_code="CODEX_EXECUTABLE_UNAVAILABLE",
     )
+    if executable.name == "codex.js" and executable.parent.name == "bin":
+        return _canonical_executable(
+            _codex_native_root(executable) / "bin" / "codex", "CODEX_EXECUTABLE_UNAVAILABLE"
+        )
+    return executable
 
 
 def discover_claude_executable(environ: Mapping[str, str]) -> Path:
@@ -255,7 +260,12 @@ def _codex_native_root(executable: Path) -> Path:
     if executable.name != "codex.js":
         return executable.parent.parent
     package, triple = _host_codex_layout()
-    return runtime / "node_modules" / "@openai" / f"codex-{package}" / "vendor" / triple
+    locations = (
+        runtime / "node_modules" / "@openai" / f"codex-{package}" / "vendor" / triple,
+        runtime.parent / f"codex-{package}" / "vendor" / triple,
+        runtime / "vendor" / triple,
+    )
+    return next((path for path in locations if path.is_dir()), locations[0])
 
 
 def _host_codex_layout() -> tuple[str, str]:

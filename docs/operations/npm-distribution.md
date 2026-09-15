@@ -167,7 +167,7 @@ aizim worker register \
 aizim worker assign \
   --project /absolute/lean/project \
   --worker-id proof-a \
-  --task "prove the current Lean target"
+  --task "prove (n : Nat) : n + 0 = n"
 AIZIM_MODEL=gpt-6-astra aizim controller start \
   --project /absolute/lean/project \
   --foreground

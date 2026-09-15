@@ -121,8 +121,16 @@ class ControllerDispatcher:
         if not operations:
             self._fail(claim, "WORKER_ROLE_UNSUPPORTED")
             return
-        name = f"aizim_assignment_{claim.assignment_id[:16]}"
-        initial_source = (f"import Std\n\ntheorem {name} : True := by\n  sorry\n").encode()
+        if not claim.task.startswith("prove ") or not claim.task.removeprefix("prove ").strip():
+            self._fail(claim, "FORMAL_TARGET_REQUIRED")
+            return
+        from aizim.research.engine import statement_source
+
+        from .run_identity import candidate_name
+
+        execution_run_id = f"task-{claim.execution_id}"
+        name = candidate_name(execution_run_id, claim.worker_id)
+        initial_source = statement_source(name, claim.task.removeprefix("prove ").strip(), ["Std"])
         directive = WorkerDirective(
             directive_id=prepared.directive_id,
             worker_id=claim.worker_id,
@@ -132,7 +140,6 @@ class ControllerDispatcher:
             timeout_seconds=decision.timeout_seconds,
             operations=operations,
         )
-        execution_run_id = f"task-{claim.execution_id}"
         artifact = ArtifactStore(self._dependencies.project).store(
             execution_run_id,
             "controller-directive",

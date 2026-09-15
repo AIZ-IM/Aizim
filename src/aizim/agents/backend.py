@@ -29,6 +29,7 @@ class AgentRequest:
     timeout_seconds: float
     context: dict[str, JsonValue] = field(default_factory=dict)
     result_schema: Literal["default", "alignment"] = "default"
+    result_root: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,7 @@ class AgentResult:
     final_message_hash: str
     exit_code: int
     policy_hash: str | None = None
+    usage: dict[str, int] | None = None
 
 
 class AgentBackend(Protocol):

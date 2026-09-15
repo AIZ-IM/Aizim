@@ -172,10 +172,10 @@ def _items(values: tuple[str, ...]) -> list[JsonValue]:
     return [item for item in values]
 
 
-def research_name(candidate: str, digest: str) -> str:
+def research_name(candidate: str, digest: str, namespace: str = "AizimSmoke.Research") -> str:
     stem = re.sub(r"[^A-Za-z0-9_]", "_", candidate)
     prefix = "candidate_" if not stem or stem[0].isdigit() else ""
-    return f"AizimSmoke.Research.{prefix}{stem}_{digest[:16]}"
+    return f"{namespace}.{prefix}{stem}_{digest[:16]}"
 
 
 def _delta(payload: Mapping[str, object]) -> PublishedKnowledgeDelta:

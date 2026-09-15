@@ -17,6 +17,7 @@ from aizim.lean.document_io import (
 )
 from aizim.lean.project import project_base_epoch
 from aizim.lean.promotion_runtime import PromotionCheck
+from aizim.lean.source_layout import allowed_imports, publication_manifest, publication_namespace
 
 from .errors import PromotionError
 from .promotion_types import PromotionEvidence, PromotionMaterialization
@@ -29,15 +30,18 @@ class RuntimePromotionVerifier:
         if type(run_id) is not str or not run_id:
             raise PromotionError("INVALID_RUNTIME_VERIFIER")
         self._runtime, self._broker, self._run_id = runtime, broker, run_id
+        self.namespace = publication_namespace(broker.source_root)
+        self.allowed_imports = allowed_imports(broker.source_root)
+        self._manifest = publication_manifest(broker.source_root)
 
     async def verify(self, source: bytes, theorem_name: str) -> PromotionEvidence:
         module_source = _render(source, theorem_name)
         project_root = await self._broker._trusted_promotion_project(self._run_id)
         suffix = sha256_bytes(module_source)[:16]
-        module = PurePosixPath("AizimSmoke/Research") / f"Promotion_{suffix}.lean"
-        probe = PurePosixPath("AizimSmoke/Research") / f"PromotionCheck_{suffix}.lean"
+        module = PurePosixPath(*self.namespace.split(".")) / f"Promotion_{suffix}.lean"
+        probe = PurePosixPath(*self.namespace.split(".")) / f"PromotionCheck_{suffix}.lean"
         descriptor, created = open_root(project_root), []
-        manifest = PurePosixPath("AizimSmoke.lean")
+        manifest = self._manifest
         original = read_relative(descriptor, manifest)
         try:
             _stage(descriptor, module, module_source, created)
@@ -71,7 +75,7 @@ class RuntimePromotionVerifier:
         project_root = await self._broker._trusted_promotion_project(self._run_id)
         if project_base_epoch(project_root) != epoch_pair.base_epoch:
             raise PromotionError("EPOCH_PROJECT_MISMATCH")
-        module = _publication_module(epoch_pair, publication_sequence, source)
+        module = _publication_module(epoch_pair, publication_sequence, source, self.namespace)
         descriptor = open_root(project_root)
         try:
             try:
@@ -99,7 +103,7 @@ class RuntimePromotionVerifier:
                 or mode_relative(descriptor, module) != 0o444
             ):
                 raise PromotionError("PUBLICATION_MODULE_COLLISION")
-            manifest = PurePosixPath("AizimSmoke.lean")
+            manifest = self._manifest
             original = read_relative(descriptor, manifest)
             updated = _with_import(original, module)
             if updated != original:
@@ -147,8 +151,13 @@ def _render(source: bytes, theorem_name: str) -> bytes:
         text = source.decode("utf-8")
     except UnicodeDecodeError:
         raise PromotionError("INVALID_PROMOTION_SOURCE") from None
-    prefix, leaf = "AizimSmoke.Research.", theorem_name.removeprefix("AizimSmoke.Research.")
-    if theorem_name == leaf or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", leaf) is None:
+    namespace, separator, leaf = theorem_name.rpartition(".")
+    prefix = namespace + "."
+    if (
+        not separator
+        or namespace not in {"AizimSmoke.Research", "AizimResearch"}
+        or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", leaf) is None
+    ):
         raise PromotionError("INVALID_PROMOTION_NAME")
     imports = [line for line in text.splitlines(keepends=True) if line.startswith("import ")]
     body = "".join(
@@ -202,9 +211,11 @@ def _imports(source: bytes) -> tuple[str, ...]:
     )
 
 
-def _publication_module(epoch_pair: EpochPair, sequence: int, source: bytes) -> PurePosixPath:
+def _publication_module(
+    epoch_pair: EpochPair, sequence: int, source: bytes, namespace: str = "AizimSmoke.Research"
+) -> PurePosixPath:
     name = f"K{epoch_pair.knowledge_epoch + 1:08d}_S{sequence:08d}_{sha256_bytes(source)}"
-    return PurePosixPath("AizimSmoke/Research") / f"{name}.lean"
+    return PurePosixPath(*namespace.split(".")) / f"{name}.lean"
 
 
 def _with_import(manifest: bytes, module: PurePosixPath) -> bytes:

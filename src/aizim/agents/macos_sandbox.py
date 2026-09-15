@@ -24,6 +24,8 @@ from .sandbox import (
 
 _CODEX_VERSION: Final = f"codex-cli {CODEX_CLI_VERSION}"
 _SANDBOX_EXECUTABLE: Final = Path("/usr/bin/sandbox-exec")
+
+
 class SandboxHostError(RuntimeError):
     pass
 
@@ -49,9 +51,7 @@ class MacOSSandboxAdapter:
                 codex_executable=executable,
                 codex_version=lambda: _command_output((str(executable), "--version")),
                 sandbox_is_apple=_sandbox_is_apple,
-                developer_root=lambda: Path(
-                    _command_output(("/usr/bin/xcode-select", "-p"))
-                ),
+                developer_root=lambda: Path(_command_output(("/usr/bin/xcode-select", "-p"))),
             )
         )
 
@@ -83,6 +83,7 @@ class MacOSSandboxAdapter:
             normalized.project_root,
             developer_root,
             normalized.runtime_read_roots,
+            provider_request=normalized,
         )
         validate_launch_spec(normalized, spec)
         return spec

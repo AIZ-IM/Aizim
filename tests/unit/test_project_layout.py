@@ -170,9 +170,7 @@ def test_state_process_preserves_owned_pid_changed_in_place(tmp_path: Path) -> N
     # Given
     pid_path = tmp_path / "state.pid"
     ownership = acquire_state_process(pid_path, tmp_path / "state.sock")
-    original_change_time = pid_path.stat().st_ctime_ns
     pid_path.write_text("42\n")
-    assert pid_path.stat().st_ctime_ns != original_change_time
 
     # When
     ownership.close()

@@ -78,7 +78,16 @@ def validate_live_state_process(pid_path: Path, socket_path: Path) -> None:
         raise StateProcessError("state socket is not a private Unix socket")
 
 
-def _remove_owned(path: Path, identity: FileIdentity) -> None:
+def _remove_owned(path: Path, identity: FileIdentity, expected_pid: int | None = None) -> None:
+    if _identity(path) != identity:
+        return
+    if expected_pid is not None:
+        try:
+            pid, observed = _read_pid(path)
+        except StateProcessError:
+            return
+        if pid != expected_pid or observed != identity:
+            return
     if _identity(path) == identity:
         path.unlink()
 
@@ -88,6 +97,7 @@ class StateProcessOwnership:
         self._pid_path = pid_path
         self._identity: FileIdentity | None = identity
         self._descriptor: int | None = descriptor
+        self._pid = os.getpid()
 
     def close(self) -> None:
         identity = self._identity
@@ -97,7 +107,7 @@ class StateProcessOwnership:
         self._identity = None
         self._descriptor = None
         try:
-            _remove_owned(self._pid_path, identity)
+            _remove_owned(self._pid_path, identity, self._pid)
         finally:
             os.close(descriptor)
 
@@ -111,7 +121,7 @@ def acquire_state_process(pid_path: Path, socket_path: Path) -> StateProcessOwne
             raise StateProcessError("state service process is already live")
         if _identity(pid_path) != identity:
             raise StateProcessError("state PID record changed during validation")
-        _remove_owned(pid_path, identity)
+        _remove_owned(pid_path, identity, pid)
         checked_dead_pid = True
     if _identity(socket_path) is not None and not checked_dead_pid:
         raise StateProcessError("state socket has no verified stale PID record")

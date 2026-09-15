@@ -80,7 +80,7 @@ def test_foundation_hash_bindings_accept_lowercase_sha256(
 
 
 def test_agent_result_exposes_optional_policy_contract_hash() -> None:
-    assert tuple(field.name for field in fields(AgentResult))[-1] == "policy_hash"
+    assert tuple(field.name for field in fields(AgentResult))[-2:] == ("policy_hash", "usage")
 
 
 def test_agent_result_persists_optional_policy_contract_hash(tmp_path: Path) -> None:

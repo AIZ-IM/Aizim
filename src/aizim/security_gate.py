@@ -31,6 +31,7 @@ from aizim.gateway.authority_probe import (
     authority_denial_reasons,
     run_authority_probe,
 )
+from aizim.lean.source_layout import lakefile, source_files
 from aizim.runtime.layout import ProjectLayout
 from aizim.runtime.provider_executables import (
     ProviderExecutableError,
@@ -277,15 +278,14 @@ def _probe_request(
 
 def _regular_lean_sources(root: Path) -> tuple[Path, Path]:
     sources: list[Path] = []
-    for source in sorted(root.rglob("*.lean")):
-        relative = source.relative_to(root)
-        if any(part in {".aizim", ".git"} for part in relative.parts):
-            continue
+    candidates = [root / path for path in source_files(root) if path.suffix == ".lean"]
+    candidates.extend((root / "lean-toolchain", lakefile(root)))
+    for source in dict.fromkeys(candidates):
         metadata = source.lstat()
         if stat.S_ISREG(metadata.st_mode) and metadata.st_nlink == 1:
             sources.append(source)
     if len(sources) < 2:
-        raise SecurityGateError("security probe requires two regular Lean sources")
+        raise SecurityGateError("security probe requires two regular project files")
     return sources[0], sources[1]
 
 

@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action", "worker_id", "instruction", "budget", "timeout_seconds", "reason_code"],
+  "properties": {
+    "action": {"type": "string", "enum": ["dispatch", "blocked", "reject"]},
+    "worker_id": {"type": ["string", "null"], "description": "Assigned worker for dispatch; null otherwise."},
+    "instruction": {"type": ["string", "null"], "description": "Worker instruction for dispatch; null otherwise."},
+    "budget": {"type": ["integer", "null"], "minimum": 1, "maximum": 12},
+    "timeout_seconds": {"type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 14400},
+    "reason_code": {
+      "type": ["string", "null"],
+      "enum": ["DEPENDENCY_UNAVAILABLE", "NO_SAFE_ACTION", "TASK_UNSAFE", "TASK_UNSUPPORTED", null],
+      "description": "A matching reason for blocked or reject; null for dispatch. All dispatch-only fields must be null when blocked or rejected."
+    }
+  }
+}

@@ -275,7 +275,17 @@ def _control(target: StateOperations, request: RpcRequest, trusted: bool) -> Rpc
 
 
 type OperationHandler = Callable[[StateOperations, RpcRequest, bool], RpcResponse]
+
+
+def _research(target: StateOperations, request: RpcRequest, trusted: bool) -> RpcResponse:
+    from .research_operations import dispatch_research
+
+    del trusted
+    return dispatch_research(target, request)
+
+
 _HANDLERS: Final[dict[str, OperationHandler]] = {
+    "control.research": _research,
     "health": _health,
     "append_event": _append,
     "query_projection": _projection,

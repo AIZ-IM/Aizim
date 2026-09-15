@@ -25,6 +25,12 @@ class RecordingBackend:
 
     async def run(self, request: AgentRequest) -> AgentResult:
         self.request = request
+        assert request.result_root is not None
+        assert request.result_root.is_relative_to(
+            request.gateway_broker_socket.parents[2] / ".aizim/run"
+        )
+        assert request.result_root.is_dir()
+        assert not request.result_root.is_relative_to(request.scratch_root)
         self.source = (request.view_root / "AizimSmoke" / "Base.lean").read_text()
         return AgentResult(request.worker_id, "submitted", "aligned", "b" * 64, "c" * 64, 0)
 
@@ -111,6 +117,7 @@ async def test_codex_workspace_backend_replaces_canonical_view_and_cleans_it(
     assert backend.source == "import Std\n"
     assert not request.view_root.exists()
     assert not request.scratch_root.exists()
+    assert request.result_root is not None and not request.result_root.exists()
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ import hashlib
 import os
 import stat
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -123,20 +124,42 @@ async def test_plan_uses_exact_codex_argv_and_canonical_context(
 
     assert decision == DispatchDecision("dispatch", "proof-a", "rfl", 2, 10.0)
     spec = captured[-1]
-    schema = Path(__file__).parents[2] / "src/aizim/orchestration/controller_decision.schema.json"
+    schema = final_path(spec).with_name("controller-schema.json")
+    tool_policy = next(
+        value for value in spec.argv if value.startswith("permissions.aizim-controller-tools=")
+    )
+    assert tomllib.loads(tool_policy)["permissions"]["aizim-controller-tools"] == {
+        "filesystem": {
+            ":minimal": "read",
+            str(spec.cwd): "read",
+            str(final_path(spec).parent): "write",
+            str(final_path(spec).parent / "codex-auth"): "deny",
+            str(binary.parent): "read",
+            str(project): "deny",
+        },
+        "network": {"enabled": False},
+    }
     model_args = () if model is None else ("--model", model)
     assert spec.argv == (
         str(binary),
         "-c",
         'shell_environment_policy.inherit="none"',
+        "-c",
+        'approval_policy="never"',
+        "-c",
+        'web_search="disabled"',
+        "-c",
+        'default_permissions="aizim-controller-tools"',
+        "-c",
+        tool_policy,
+        "-c",
+        "features.network_proxy=false",
         "--strict-config",
         "exec",
         "--ignore-user-config",
         "--ignore-rules",
         "--ephemeral",
         "--skip-git-repo-check",
-        "--sandbox",
-        "read-only",
         "--json",
         "--output-schema",
         str(schema.resolve()),

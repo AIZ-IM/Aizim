@@ -16,6 +16,7 @@ MAX_CONTROLLER_INSTRUCTION_BYTES: Final = 64 * 1024
 CONTROLLER_PLAN_TIMEOUT_SECONDS: Final = 60.0
 MAX_WORKER_BUDGET: Final = 12
 MAX_WORKER_TIMEOUT_SECONDS: Final = 60.0
+MAX_RESEARCH_WORKER_TIMEOUT_SECONDS: Final = 14_400.0
 _SCHEMA_PATH: Final = Path(__file__).with_name("controller_decision.schema.json")
 _DECISION_VALIDATOR = Draft202012Validator(json.loads(_SCHEMA_PATH.read_text()))
 
@@ -49,7 +50,7 @@ _SAFE_CONTROLLER_OPERATIONS: Final[frozenset[ControllerOperation]] = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ControllerBackendError(RuntimeError):
     code: ControllerBackendErrorCode
 
@@ -149,6 +150,19 @@ def parse_controller_decision(raw: bytes, context: ControllerContext) -> Control
     return _parse_valid_decision(value, context)
 
 
+def parse_controller_wire_decision(raw: bytes, context: ControllerContext) -> ControllerDecision:
+    try:
+        value: JsonValue = json.loads(raw, object_pairs_hook=_unique_json_object)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ControllerBackendError("CONTROLLER_DECISION_INVALID") from error
+    nullable = {"worker_id", "instruction", "budget", "timeout_seconds", "reason_code"}
+    if type(value) is dict:
+        value = {
+            key: item for key, item in value.items() if item is not None or key not in nullable
+        }
+    return parse_controller_decision(canonical_json(value), context)
+
+
 def _unique_json_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
     value: dict[str, JsonValue] = {}
     for key, item in pairs:
@@ -186,7 +200,7 @@ def _dispatch_decision(value: dict[str, JsonValue], context: ControllerContext) 
     if budget > min(context.max_budget, MAX_WORKER_BUDGET):
         raise ControllerBackendError("CONTROLLER_BUDGET_INVALID")
     timeout_seconds = _finite_number(value, "timeout_seconds")
-    if timeout_seconds > min(context.max_timeout_seconds, MAX_WORKER_TIMEOUT_SECONDS):
+    if timeout_seconds > min(context.max_timeout_seconds, MAX_RESEARCH_WORKER_TIMEOUT_SECONDS):
         raise ControllerBackendError("CONTROLLER_TIMEOUT_INVALID")
     return DispatchDecision("dispatch", worker_id, instruction, budget, timeout_seconds)
 

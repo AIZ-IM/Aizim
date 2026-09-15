@@ -39,9 +39,9 @@ class ResourceGovernor:
             raise ResourcePolicyError("INVALID_RESOURCE_REQUEST")
         if mode is not LeanRuntimeMode.SHARED:
             raise ResourcePolicyError("ISOLATED_RUNTIME_UNAVAILABLE")
-        if self.max_proof_workers != 2:
+        if not 1 <= self.max_proof_workers <= 64:
             raise ResourcePolicyError("PROOF_WORKER_LIMIT")
-        if self.scratch_slots != 2:
+        if not 1 <= self.scratch_slots <= 64:
             raise ResourcePolicyError("SCRATCH_SLOT_LIMIT")
         if self.lsp_instances != 1:
             raise ResourcePolicyError("LSP_INSTANCE_LIMIT")

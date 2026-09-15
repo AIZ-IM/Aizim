@@ -55,6 +55,7 @@ class CodexLaunchOutcome:
     transport_event_hash: str
     final_message_hash: str
     exit_code: int
+    usage: dict[str, int] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +177,7 @@ async def launch_codex(spec: CodexLaunchSpec) -> CodexLaunchOutcome:
         hasher.hexdigest(),
         final_hash,
         process.returncode,
+        hasher.usage,
     )
 
 

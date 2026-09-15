@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
@@ -21,6 +22,8 @@ from aizim.agents.macos_sandbox import SandboxHostError
 from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import SandboxRequest
 from aizim.domain import sha256_file
+from aizim.lean.document_io import ensure_tree, open_root
+from aizim.lean.source_layout import lakefile
 from aizim.runtime.distribution import without_distribution_environment
 from aizim.runtime.provider_executables import (
     ProviderExecutableError,
@@ -67,14 +70,24 @@ class CodexWorkspaceBackend:
             instruction = source if isinstance(source, str) else source(request)
             if type(instruction) is not str or not instruction:
                 raise CodexWorkerError("INVALID_CODEX_WORKER_INSTRUCTION")
-            isolated = replace(
-                request,
-                prompt=f"{request.prompt}\n{instruction}",
-                model=self._model,
-                view_root=workspace.view_root,
-                scratch_root=workspace.scratch_root,
-            )
-            return await self._backend.run(isolated)
+            root_fd = open_root(self._project_root)
+            try:
+                output_fd = ensure_tree(root_fd, (".aizim", "run"))
+                os.close(output_fd)
+            finally:
+                os.close(root_fd)
+            with tempfile.TemporaryDirectory(
+                prefix="aizim-result-", dir=self._project_root / ".aizim/run"
+            ) as output:
+                isolated = replace(
+                    request,
+                    prompt=f"{request.prompt}\n{instruction}",
+                    model=self._model,
+                    view_root=workspace.view_root,
+                    scratch_root=workspace.scratch_root,
+                    result_root=Path(output),
+                )
+                return await self._backend.run(isolated)
         finally:
             workspace.close()
 
@@ -165,14 +178,16 @@ def project_view_sources(project_root: Path) -> tuple[ViewSource, ...]:
         root = project_root.resolve(strict=True)
     except OSError as error:
         raise CodexWorkerError("PROJECT_VIEW_UNAVAILABLE") from error
-    controls = tuple(root / name for name in ("lakefile.toml", "lean-toolchain"))
+    controls = tuple(path for path in (lakefile(root), root / "lean-toolchain"))
     if not root.is_dir() or any(not item.is_file() for item in controls):
         raise CodexWorkerError("PROJECT_VIEW_UNAVAILABLE")
     files = [*controls]
     files.extend(
         item
         for item in root.rglob("*.lean")
-        if item.is_file() and all(not part.startswith(".") for part in item.relative_to(root).parts)
+        if item not in controls
+        and item.is_file()
+        and all(not part.startswith(".") for part in item.relative_to(root).parts)
     )
     return tuple(
         ViewSource(PurePosixPath(item.relative_to(root).as_posix()), sha256_file(item))

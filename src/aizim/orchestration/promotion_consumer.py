@@ -27,7 +27,10 @@ class PromotionConsumer:
         artifacts: ArtifactStore,
         verifier: RuntimePromotionVerifier,
         knowledge: KnowledgeStream,
+        *,
+        continue_on_failure: bool = False,
     ) -> None:
+        self._continue_on_failure = continue_on_failure
         self._state, self._artifacts = state, artifacts
         self._verifier, self._knowledge = verifier, knowledge
         self._wake, self._published, self._failed = (
@@ -49,6 +52,9 @@ class PromotionConsumer:
                 if outcome is None:
                     break
                 if outcome.state is not PublicationQueueState.PUBLISHED:
+                    if self._continue_on_failure:
+                        self._published.set()
+                        continue
                     self.failure = outcome
                     self._published.set()
                     self._failed.set()
@@ -85,7 +91,10 @@ class PromotionConsumer:
         return PromotionConsumerError(reason if type(reason) is str else "PROMOTION_FAILED")
 
     def _service(self) -> PromotionService:
-        imports = ("Std", *(item.module for item in KnowledgeReader(self._state).read(0)))
+        imports = (
+            *self._verifier.allowed_imports,
+            *(item.module for item in KnowledgeReader(self._state).read(0)),
+        )
         return PromotionService(
             self._state,
             self._artifacts,
@@ -93,4 +102,5 @@ class PromotionConsumer:
             "shared-promotion-consumer",
             self._verifier,
             tuple(dict.fromkeys(imports)),
+            namespace=self._verifier.namespace,
         )

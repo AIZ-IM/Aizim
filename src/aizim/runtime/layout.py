@@ -14,6 +14,8 @@ from aizim.config import (
     MCP_VERSION,
     MIN_FREE_DISK_BYTES,
 )
+from aizim.lean.document_io import DocumentIoError
+from aizim.lean.source_layout import lakefile
 
 CONFIG_TEMPLATE: Final = (
     "[run]\n"
@@ -156,7 +158,10 @@ class ProjectLayout:
         if not root.is_dir():
             raise LayoutError("Lean project path must be a directory")
         _regular(root / "lean-toolchain", "lean-toolchain")
-        _regular(root / "lakefile.toml", "lakefile.toml")
+        try:
+            _regular(lakefile(root), "Lake project configuration")
+        except DocumentIoError as error:
+            raise LayoutError("Lake project configuration is unavailable") from error
         return cls(root)
 
     @property

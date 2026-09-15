@@ -206,3 +206,21 @@ def test_external_codex_js_layout_locates_runtime_ripgrep_and_bwrap(
     assert codex_runtime_root(codex) == package.resolve()
     assert codex_ripgrep_executable(codex) == ripgrep.resolve()
     assert codex_bwrap_executable(codex) == bwrap.resolve()
+
+
+@pytest.mark.parametrize("hoisted", [False, True])
+def test_official_codex_wrapper_resolves_and_attests_the_native_image(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, hoisted: bool
+) -> None:
+    package = tmp_path / "node_modules/@openai/codex"
+    wrapper = executable(package / "bin/codex.js", "wrapper must not execute")
+    (package / "package.json").write_text('{"name":"@openai/codex"}\n')
+    platform = (
+        package.parent / "codex-test" if hoisted else package / "node_modules/@openai/codex-test"
+    )
+    native = executable(platform / "vendor/test-triple/bin/codex", "codex-cli 0.154.0")
+    monkeypatch.setattr(providers, "_host_codex_layout", lambda: ("test", "test-triple"))
+    descriptor = resolve_codex({"AIZIM_CODEX_EXECUTABLE": str(wrapper), "PATH": ""})
+    assert descriptor.path == native.resolve()
+    assert descriptor.sha256 == sha256_file(native)
+    assert descriptor.sha256 != sha256_file(wrapper)

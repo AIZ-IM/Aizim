@@ -34,10 +34,7 @@ def _sort_key(value: JsonValue) -> str:
 @singledispatch
 def _canonicalize[T](value: T) -> JsonValue:
     if is_dataclass(value):
-        return {
-            field.name: _canonicalize(getattr(value, field.name))
-            for field in fields(value)
-        }
+        return {field.name: _canonicalize(getattr(value, field.name)) for field in fields(value)}
     raise _failure(value, "unsupported value")
 
 
@@ -157,7 +154,10 @@ def compute_environment_fingerprint[T](
 ) -> str:
     parts = [
         (project_root / "lean-toolchain").read_bytes(),
-        (project_root / "lakefile.toml").read_bytes(),
+        (
+            project_root
+            / ("lakefile.toml" if (project_root / "lakefile.toml").is_file() else "lakefile.lean")
+        ).read_bytes(),
     ]
     lake_manifest = project_root / "lake-manifest.json"
     if lake_manifest.is_file():

@@ -228,6 +228,7 @@ def test_schema_v1_codec_rejects_wrong_payload_field_type(
 
 def test_projection_registry_is_fixed() -> None:
     assert (
+        "research",
         "project",
         "runs",
         "artifacts",

@@ -9,7 +9,7 @@ alone grants no authority.
 
 The trusted computing base contains the Aizim CLI security-gate orchestrator,
 `StateService` and its single SQLite event store, the capability issuer and
-gateway, the gateway session broker, the materialized-view builder, the macOS
+gateway, the gateway session broker, the materialized-view builder, the platform
 sandbox adapters, and the launcher-owned Codex parent process. These components
 may read canonical project state and append validated audit events.
 
@@ -25,23 +25,41 @@ the model run under the compiled profile with network disabled, so allowing the
 parent to reach model infrastructure does not give the model-controlled shell a
 network path.
 
-The foreground controller is trusted orchestration but the Codex or Claude
-controller model process is untrusted. It receives only bounded canonical
-assignment context and returns one validated dispatch, blocked, or reject
-decision. It cannot read the canonical project, `.aizim`, state RPC socket,
-gateway socket, credentials outside its provider allowlist, or a worker
-capability. A validated dispatch may name only the assigned worker and fixed
+The foreground controller is trusted orchestration. The attested native Codex CLI
+is a trusted model transport, as it is for Workers; model outputs and model-selected
+tools are untrusted. Codex API traffic uses the client's own authenticated network
+connection. Its tools use a separate native permission profile: only the empty
+view and scratch are available, the canonical project and copied authentication
+directory are denied, shell environment inheritance and web search are disabled,
+and tool network access is disabled. Nesting the whole Codex CLI inside its own
+sandbox is unsupported by the pinned CLI's filesystem helpers.
+
+Claude keeps the outer OS filesystem sandbox, disabled built-in tools and MCP,
+and an active network proxy restricted to its provider domains. Provider auth
+files are copied into private temporary storage; user settings and history are
+not copied. The model receives bounded assignment context and returns one validated
+dispatch, blocked, or reject decision. A validated dispatch may name only the assigned worker and fixed
 budget and timeout ceilings. Trusted code persists only the validated directive
 instruction and fixed hashes; prompts, raw provider envelopes, responses,
 credentials, authenticated URLs, and full environments are not durable state.
 
 The supervisor owns the sole live `StateService`. Same-UID CLI clients may use
-only the three public configure, register, and assign mutations; generic event
+the public configure, register, assign, and typed research mutations; generic event
 append remains service-session-only. The selected controller provider never
 selects the worker backend: worker execution remains Codex-backed and passes
 through the existing lease, capability, gateway, sandbox, cleanup, and Lean
 verification boundaries. Terminal assignment IDs are durable and never
 dispatched again after restart.
+
+Research records add immutable mathematical targets, dependency scheduling, bounded
+attempts, scoped advisory memory, and operator contributions/reviews. Only existing
+Lean publication evidence can mark a target verified. Human acceptance of meaning,
+value, or exposition never substitutes for formal verification. Model API output
+uses a provider-compatible flat schema and is normalized into the stricter local
+decision union; unknown fields and invalid action-specific combinations remain errors.
+
+See [Codex permission scope](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)
+for the distinction between client service traffic and sandboxed command traffic.
 
 Launcher-owned host checks also start in a fresh process group. Whether their
 direct parent exits successfully or with an error, Aizim returns its captured
@@ -58,6 +76,11 @@ bytes through descriptor-relative operations. Each source digest and metadata
 snapshot is checked again before publication. Published files are fresh `0444`
 copies, directories are read-only, and the manifest binds path, length, mode,
 and SHA-256. Scratch is a separate private ephemeral directory.
+
+Worker final messages use a parent-owned temporary directory under `.aizim/run`,
+outside the model's writable scratch and readable view. The CLI parent can write
+there as a normal user, while model tools remain denied access. The directory is
+removed after result parsing and on cancellation.
 
 `MacOSSandboxAdapter` compiles and then validates the exact inline Codex
 permission profile before launching `codex sandbox --permission-profile`.

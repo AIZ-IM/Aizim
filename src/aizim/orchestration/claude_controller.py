@@ -24,20 +24,32 @@ from aizim.runtime.provider_executables import (
 
 from . import controller_backend as cb
 from . import controller_process as process
+from .controller_transport import CLAUDE_DOMAINS, prepare_auth
 
-_SCHEMA_PATH: Final = Path(__file__).with_name("controller_decision.schema.json")
+_SCHEMA_PATH: Final = Path(__file__).with_name("controller_wire.schema.json")
 _SCHEMA: Final = canonical_json(json.loads(_SCHEMA_PATH.read_text())).decode()
 _AUTH_ENVIRONMENT: Final = frozenset(
     {"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "SSL_CERT_FILE", "SSL_CERT_DIR"}
 )
-_COMMAND_FLAGS: Final = tuple(
-    "" if value == "EMPTY" else value
-    for value in (
-        f"-p --output-format json --json-schema {_SCHEMA} --safe-mode "
-        "--disable-slash-commands --setting-sources EMPTY --permission-mode plan "
-        "--no-chrome --tools EMPTY --disallowedTools mcp__* --strict-mcp-config "
-        "--no-session-persistence"
-    ).split()
+_COMMAND_FLAGS: Final = (
+    "-p",
+    "--output-format",
+    "json",
+    "--json-schema",
+    _SCHEMA,
+    "--safe-mode",
+    "--disable-slash-commands",
+    "--setting-sources",
+    "",
+    "--permission-mode",
+    "plan",
+    "--no-chrome",
+    "--tools",
+    "",
+    "--disallowedTools",
+    "mcp__*",
+    "--strict-mcp-config",
+    "--no-session-persistence",
 )
 
 
@@ -114,6 +126,7 @@ class ClaudeControllerBackend:
                     command,
                     cb.controller_context_bytes(context),
                     context.max_timeout_seconds,
+                    network=True,
                 )
             except process.ControllerLaunchError as error:
                 if error.code == "CONTROLLER_TIMEOUT":
@@ -129,6 +142,8 @@ class ClaudeControllerBackend:
         command: tuple[str, ...],
         source: bytes,
         timeout_seconds: float,
+        *,
+        network: bool = False,
     ) -> process.ControllerLaunchOutcome:
         view, scratch = private / "aizim-view-empty", private / "aizim-scratch-data"
         runtime_executable = self._executable
@@ -140,6 +155,11 @@ class ClaudeControllerBackend:
                 raise ClaudeControllerError("CONTROLLER_IMAGE_CHANGED")
             command = (str(runtime_executable), *command[1:])
         environment = _environment(self._source_environment, private, scratch)
+        auth_key, auth_root = prepare_auth("claude", self._source_environment, scratch)
+        environment[auth_key] = str(auth_root)
+        environment["TMPDIR"] = str(scratch / "tmp")
+        if network:
+            command = ("/usr/bin/env", f"TMPDIR={scratch / 'client-tmp'}", *command)
         request = SandboxRequest(
             self._project,
             view,
@@ -148,6 +168,7 @@ class ClaudeControllerBackend:
             environment,
             _runtime_roots(runtime_executable),
             ProviderEnvironmentPolicy.FILTERED_PARENT,
+            CLAUDE_DOMAINS if network else (),
         )
         try:
             revalidate_codex(self._sandbox_descriptor, self._source_environment)
@@ -236,7 +257,9 @@ def _read_decision(raw: bytes, context: cb.ControllerContext) -> cb.ControllerDe
     if type(envelope) is not dict or type(envelope.get("structured_output")) is not dict:
         raise ClaudeControllerError("CONTROLLER_RESULT_INVALID")
     try:
-        return cb.parse_controller_decision(canonical_json(envelope["structured_output"]), context)
+        return cb.parse_controller_wire_decision(
+            canonical_json(envelope["structured_output"]), context
+        )
     except cb.ControllerBackendError as error:
         raise ClaudeControllerError("CONTROLLER_RESULT_INVALID") from error
 

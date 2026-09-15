@@ -112,7 +112,13 @@ class SharedLeanRuntime(PromotionRuntimeMethods):
             if not build.success:
                 raise LeanRuntimeError("LEAN_PREPARATION_FAILED")
             diagnostics = await client.diagnostics(
-                project_root / "AizimSmoke" / "Base.lean", None, None
+                (
+                    project_root / "AizimSmoke/Base.lean"
+                    if (project_root / "AizimSmoke/Base.lean").is_file()
+                    else project_root / "AizimResearch.lean"
+                ),
+                None,
+                None,
             )
             if (
                 not diagnostics.success

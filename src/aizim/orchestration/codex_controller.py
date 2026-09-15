@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Final, Never
 
 from aizim.agents import BackendIdentity
+from aizim.agents.codex_events import transport_usage
 from aizim.agents.macos_sandbox import SandboxHostError
 from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import ProviderEnvironmentPolicy, SandboxRequest
@@ -23,7 +24,7 @@ from .controller_backend import (
     ControllerContext,
     ControllerDecision,
     controller_context_bytes,
-    parse_controller_decision,
+    parse_controller_wire_decision,
 )
 from .controller_process import (
     ControllerLauncher,
@@ -33,9 +34,10 @@ from .controller_process import (
     launch_controller_process,
     private_workspace,
 )
+from .controller_transport import codex_tool_policy, prepare_auth
 
 _OUTPUT_LIMIT: Final = 1024 * 1024
-_SCHEMA_PATH: Final = Path(__file__).with_name("controller_decision.schema.json").resolve()
+_SCHEMA_PATH: Final = Path(__file__).with_name("controller_wire.schema.json").resolve()
 _AUTH_ENVIRONMENT: Final = frozenset(
     {
         "OPENAI_API_KEY",
@@ -71,6 +73,7 @@ class CodexControllerBackend:
         if model is not None and (type(model) is not str or not model):
             raise CodexControllerError("CONTROLLER_MODEL_INVALID")
         self._model = model
+        self.last_usage: dict[str, int] | None = None
         self._source_environment = dict(parent_environment)
         self._launch = launch
         self._image_hash = executable.sha256
@@ -100,26 +103,30 @@ class CodexControllerBackend:
             raise ControllerBackendError("CONTROLLER_DECISION_INVALID") from error
 
     async def _plan(self, context: ControllerContext) -> ControllerDecision:
+        self.last_usage = None
         self._validate_image()
         with private_workspace("aizim-controller-") as roots:
             private, view, scratch = roots
             final = scratch / "controller-final.json"
+            schema = scratch / "controller-schema.json"
+            schema.write_bytes(_SCHEMA_PATH.read_bytes())
             model = () if self._model is None else ("--model", self._model)
             command = (
                 str(self._executable),
                 "-c",
                 'shell_environment_policy.inherit="none"',
+                *codex_tool_policy(
+                    view, scratch, self._project, codex_runtime_root(self._executable)
+                ),
                 "--strict-config",
                 "exec",
                 "--ignore-user-config",
                 "--ignore-rules",
                 "--ephemeral",
                 "--skip-git-repo-check",
-                "--sandbox",
-                "read-only",
                 "--json",
                 "--output-schema",
-                str(_SCHEMA_PATH),
+                str(schema),
                 "--output-last-message",
                 str(final),
                 "-C",
@@ -133,11 +140,13 @@ class CodexControllerBackend:
                     command,
                     controller_context_bytes(context),
                     context.max_timeout_seconds,
+                    network=True,
                 )
             except ControllerLaunchError as error:
                 if error.code == "CONTROLLER_TIMEOUT":
                     raise TimeoutError from error
                 raise ControllerBackendError("CONTROLLER_DECISION_INVALID") from error
+            self.last_usage = transport_usage(outcome.stdout)
             if outcome.exit_code != 0:
                 raise ControllerBackendError("CONTROLLER_DECISION_INVALID")
             return _read_decision(final, context)
@@ -148,9 +157,16 @@ class CodexControllerBackend:
         command: tuple[str, ...],
         source: bytes,
         timeout_seconds: float,
+        *,
+        network: bool = False,
     ) -> ControllerLaunchOutcome:
         view, scratch = private / "aizim-view-empty", private / "aizim-scratch-data"
         environment = _environment(self._source_environment, private, scratch)
+        auth_key, auth_root = prepare_auth("codex", self._source_environment, scratch)
+        environment[auth_key] = str(auth_root)
+        environment["TMPDIR"] = str(scratch / "tmp")
+        if network:
+            environment["TMPDIR"] = str(scratch / "client-tmp")
         request = SandboxRequest(
             self._project,
             view,
@@ -166,9 +182,12 @@ class CodexControllerBackend:
             raise CodexControllerError("CONTROLLER_SANDBOX_INVALID") from error
         if spec.argv[-len(command) :] != command:
             raise CodexControllerError("CONTROLLER_EXECUTABLE_MISMATCH")
+        # API transport stays in the attested CLI parent. The command's explicit
+        # native permission profile confines model tools; nesting the CLI itself
+        # inside another Codex sandbox prevents its filesystem helpers starting.
         return await self._launch(
             ControllerLaunchSpec(
-                spec.argv,
+                command if network else spec.argv,
                 spec.cwd,
                 dict(spec.parent_env),
                 source,
@@ -242,7 +261,7 @@ def _read_decision(final: Path, context: ControllerContext) -> ControllerDecisio
         raise CodexControllerError("CONTROLLER_RESULT_OVERSIZED")
     try:
         raw = final.read_bytes()
-        return parse_controller_decision(raw, context)
+        return parse_controller_wire_decision(raw, context)
     except (OSError, ControllerBackendError) as error:
         raise CodexControllerError("CONTROLLER_RESULT_INVALID") from error
 

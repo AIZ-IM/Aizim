@@ -10,6 +10,7 @@ from aizim.domain.serialization import JsonValue, canonical_json
 from . import schema_v1_orchestration as _orchestration
 from . import schema_v1_validation as _validation
 from .payload_validation import patch_edits_payload
+from .validation_errors import EventValidationError
 
 _DOCUMENT_FIELDS = _validation.DOCUMENT_FIELDS
 _DOCUMENT_VALIDATORS = _validation.DOCUMENT_VALIDATORS
@@ -19,15 +20,6 @@ _sha256_payload = _validation.sha256_payload
 _strings_payload = _validation.strings_payload
 _text_payload = _validation.text_payload
 _timestamp_payload = _validation.timestamp_payload
-
-
-@dataclass(slots=True)
-class EventValidationError(ValueError):
-    location: str
-    reason: str
-
-    def __str__(self) -> str:
-        return f"{self.location}: {self.reason}"
 
 
 type PayloadValidator = Callable[[JsonValue], bool]
@@ -264,6 +256,12 @@ _orchestration.extend(_CODECS, _codec)
 
 
 def validate_payload(event_type: str, payload: Mapping[str, JsonValue]) -> None:
+    if event_type == "ResearchRecordUpdated":
+        from aizim.research.records import valid_record
+
+        if not valid_record(payload):
+            raise EventValidationError(event_type, "invalid typed research record")
+        return
     codec = _CODECS.get(event_type)
     if codec is None:
         raise EventValidationError("event_type", f"unknown event type {event_type!r}")

@@ -62,6 +62,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="aizim")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command")
+    from .research_command import add_research_parser, run_research_command
+
+    add_research_parser(commands)
     init = commands.add_parser("init")
     init.add_argument("project", type=Path)
     doctor = commands.add_parser("doctor")
@@ -109,6 +112,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     security_probe.add_argument("--backend", choices=("codex",), required=True)
     security_probe.add_argument("--no-model", action="store_true", required=True)
     arguments = parser.parse_args(command_line)
+    if arguments.command == "research":
+        return run_research_command(arguments)
     if arguments.command == "init":
         return run_init(arguments.project)
     if arguments.command == "doctor":

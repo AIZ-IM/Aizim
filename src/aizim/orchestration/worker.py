@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from aizim.agents import AgentRequest
 from aizim.domain import AgentRole, FileLease
 from aizim.domain.serialization import JsonValue
 from aizim.lean import DocumentBroker
 from aizim.lean.broker_knowledge import current_epoch
+from aizim.lean.source_layout import worker_path
 from aizim.state import AppendEventCommand, StateService
 from aizim.state.event_payload import thaw_payload
 
@@ -61,7 +62,7 @@ class WorkerRunner:
         lease = await self._broker.create_document(
             self._run_id,
             directive.worker_id,
-            PurePosixPath(f"AizimSmoke/Workers/{self._run_id}/{directive.worker_id}.lean"),
+            worker_path(self._broker.source_root, self._run_id, directive.worker_id),
             directive.initial_source,
             current_epoch(self._state),
         )

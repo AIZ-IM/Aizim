@@ -14,6 +14,7 @@ __all__ = [
 ]
 
 PROJECTION_NAMES: Final = (
+    "research",
     "project",
     "runs",
     "artifacts",

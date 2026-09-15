@@ -15,6 +15,7 @@ from .projections_orchestration import (
 )
 
 _EVENT_PROJECTION: Final = {
+    "ResearchRecordUpdated": "research",
     "ProjectInitialized": "project",
     "RunCreated": "runs",
     "RunCompleted": "runs",
@@ -69,6 +70,7 @@ _EVENT_PROJECTION: Final = {
 }
 
 _ENTITY_FIELD: Final = {
+    "ResearchRecordUpdated": "record_id",
     "ProjectInitialized": "project_id",
     "ArtifactRegistered": "content_hash",
     "EvaluationTransitionRejected": "requested_hash",

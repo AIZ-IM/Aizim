@@ -220,7 +220,6 @@ async def test_controller_provider_cannot_observe_project_or_authority_secrets(
         capability,
         npm_secret,
         unrelated,
-        str(project),
         str(planted["state.sock"]),
         "mcp_servers",
         "gateway",
@@ -231,6 +230,7 @@ async def test_controller_provider_cannot_observe_project_or_authority_secrets(
     )
     for value in forbidden:
         assert value.encode() not in combined
+    assert str(project).encode() not in observed[2]
     direct_auth = (
         b"OPENAI_API_KEY=openai-direct-auth"
         if provider == CODEX

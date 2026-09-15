@@ -134,6 +134,8 @@ class WorkerExecutionHost:
         smoke_root: Path,
         governor: ResourceGovernor,
         run_id: str,
+        *,
+        continue_on_failure: bool = False,
     ) -> WorkerExecutionHost:
         return await cls._open_with_factories(
             state,
@@ -141,7 +143,12 @@ class WorkerExecutionHost:
             smoke_root,
             governor,
             run_id,
-            _HostFactories(ProjectSocketAlias, PromotionConsumer),
+            _HostFactories(
+                ProjectSocketAlias,
+                lambda state, artifacts, verifier, knowledge: PromotionConsumer(
+                    state, artifacts, verifier, knowledge, continue_on_failure=continue_on_failure
+                ),
+            ),
         )
 
     @classmethod

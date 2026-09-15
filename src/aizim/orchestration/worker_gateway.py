@@ -16,6 +16,7 @@ from aizim.knowledge import (
 )
 from aizim.lean import DocumentBroker, SharedLeanRuntime
 from aizim.lean.runtime_gateway import multi_attempt as runtime_multi_attempt
+from aizim.lean.source_layout import allowed_imports
 from aizim.state import StateService
 
 from .knowledge_stream import KnowledgeStream
@@ -57,6 +58,7 @@ class WorkerGatewayActions:
         environment_fingerprint: str,
         on_submission: Callable[[], None],
     ) -> None:
+        self._base_imports = allowed_imports(broker.source_root)
         self._state, self._broker, self._runtime = state, broker, runtime
         self._knowledge, self._artifacts = knowledge, artifacts
         self._environment, self._on_submission = environment_fingerprint, on_submission
@@ -152,7 +154,10 @@ class WorkerGatewayActions:
             self._environment,
             tuple(
                 dict.fromkeys(
-                    ("Std", *(item.module for item in KnowledgeReader(self._state).read(0)))
+                    (
+                        *self._base_imports,
+                        *(item.module for item in KnowledgeReader(self._state).read(0)),
+                    )
                 )
             ),
         )

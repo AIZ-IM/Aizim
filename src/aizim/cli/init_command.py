@@ -6,6 +6,7 @@ from pathlib import Path
 from aizim.domain import sha256_file, sha256_json
 from aizim.lean.document_io import DocumentIoError
 from aizim.lean.project import smoke_base_epoch
+from aizim.lean.source_layout import lakefile
 from aizim.runtime.layout import ProjectLayout
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
@@ -71,7 +72,7 @@ def _initial_base_epoch(project: Path) -> str:
     except DocumentIoError:
         return sha256_json(
             {
-                "lakefile": sha256_file(project / "lakefile.toml"),
+                "lakefile": sha256_file(lakefile(project)),
                 "lean_toolchain": sha256_file(project / "lean-toolchain"),
             }
         )

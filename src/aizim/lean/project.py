@@ -9,6 +9,7 @@ from typing import Final
 
 from aizim.domain import compute_base_epoch, sha256_bytes, sha256_json
 
+from . import source_layout
 from .document_io import (
     DocumentIoError,
     create_relative,
@@ -42,7 +43,10 @@ class PublishedModule:
     def __post_init__(self) -> None:
         if (
             _RUN_ID.fullmatch(self.run_id) is None
-            or _RESEARCH_IMPORT.fullmatch(f"import {self.module}\n".encode()) is None
+            or re.fullmatch(
+                r"(?:AizimSmoke\.Research|AizimResearch)\.[A-Za-z_][A-Za-z0-9_]*", self.module
+            )
+            is None
             or _HASH.fullmatch(self.content_hash) is None
         ):
             raise DocumentIoError("INVALID_PUBLISHED_MODULE")
@@ -53,6 +57,8 @@ def smoke_base_epoch(smoke_root: Path) -> str:
 
 
 def project_base_epoch(project_root: Path, extra_modules: Mapping[str, bytes] | None = None) -> str:
+    if not source_layout.is_smoke(project_root):
+        return source_layout.base_epoch(project_root, dict(extra_modules or {}))
     descriptor = open_root(project_root)
     try:
         bodies = {relative: read_relative(descriptor, relative) for relative in _SMOKE_FILES}
@@ -87,6 +93,8 @@ def project_base_epoch(project_root: Path, extra_modules: Mapping[str, bytes] | 
 
 
 def materialize_smoke_project(project_root: Path, run_id: str, smoke_root: Path) -> Path:
+    if not source_layout.is_smoke(smoke_root):
+        return source_layout.materialize(project_root, run_id, smoke_root)
     project_fd = open_root(project_root)
     source_fd = open_root(smoke_root)
     run_project = project_root / ".aizim" / "run" / run_id / "lean-project"
@@ -117,6 +125,8 @@ def materialize_smoke_project(project_root: Path, run_id: str, smoke_root: Path)
 def sync_published_modules(
     project_root: Path, run_project: Path, published: tuple[PublishedModule, ...]
 ) -> str:
+    if not source_layout.is_smoke(run_project):
+        return source_layout.sync_modules(project_root, run_project, published)
     by_name = {item.module: item for item in published}
     if len(by_name) != len(published):
         raise DocumentIoError("PROMOTION_MODULE_MISMATCH")

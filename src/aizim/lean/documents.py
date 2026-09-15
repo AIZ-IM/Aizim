@@ -34,6 +34,10 @@ class DocumentBroker:
         self._recovery_lock = asyncio.Lock()
         self._recovered = False
 
+    @property
+    def source_root(self) -> Path:
+        return self._storage._smoke_root
+
     async def recover(self) -> None:
         await self._ensure_recovered()
 

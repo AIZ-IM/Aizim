@@ -8,6 +8,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Final
 
+from .permission_profile import network_launch_policy, network_policy
 from .sandbox import SandboxContractError, SandboxLaunchSpec, SandboxRequest
 
 _PROFILE_ID: Final = "aizim-worker"
@@ -40,7 +41,7 @@ def compile_macos_profile(
     argv = (
         str(codex_executable),
         *(item for override in overrides for item in ("-c", override)),
-        *_FIXED_LAUNCH_POLICY,
+        *network_launch_policy(_FIXED_LAUNCH_POLICY, request.provider_network_domains),
         str(request.view_root),
         *request.command,
     )
@@ -53,7 +54,7 @@ def compile_macos_profile(
         view_root=request.view_root,
         scratch_root=request.scratch_root,
         profile_id=_PROFILE_ID,
-        policy_hash=_policy_contract_hash(filtered),
+        policy_hash=_policy_contract_hash(filtered, request.provider_network_domains),
     )
 
 
@@ -62,7 +63,13 @@ def validate_macos_profile(
     project_root: Path,
     developer_root: Path,
     runtime_read_roots: tuple[Path, ...] = (),
+    *,
+    provider_request: SandboxRequest | None = None,
 ) -> None:
+    if provider_request is not None and provider_request.provider_network_domains:
+        if spec != compile_macos_profile(Path(spec.argv[0]), provider_request, developer_root):
+            raise SandboxContractError("invalid macOS provider transport profile")
+        return
     argv = spec.argv
     overrides = argv[2:9:2]
     filtered = len(overrides) == 4 and overrides[3] == _environment_override(True, {})
@@ -154,10 +161,11 @@ def _permission_override(request: SandboxRequest, developer_root: Path) -> str:
     entries = ",".join(
         f"{_toml_string(path)}={_toml_string(permission)}" for path, permission in filesystem
     )
-    return f"permissions.{_PROFILE_ID}={{filesystem={{{entries}}},network={{enabled=false}}}}"
+    network = network_policy(request.provider_network_domains)
+    return f"permissions.{_PROFILE_ID}={{filesystem={{{entries}}},network={network}}}"
 
 
-def _policy_contract_hash(filtered: bool = False) -> str:
+def _policy_contract_hash(filtered: bool = False, domains: tuple[str, ...] = ()) -> str:
     scratch = Path("/__aizim_contract__/scratch")
     request = SandboxRequest(
         Path("/__aizim_contract__/project"),
@@ -169,6 +177,7 @@ def _policy_contract_hash(filtered: bool = False) -> str:
             Path("/__aizim_contract__/runtime-python"),
             Path("/__aizim_contract__/runtime-codex"),
         ),
+        provider_network_domains=domains,
     )
     environment = {
         "PATH": _BASE_PATH,
@@ -181,7 +190,7 @@ def _policy_contract_hash(filtered: bool = False) -> str:
         'approval_policy="never"',
         _permission_override(request, Path("/__aizim_contract__/developer")),
         _environment_override(filtered, environment),
-        *_FIXED_LAUNCH_POLICY,
+        *network_launch_policy(_FIXED_LAUNCH_POLICY, domains),
     )
     body = json.dumps(contract, ensure_ascii=False, separators=(",", ":")).encode()
     return hashlib.sha256(body).hexdigest()

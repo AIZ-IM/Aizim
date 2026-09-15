@@ -27,6 +27,7 @@ from .project import (
     project_base_epoch,
     sync_published_modules,
 )
+from .source_layout import worker_path
 
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
@@ -55,7 +56,7 @@ class DocumentStorage:
         _identifier(run_id)
         _identifier(worker_id)
         canonical = validate_relative_path(relative)
-        expected = PurePosixPath(f"AizimSmoke/Workers/{run_id}/{worker_id}.lean")
+        expected = worker_path(self._smoke_root, run_id, worker_id)
         if canonical != expected:
             raise LeanPathError("DOCUMENT_PATH_DENIED")
         return canonical

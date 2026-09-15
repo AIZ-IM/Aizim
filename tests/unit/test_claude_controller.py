@@ -161,12 +161,12 @@ async def test_plan_uses_exact_claude_argv_and_structured_output(
 
     assert await backend.plan(context()) == DispatchDecision("dispatch", "proof-a", "rfl", 2, 10.0)
     spec = captured[-1]
-    schema_path = (
-        Path(__file__).parents[2] / "src/aizim/orchestration/controller_decision.schema.json"
-    )
+    schema_path = Path(__file__).parents[2] / "src/aizim/orchestration/controller_wire.schema.json"
     schema = canonical_json(json.loads(schema_path.read_text())).decode()
     model_args = () if model is None else ("--model", model)
     assert spec.argv == (
+        "/usr/bin/env",
+        f"TMPDIR={spec.cwd.parent / 'aizim-scratch-data/client-tmp'}",
         str(claude),
         "-p",
         "--output-format",

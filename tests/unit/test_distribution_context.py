@@ -184,6 +184,7 @@ def test_source_resolution_uses_ripgrep_from_the_codex_native_dependency(
         meta / "node_modules" / "@openai" / "codex-darwin-arm64" / "vendor" / "aarch64-apple-darwin"
     )
     (triple / "codex-path").mkdir(parents=True)
+    _executable(triple / "bin" / "codex")
     ripgrep = _executable(triple / "codex-path" / "rg")
     monkeypatch.setattr(
         providers,

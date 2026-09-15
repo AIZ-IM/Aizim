@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -12,6 +14,7 @@ _PROVIDER_ENVIRONMENT_KEYS = frozenset(
         "CLAUDE_CODE_OAUTH_TOKEN",
         "OPENAI_API_KEY",
         "CODEX_HOME",
+        "CLAUDE_CONFIG_DIR",
         "SSL_CERT_FILE",
         "SSL_CERT_DIR",
         "HOME",
@@ -44,6 +47,17 @@ def normalize_sandbox_request(
         raise SandboxContractError("invalid provider environment policy")
     if request.provider_environment is ProviderEnvironmentPolicy.FILTERED_PARENT:
         _validate_provider_environment(request)
+    if type(request.provider_network_domains) is not tuple or any(
+        type(host) is not str
+        or re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*\.[a-z]{2,}", host) is None
+        for host in request.provider_network_domains
+    ):
+        raise SandboxContractError("invalid provider network domains")
+    if (
+        request.provider_network_domains
+        and request.provider_environment is not ProviderEnvironmentPolicy.FILTERED_PARENT
+    ):
+        raise SandboxContractError("provider network requires a filtered transport environment")
 
     runtime_roots: list[Path] = []
     for root in request.runtime_read_roots:
@@ -64,15 +78,42 @@ def normalize_sandbox_request(
         request.parent_env,
         tuple(runtime_roots),
         request.provider_environment,
+        request.provider_network_domains,
+    )
+
+
+def network_policy(domains: tuple[str, ...]) -> str:
+    if not domains:
+        return "{enabled=false}"
+    entries = ",".join(f'{json.dumps(host)}="allow"' for host in domains)
+    return (
+        "{enabled=true,domains={" + entries + '},proxy_url="http://127.0.0.1:0",'
+        "enable_socks5=false,allow_upstream_proxy=false,allow_local_binding=false}"
+    )
+
+
+def network_launch_policy(fixed: tuple[str, ...], domains: tuple[str, ...]) -> tuple[str, ...]:
+    if not domains:
+        return fixed
+    return (
+        "-c",
+        "features.network_proxy=true",
+        *(item for item in fixed if item != "--sandbox-state-disable-network"),
     )
 
 
 def _validate_provider_environment(request: SandboxRequest) -> None:
     environment = request.parent_env
+    temporary = environment.get("TMPDIR")
+    if type(temporary) is not str or not temporary:
+        raise SandboxContractError("invalid provider temporary directory")
+    temporary_root = canonical_directory(
+        Path(temporary), "provider temporary directory", require_exact=True
+    )
     if (
         not environment.keys() >= _BASELINE_ENVIRONMENT_KEYS
         or not environment.keys() <= _PROVIDER_ENVIRONMENT_KEYS
-        or environment.get("TMPDIR") != str(request.scratch_root)
+        or not temporary_root.is_relative_to(request.scratch_root)
         or any(type(value) is not str or not value for value in environment.values())
     ):
         raise SandboxContractError("invalid provider environment")

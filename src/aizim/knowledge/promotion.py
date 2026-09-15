@@ -51,6 +51,7 @@ class PromotionService:
         materializer: PromotionMaterializer,
         allowed_imports: tuple[str, ...] = ("Std",),
         heartbeat_interval: timedelta = timedelta(seconds=1),
+        namespace: str = "AizimSmoke.Research",
     ) -> None:
         if type(state) is not StateService or type(artifacts) is not ArtifactStore:
             raise PromotionError("INVALID_PROMOTION_SERVICE")
@@ -62,6 +63,9 @@ class PromotionService:
             raise PromotionError("INVALID_PROMOTION_SERVICE")
         if type(heartbeat_interval) is not timedelta or heartbeat_interval <= timedelta(0):
             raise PromotionError("INVALID_PROMOTION_SERVICE")
+        if namespace not in {"AizimSmoke.Research", "AizimResearch"}:
+            raise PromotionError("INVALID_PUBLICATION_NAMESPACE")
+        self._namespace = namespace
         self._state, self._artifacts, self._verifier = state, artifacts, verifier
         self._owner_id, self._materializer = owner_id, materializer
         self._allowed_imports, self._heartbeat_interval = allowed_imports, heartbeat_interval
@@ -95,7 +99,9 @@ class PromotionService:
                 self._allowed_imports,
             )
             name = research_name(
-                text_field(payload, "candidate_name"), text_field(payload, "payload_hash")
+                text_field(payload, "candidate_name"),
+                text_field(payload, "payload_hash"),
+                self._namespace,
             )
             evidence = await self._active(entry, self._verifier.verify(source, name))
             record_verification(self._state, run_id, entry.contribution_id, evidence)
@@ -257,11 +263,7 @@ class PromotionService:
             entry,
             run_id,
             reason,
-            (
-                ()
-                if evidence is None
-                else (*evidence.diagnostics, *evidence.source_scan_warnings)
-            ),
+            (() if evidence is None else (*evidence.diagnostics, *evidence.source_scan_warnings)),
             () if evidence is None else evidence.axioms,
         )
         return PromotionOutcome(entry.contribution_id, quarantined.state, None)

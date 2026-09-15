@@ -36,6 +36,7 @@ class ProjectionDocument:
 
 
 type ControlOperationName = Literal[
+    "control.research",
     "control.configure_controller",
     "control.register_worker",
     "control.assign_task",

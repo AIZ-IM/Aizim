@@ -25,8 +25,8 @@ def test_shared_resource_policy_requires_slice_two_limits(tmp_path: Path) -> Non
 @pytest.mark.parametrize(
     ("policy", "mode", "code"),
     [
-        (ResourcePolicy(max_proof_workers=1), LeanRuntimeMode.SHARED, "PROOF_WORKER_LIMIT"),
-        (ResourcePolicy(scratch_slots=1), LeanRuntimeMode.SHARED, "SCRATCH_SLOT_LIMIT"),
+        (ResourcePolicy(max_proof_workers=0), LeanRuntimeMode.SHARED, "PROOF_WORKER_LIMIT"),
+        (ResourcePolicy(scratch_slots=0), LeanRuntimeMode.SHARED, "SCRATCH_SLOT_LIMIT"),
         (ResourcePolicy(lsp_instances=2), LeanRuntimeMode.SHARED, "LSP_INSTANCE_LIMIT"),
         (ResourcePolicy(), LeanRuntimeMode.ISOLATED, "ISOLATED_RUNTIME_UNAVAILABLE"),
     ],

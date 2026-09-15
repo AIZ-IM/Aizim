@@ -5,8 +5,8 @@ Slices 1–2 establish an executable engineering-smoke path for its authority fo
 and shared formal loop.
 
 The trusted boundary contains the supervisor-owned state, capability gateway, document
-broker, shared Lean bridge, and verification and promotion services. Agent processes,
-model outputs, and model-controlled tool calls are untrusted and receive only explicitly
+broker, shared Lean bridge, verification and promotion services, and attested provider CLI
+transports. Model outputs and model-controlled tool calls are untrusted and receive only explicitly
 authorized capabilities and materialized worker views.
 
 Slices 1–2 support macOS first. Linux is a future interface adapter and is not an
@@ -76,6 +76,12 @@ qualification and release-readiness procedure.
 
 ## Persistent controller and workers
 
+For ordinary Lean projects, dependency scheduling, bounded repair rounds, offline lemma search,
+research memory, operator guidance, human contribution records, and the local dashboard, use the
+[research workflow](docs/operations/research-workflow.md). The
+[human-role design](docs/designs/2026-09-15-human-role-in-lean-native-research.md) explains how
+formal validity, mathematical meaning, research value, attribution, and exposition are recorded.
+
 Initialize a Lean project, select one primary controller provider, then register workers and
 assign versioned tasks:
 
@@ -92,7 +98,7 @@ aizim worker register \
 aizim worker assign \
   --project /absolute/path/to/lean-project \
   --worker-id counterexample-a \
-  --task "search quartic families"
+  --task "prove (n : Nat) : n + 0 = n"
 AIZIM_MODEL=gpt-6-astra aizim controller start \
   --project /absolute/path/to/lean-project \
   --foreground

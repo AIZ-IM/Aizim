@@ -57,6 +57,7 @@ class SandboxRequest:
     parent_env: Mapping[str, str] = field(repr=False)
     runtime_read_roots: tuple[Path, ...] = ()
     provider_environment: ProviderEnvironmentPolicy = ProviderEnvironmentPolicy.NONE
+    provider_network_domains: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

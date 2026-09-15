@@ -135,6 +135,8 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
                     "reason_code": _enum(
                         "OPERATOR_SIGNAL",
                         "PREFLIGHT_FAILED",
+                        "RESEARCH_IDLE",
+                        "TIME_LIMIT",
                         "CONTROLLER_FAILED",
                     )
                 },
@@ -195,6 +197,7 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
                         "CONTROLLER_TIMEOUT",
                         "WORKER_FAILED",
                         "WORKER_ROLE_UNSUPPORTED",
+                        "FORMAL_TARGET_REQUIRED",
                     ),
                 },
             ),

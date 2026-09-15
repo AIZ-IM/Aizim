@@ -9,7 +9,7 @@ from aizim.state import PublicationQueueState
 
 from .errors import PromotionError
 
-_MODULE = re.compile(r"AizimSmoke\.Research\.[A-Za-z_][A-Za-z0-9_]*")
+_MODULE = re.compile(r"(?:AizimSmoke\.Research|AizimResearch)\.[A-Za-z_][A-Za-z0-9_]*")
 _HASH = re.compile(r"[0-9a-f]{64}")
 
 

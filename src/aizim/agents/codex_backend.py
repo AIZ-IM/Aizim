@@ -111,6 +111,7 @@ class CodexBackend:
             outcome.final_message_hash,
             outcome.exit_code,
             sandbox.policy_hash,
+            outcome.usage,
         )
 
     async def _finish(self, request: AgentRequest, failure: BaseException | None) -> None:
@@ -155,7 +156,16 @@ def build_codex_launch_spec(
         else "codex_result.schema.json"
     )
     schema_path = Path(__file__).with_name(schema_name).resolve()
-    final_path = request.view_root / ".aizim-codex-last-message.json"
+    result_root = request.view_root if request.result_root is None else request.result_root
+    if request.result_root is not None:
+        protected_root = _project_root(request) / ".aizim" / "run"
+        if (
+            result_root.resolve(strict=True) != result_root
+            or not result_root.is_relative_to(protected_root)
+            or result_root.stat().st_mode & 0o777 != 0o700
+        ):
+            raise CodexBackendError("RESULT_ROOT_INVALID")
+    final_path = result_root / ".aizim-codex-last-message.json"
     mcp_override = _mcp_override(request, sidecar_executable)
     model = () if request.model is None else ("--model", request.model)
     argv = (
