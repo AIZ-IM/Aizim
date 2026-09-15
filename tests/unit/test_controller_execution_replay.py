@@ -45,7 +45,7 @@ def _start(state: StateService, session_id: str = _SESSION_ID) -> None:
         session_id=session_id,
         controller_version=1,
         provider=ControllerProviderId("codex"),
-        backend_version="0.145.0",
+        backend_version="0.154.0",
         executable_hash="c" * 64,
     )
 
@@ -150,7 +150,7 @@ def test_stale_controller_start_uses_execution_error_without_event(tmp_path: Pat
                 session_id=_SESSION_ID,
                 controller_version=2,
                 provider=ControllerProviderId("codex"),
-                backend_version="0.145.0",
+                backend_version="0.154.0",
                 executable_hash="c" * 64,
             )
         assert state.query_events() == before

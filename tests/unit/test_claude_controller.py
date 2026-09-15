@@ -30,7 +30,7 @@ from aizim.orchestration.controller_providers import production_controller
 from aizim.runtime.provider_executables import ResolvedExecutable
 
 type Captured = list[ControllerLaunchSpec]
-_CODEX_SCRIPT = "import sys\nprint('codex-cli 0.145.0'if'--version'in sys.argv else'')\n"
+_CODEX_SCRIPT = "import sys\nprint('codex-cli 0.154.0'if'--version'in sys.argv else'')\n"
 _CLAUDE_SCRIPT = "import sys\nprint('2.1.218 (Claude Code)'if'--version'in sys.argv else'')\n"
 _DECISION = json.loads(
     b'{"action":"dispatch","worker_id":"proof-a","instruction":"rfl",'
@@ -120,7 +120,7 @@ def test_production_factory_routes_claude(tmp_path: Path, monkeypatch: pytest.Mo
     project.mkdir()
     backend = ClaudeControllerBackend(
         descriptor(claude, "2.1.218 (Claude Code)"),
-        descriptor(_codex, "codex-cli 0.145.0"),
+        descriptor(_codex, "codex-cli 0.154.0"),
         None,
         project,
         environment,
@@ -152,7 +152,7 @@ async def test_plan_uses_exact_claude_argv_and_structured_output(
     )
     backend = ClaudeControllerBackend(
         descriptor(claude, "2.1.218 (Claude Code)"),
-        descriptor(_codex, "codex-cli 0.145.0"),
+        descriptor(_codex, "codex-cli 0.154.0"),
         model,
         project,
         environment,
@@ -217,7 +217,7 @@ async def test_provider_stdin_is_byte_identical(
         return ControllerLaunchOutcome(b"", "0" * 64, 0)
 
     await CodexControllerBackend(
-        descriptor(codex, "codex-cli 0.145.0"),
+        descriptor(codex, "codex-cli 0.154.0"),
         None,
         project,
         environment,
@@ -225,7 +225,7 @@ async def test_provider_stdin_is_byte_identical(
     ).plan(context())
     await ClaudeControllerBackend(
         descriptor(claude, "2.1.218 (Claude Code)"),
-        descriptor(codex, "codex-cli 0.145.0"),
+        descriptor(codex, "codex-cli 0.154.0"),
         None,
         project,
         environment,
@@ -250,7 +250,7 @@ async def test_preflight_checks_image_version_and_auth_without_exposing_secrets(
     )
     backend = ClaudeControllerBackend(
         descriptor(claude, "2.1.218 (Claude Code)"),
-        descriptor(_codex, "codex-cli 0.145.0"),
+        descriptor(_codex, "codex-cli 0.154.0"),
         None,
         project,
         environment,
@@ -299,7 +299,7 @@ async def test_plan_rejects_invalid_or_failed_results(
     )
     backend = ClaudeControllerBackend(
         descriptor(claude, "2.1.218 (Claude Code)"),
-        descriptor(_codex, "codex-cli 0.145.0"),
+        descriptor(_codex, "codex-cli 0.154.0"),
         None,
         project,
         environment,
@@ -325,7 +325,7 @@ async def test_plan_rejects_executable_replacement(
     )
     backend = ClaudeControllerBackend(
         descriptor(claude, "2.1.218 (Claude Code)"),
-        descriptor(_codex, "codex-cli 0.145.0"),
+        descriptor(_codex, "codex-cli 0.154.0"),
         None,
         project,
         environment,

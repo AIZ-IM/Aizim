@@ -66,8 +66,9 @@ def _mcp_table(argv: tuple[str, ...]) -> dict[str, object]:
     return tomllib.loads(f"value={override.partition('=')[2]}")["value"]
 
 
-def test_codex_launch_reuses_profile_and_adds_required_sidecar(tmp_path: Path) -> None:
-    agent_request = request(tmp_path)
+@pytest.mark.parametrize("model", ["gpt-5.2-codex", "gpt-6-astra"])
+def test_codex_launch_reuses_profile_and_adds_required_sidecar(tmp_path: Path, model: str) -> None:
+    agent_request = request(tmp_path, model=model)
     sandbox = sandbox_spec(agent_request)
     sidecar = Path("/opt/aizim/bin/aizim-gateway-sidecar")
 
@@ -95,7 +96,7 @@ def test_codex_launch_reuses_profile_and_adds_required_sidecar(tmp_path: Path) -
     assert "launcher-owned-credential" not in repr(launch)
     assert "launcher-owned-credential" not in repr(launch.argv)
     assert "--model" in launch.argv
-    assert launch.argv[launch.argv.index("--model") + 1] == "gpt-5.2-codex"
+    assert launch.argv[launch.argv.index("--model") + 1] == model
 
     table = _mcp_table(launch.argv)
     assert table == {
@@ -240,10 +241,10 @@ async def test_codex_backend_has_verified_identity_and_always_finalizes(
     dependencies = CodexBackendDependencies(
         codex_executable=ResolvedExecutable(
             executable.resolve(),
-            "codex-cli 0.145.0",
+            "codex-cli 0.154.0",
             sha256_file(executable),
         ),
-        codex_version=lambda _path: "codex-cli 0.145.0",
+        codex_version=lambda _path: "codex-cli 0.154.0",
         sandbox=lambda _request: replace(base, argv=(str(executable), *base.argv[1:])),
         sidecar_executable=Path("/opt/aizim/bin/aizim-gateway-sidecar"),
         launch=launch,
@@ -269,7 +270,7 @@ async def test_codex_backend_has_verified_identity_and_always_finalizes(
             await backend.run(agent_request)
 
     assert backend.identity.executable_sha256 == original_hash
-    assert backend.identity.version == "codex-cli 0.145.0"
+    assert backend.identity.version == "codex-cli 0.154.0"
     expected_actions = (
         ["revoke", "cleanup"]
         if mode == "replaced"

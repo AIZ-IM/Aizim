@@ -46,7 +46,7 @@ def runtime(status: str, reason_code: str | None = None) -> ProjectionDocument:
         "controller_session_id": SESSION_ID,
         "controller_version": 1,
         "provider": "codex",
-        "backend_version": "codex-cli 0.145.0",
+        "backend_version": "codex-cli 0.154.0",
         "executable_hash": "b" * 64,
         "status": status,
     }
@@ -152,7 +152,7 @@ def test_controller_document_projects_validated_runtime(
     reason_code: str | None,
 ) -> None:
     expected: dict[str, JsonValue] = {
-        "backend_version": "codex-cli 0.145.0",
+        "backend_version": "codex-cli 0.154.0",
         "controller_session_id": SESSION_ID,
         "controller_version": 1,
         "status": status,

@@ -56,7 +56,7 @@ def run_manifest() -> RunManifest:
         lean_lsp_mcp_version="0.28.1",
         leanclient_version="0.12.1",
         agent_harness_name="codex-cli",
-        agent_harness_version="0.145.0",
+        agent_harness_version="0.154.0",
         agent_harness_binary_hash="1" * 64,
         model_backend="openai",
         model_identifier="gpt-5",
@@ -240,6 +240,7 @@ def test_unknown_enum_value_is_fatal(tmp_path: Path) -> None:
         ("leanclient_version", "0.12.0"),
         ("mcp_version", "1.28.0"),
         ("codex_cli_version", "0.144.5"),
+        ("codex_cli_version", "0.145.0"),
     ],
 )
 def test_foundation_pins_must_match_exact_versions(

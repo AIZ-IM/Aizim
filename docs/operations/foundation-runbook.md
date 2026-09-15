@@ -20,7 +20,7 @@ open-problem result, novelty, or general autonomous proving capability.
 | Platform | macOS with `/usr/bin/sandbox-exec` |
 | Python | 3.12–3.14 |
 | uv | 0.11.31 |
-| Codex CLI | 0.145.0 |
+| Codex CLI | 0.154.0 |
 | Claude Code | 2.1.218 when using a Claude Controller |
 | Lean | 4.32.1 |
 | Lean toolchain | `leanprover/lean4:v4.32.1` |
@@ -38,7 +38,7 @@ Node.js, and `rg`, then install the agent pins you need:
 
 ```sh
 elan toolchain install leanprover/lean4:v4.32.1
-npm install --global @openai/codex@0.145.0
+npm install --global @openai/codex@0.154.0
 # Only for a Claude Controller:
 npm install --global --allow-scripts=@anthropic-ai/claude-code \
   @anthropic-ai/claude-code@2.1.218
@@ -57,7 +57,7 @@ claude --version
 uv run python -c 'import importlib.metadata as m; print(m.version("lean-lsp-mcp"), m.version("leanclient"), m.version("mcp"))'
 ```
 
-Expected pins are `uv 0.11.31`, `codex-cli 0.145.0`, optional `2.1.218 (Claude Code)`, Lean
+Expected pins are `uv 0.11.31`, `codex-cli 0.154.0`, optional `2.1.218 (Claude Code)`, Lean
 `4.32.1`, and Python package versions `0.28.1 0.12.1 1.28.1`.
 
 Codex resolves `AIZIM_CODEX_EXECUTABLE` before `codex` on `PATH`; Claude independently resolves

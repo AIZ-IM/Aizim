@@ -70,7 +70,7 @@ shell isolation is real without using user credentials.
 
 `LinuxSandboxAdapter` enforces the same permission contract through the
 package-local Codex CLI and its exact bundled `codex-resources/bwrap`. It
-accepts only Linux, Codex `0.145.0`, canonical regular executable images, and
+accepts only Linux, Codex `0.154.0`, canonical regular executable images, and
 a working user-namespace/bwrap probe. Missing or unusable bwrap fails before a
 worker starts; there is no Landlock or unsandboxed fallback. The Linux profile
 uses a minimal fixed `PATH`, reads only the materialized view and declared

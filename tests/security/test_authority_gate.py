@@ -117,7 +117,7 @@ async def test_security_probe_revalidates_the_resolved_codex_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     binary = tmp_path / "codex"
-    binary.write_text("#!/bin/sh\nprintf 'codex-cli 0.145.0\\n'\n")
+    binary.write_text("#!/bin/sh\nprintf 'codex-cli 0.154.0\\n'\n")
     binary.chmod(0o755)
     environment = {
         "AIZIM_CODEX_EXECUTABLE": str(binary),
@@ -127,11 +127,11 @@ async def test_security_probe_revalidates_the_resolved_codex_image(
 
     class ReplacingAdapter:
         async def launch_probe(self, _request: ProbeRequest) -> ProbeReport:
-            binary.write_text("#!/bin/sh\nprintf 'codex-cli 0.145.0\\n'\n# replaced\n")
+            binary.write_text("#!/bin/sh\nprintf 'codex-cli 0.154.0\\n'\n# replaced\n")
             return ProbeReport(
                 "darwin",
                 True,
-                "codex-cli 0.145.0",
+                "codex-cli 0.154.0",
                 "/usr/bin/sandbox-exec",
                 "a" * 64,
                 (),

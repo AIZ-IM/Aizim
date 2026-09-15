@@ -350,7 +350,7 @@ test("CI isolates external provider contracts from provider-free package lanes",
     "leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9",
     'version: "0.11.31"',
     "npm@12.0.1",
-    "@openai/codex@0.145.0",
+    "@openai/codex@0.154.0",
     'cp -R tests/fixtures/attack_probe_project "$RUNNER_TEMP/attack-probe-project"',
     'uv run aizim init "$RUNNER_TEMP/attack-probe-project"',
     '--project "$RUNNER_TEMP/attack-probe-project"',
@@ -359,7 +359,7 @@ test("CI isolates external provider contracts from provider-free package lanes",
   }
   assert.doesNotMatch(leanWorkflow, /@anthropic-ai\/claude-code/u);
   assert.equal(
-    leanWorkflow.match(/@openai\/codex@0\.145\.0/gu)?.length,
+    leanWorkflow.match(/@openai\/codex@0\.154\.0/gu)?.length,
     1,
   );
 
@@ -405,9 +405,9 @@ test("CI isolates external provider contracts from provider-free package lanes",
   }
   const codexJob = workflowJob(providerWorkflow, "provider-contract-codex");
   const claudeJob = workflowJob(providerWorkflow, "provider-contract-claude");
-  assert.match(codexJob, /@openai\/codex@0\.145\.0/u);
+  assert.match(codexJob, /@openai\/codex@0\.154\.0/u);
   assert.doesNotMatch(codexJob, /@anthropic-ai\/claude-code/u);
-  assert.match(claudeJob, /@openai\/codex@0\.145\.0/u);
+  assert.match(claudeJob, /@openai\/codex@0\.154\.0/u);
   assert.match(claudeJob, /@anthropic-ai\/claude-code@2\.1\.218/u);
   assert.match(
     claudeJob,

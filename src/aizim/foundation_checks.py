@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from aizim import foundation_contract as contract
 from aizim import foundation_evidence as fe
+from aizim.config import CODEX_CLI_VERSION
 from aizim.domain import sha256_bytes, sha256_json
 from aizim.domain.serialization import JsonValue
 from aizim.foundation_epoch import durable_start
@@ -190,7 +191,7 @@ def _codex(manifest: fe.JsonObject) -> bool:
     policy = _object(manifest.get("run_policy"))
     return (
         manifest.get("agent_harness_name") == manifest.get("model_backend") == "codex"
-        and manifest.get("agent_harness_version") == "codex-cli 0.145.0"
+        and manifest.get("agent_harness_version") == f"codex-cli {CODEX_CLI_VERSION}"
         and fe.is_hash(manifest.get("agent_harness_binary_hash"))
         and type(manifest.get("model_identifier")) is str
         and manifest.get("process_isolation_profile") == "macos-sandbox-aizim-worker"

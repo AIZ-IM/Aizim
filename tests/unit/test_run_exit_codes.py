@@ -76,7 +76,7 @@ def test_direct_codex_run_passes_the_single_resolved_descriptor_to_backend(
 ) -> None:
     descriptor = ResolvedExecutable(
         Path("/opt/aizim-test/codex"),
-        "codex-cli 0.145.0",
+        "codex-cli 0.154.0",
         "a" * 64,
     )
     backend = cast(CodexBackend, object())

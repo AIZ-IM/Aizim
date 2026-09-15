@@ -10,7 +10,7 @@ from integration.cli_control_support import initialized_project, run_cli
 
 @pytest.mark.parametrize(
     ("provider", "model"),
-    (("codex", "gpt-5.6-sol"), ("claude", None)),
+    (("codex", "gpt-5.6-sol"), ("codex", "gpt-6-astra"), ("claude", None)),
 )
 def test_controller_provider_is_configurable_and_persistent(
     tmp_path: Path, provider: str, model: str | None

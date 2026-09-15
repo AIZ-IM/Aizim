@@ -32,12 +32,12 @@ npx --no-install aizim --version
 ```
 
 The first command may download and prepare a managed CPython 3.14.6 runtime in the Aizim cache
-through bundled uv 0.11.31. Aizim does not install Codex or Claude. Install Codex CLI 0.145.0
+through bundled uv 0.11.31. Aizim does not install Codex or Claude. Install Codex CLI 0.154.0
 independently for every operational configuration; install Claude Code 2.1.218 only when selecting
 a Claude Controller:
 
 ```sh
-npm install --global @openai/codex@0.145.0
+npm install --global @openai/codex@0.154.0
 npm install --global --allow-scripts=@anthropic-ai/claude-code \
   @anthropic-ai/claude-code@2.1.218
 ```
@@ -84,7 +84,7 @@ aizim init /absolute/path/to/lean-project
 aizim controller configure \
   --project /absolute/path/to/lean-project \
   --provider codex \
-  --model gpt-5.6-sol
+  --model gpt-6-astra
 aizim worker register \
   --project /absolute/path/to/lean-project \
   --worker-id counterexample-a \
@@ -93,7 +93,7 @@ aizim worker assign \
   --project /absolute/path/to/lean-project \
   --worker-id counterexample-a \
   --task "search quartic families"
-AIZIM_MODEL=gpt-5.6-sol aizim controller start \
+AIZIM_MODEL=gpt-6-astra aizim controller start \
   --project /absolute/path/to/lean-project \
   --foreground
 aizim controller show --project /absolute/path/to/lean-project --json
@@ -107,7 +107,7 @@ aizim controller configure \
   --project /absolute/path/to/lean-project \
   --provider claude \
   --model claude-opus-4-6
-AIZIM_MODEL=gpt-5.6-sol aizim controller start \
+AIZIM_MODEL=gpt-6-astra aizim controller start \
   --project /absolute/path/to/lean-project \
   --foreground
 ```
@@ -117,8 +117,12 @@ model from `AIZIM_MODEL` or the project configuration. The foreground controller
 state writer, executes each durable assignment at most once, and records runtime and execution
 status for `controller show` and `worker list`. Configuration, registration, assignments, and
 terminal execution status survive restarts; terminal assignments are not dispatched again.
-Codex CLI 0.145.0 is required for either Controller choice; Claude Code 2.1.218 is additionally
+Codex CLI 0.154.0 is required for either Controller choice; Claude Code 2.1.218 is additionally
 required only for the Claude Controller.
+
+The Codex examples select [GPT-6 Astra](https://learn.chatgpt.com/docs/models) using
+`gpt-6-astra`. Set the Controller's `--model` and the Worker's `AIZIM_MODEL` separately;
+changing one does not change the other. Other explicitly configured models remain supported.
 
 Slices 1–2 are engineering smoke tests only. They make no open-problem, novelty, or
 general proof-capability claim.

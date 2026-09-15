@@ -52,7 +52,7 @@ def _start(state: StateService, session_id: str = _SESSION_ID) -> None:
         session_id=session_id,
         controller_version=1,
         provider=ControllerProviderId("codex"),
-        backend_version="0.145.0",
+        backend_version="0.154.0",
         executable_hash="c" * 64,
     )
 

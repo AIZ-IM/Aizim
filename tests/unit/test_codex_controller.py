@@ -30,7 +30,7 @@ from aizim.orchestration.controller_process import (
 from aizim.runtime.provider_executables import ResolvedExecutable
 
 type Captured = list[ControllerLaunchSpec]
-_VERSION_SCRIPT = "import sys\nprint('codex-cli 0.145.0'if'--version'in sys.argv else'')\n"
+_VERSION_SCRIPT = "import sys\nprint('codex-cli 0.154.0'if'--version'in sys.argv else'')\n"
 
 
 class PassthroughSandbox:
@@ -60,7 +60,7 @@ def executable(tmp_path: Path, body: str = _VERSION_SCRIPT) -> Path:
 
 
 def descriptor(path: Path) -> ResolvedExecutable:
-    return ResolvedExecutable(path, "codex-cli 0.145.0", sha256_file(path))
+    return ResolvedExecutable(path, "codex-cli 0.154.0", sha256_file(path))
 
 
 def context() -> ControllerContext:
@@ -97,7 +97,7 @@ def launcher(captured: Captured) -> ControllerLauncher:
     return launch
 
 
-@pytest.mark.parametrize("model", [None, "gpt-5.6-sol"])
+@pytest.mark.parametrize("model", [None, "gpt-5.6-sol", "gpt-6-astra"])
 async def test_plan_uses_exact_codex_argv_and_canonical_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

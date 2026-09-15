@@ -139,7 +139,7 @@ def _dependencies(
     directives = (f"directive-{value:032x}" for value in count(1))
     executable = ResolvedExecutable(
         Path(sys.executable).resolve(strict=True),
-        "codex-cli 0.145.0",
+        "codex-cli 0.154.0",
         "0" * 64,
     )
     runtime = ResolvedControllerRuntime(

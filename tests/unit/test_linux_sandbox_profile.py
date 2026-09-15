@@ -35,7 +35,7 @@ def dependencies(
     bwrap: Path,
     *,
     platform: str = "linux",
-    version: str = "codex-cli 0.145.0",
+    version: str = "codex-cli 0.154.0",
     usable: bool = True,
 ) -> LinuxSandboxDependencies:
     return LinuxSandboxDependencies(

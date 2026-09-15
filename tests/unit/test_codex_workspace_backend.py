@@ -17,7 +17,7 @@ from aizim.runtime.provider_executables import ResolvedExecutable
 
 
 class RecordingBackend:
-    identity = BackendIdentity("codex", "codex-cli 0.145.0", "a" * 64)
+    identity = BackendIdentity("codex", "codex-cli 0.154.0", "a" * 64)
 
     def __init__(self) -> None:
         self.request: AgentRequest | None = None
@@ -56,7 +56,7 @@ def _request(project: Path) -> AgentRequest:
     )
 
 
-def _executable(path: Path, output: str = "codex-cli 0.145.0") -> Path:
+def _executable(path: Path, output: str = "codex-cli 0.154.0") -> Path:
     path.write_text(f"#!/bin/sh\nprintf '%s\\n' '{output}'\n")
     path.chmod(0o755)
     return path
@@ -65,7 +65,7 @@ def _executable(path: Path, output: str = "codex-cli 0.145.0") -> Path:
 def _descriptor(path: Path) -> ResolvedExecutable:
     return ResolvedExecutable(
         path.resolve(),
-        "codex-cli 0.145.0",
+        "codex-cli 0.154.0",
         sha256_file(path),
     )
 

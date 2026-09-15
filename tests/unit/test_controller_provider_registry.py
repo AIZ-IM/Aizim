@@ -81,7 +81,7 @@ def test_registry_distinguishes_well_formed_unsupported_provider() -> None:
 
 
 def test_codex_runtime_reuses_mandatory_worker_descriptor(tmp_path) -> None:
-    codex = provider_executable(tmp_path / "codex", "codex-cli 0.145.0")
+    codex = provider_executable(tmp_path / "codex", "codex-cli 0.154.0")
 
     runtime = resolve_controller_runtime(
         ControllerProviderId("codex"),
@@ -93,7 +93,7 @@ def test_codex_runtime_reuses_mandatory_worker_descriptor(tmp_path) -> None:
 
 
 def test_claude_runtime_resolves_only_selected_controller(tmp_path) -> None:
-    codex = provider_executable(tmp_path / "codex", "codex-cli 0.145.0")
+    codex = provider_executable(tmp_path / "codex", "codex-cli 0.154.0")
     claude = provider_executable(tmp_path / "claude", "2.1.218 (Claude Code)")
 
     runtime = resolve_controller_runtime(

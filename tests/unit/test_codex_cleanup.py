@@ -26,7 +26,7 @@ from aizim.runtime.provider_executables import ResolvedExecutable
 def _descriptor(path: Path) -> ResolvedExecutable:
     return ResolvedExecutable(
         path.resolve(),
-        "codex-cli 0.145.0",
+        "codex-cli 0.154.0",
         hashlib.sha256(path.read_bytes()).hexdigest(),
     )
 
@@ -162,7 +162,7 @@ async def test_repeated_cancellation_cannot_skip_revoke_or_cleanup(tmp_path: Pat
     backend = CodexBackend(
         CodexBackendDependencies(
             _descriptor(executable),
-            lambda _path: "codex-cli 0.145.0",
+            lambda _path: "codex-cli 0.154.0",
             lambda _request: replace(sandbox),
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
             launch,
@@ -204,7 +204,7 @@ async def test_replaced_codex_is_rejected_before_the_sandbox_compiler(tmp_path: 
     backend = CodexBackend(
         CodexBackendDependencies(
             _descriptor(executable),
-            lambda _path: "codex-cli 0.145.0",
+            lambda _path: "codex-cli 0.154.0",
             compile_sandbox,
             Path("/opt/aizim/bin/aizim-gateway-sidecar"),
             unreachable_launch,

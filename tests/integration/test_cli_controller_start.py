@@ -97,7 +97,7 @@ def dependencies(
 ) -> SupervisorDeps:
     codex = ResolvedExecutable(
         Path("/opt/aizim-test/codex"),
-        "codex-cli 0.145.0",
+        "codex-cli 0.154.0",
         "a" * 64,
     )
     return SupervisorDeps(

@@ -43,7 +43,7 @@ def roots(tmp_path: Path) -> tuple[Path, Path, Path]:
 def dependencies(
     *,
     platform: str = "darwin",
-    codex_version: Callable[[], str] = lambda: "codex-cli 0.145.0",
+    codex_version: Callable[[], str] = lambda: "codex-cli 0.154.0",
     sandbox_is_apple: Callable[[], bool] = lambda: True,
     developer_root: Callable[[], Path] = lambda: Path("/Library/Developer/CommandLineTools"),
 ) -> MacOSSandboxDependencies:

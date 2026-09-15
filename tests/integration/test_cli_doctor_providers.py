@@ -25,8 +25,8 @@ def test_codex_controller_never_resolves_claude(
     root = initialized_project(tmp_path)
     persist_controller(root, "codex")
     resolved = descriptor(
-        executable(tmp_path / "codex", "codex-cli 0.145.0"),
-        "codex-cli 0.145.0",
+        executable(tmp_path / "codex", "codex-cli 0.154.0"),
+        "codex-cli 0.154.0",
     )
 
     checks = provider_checks(root, monkeypatch, codex=resolved)
@@ -45,8 +45,8 @@ def test_claude_controller_uses_independent_codex_worker(
     root = initialized_project(tmp_path)
     persist_controller(root, "claude")
     codex = descriptor(
-        executable(tmp_path / "codex", "codex-cli 0.145.0"),
-        "codex-cli 0.145.0",
+        executable(tmp_path / "codex", "codex-cli 0.154.0"),
+        "codex-cli 0.154.0",
     )
     claude = descriptor(
         executable(tmp_path / "claude", "2.1.218 (Claude Code)"),
@@ -69,8 +69,8 @@ def test_selected_claude_failure_skips_only_controller_auth(
     root = initialized_project(tmp_path)
     persist_controller(root, "claude")
     codex = descriptor(
-        executable(tmp_path / "codex", "codex-cli 0.145.0"),
-        "codex-cli 0.145.0",
+        executable(tmp_path / "codex", "codex-cli 0.154.0"),
+        "codex-cli 0.154.0",
     )
 
     checks = provider_checks(
@@ -162,8 +162,8 @@ def test_malformed_and_unsupported_persisted_ids_fail_provider_role(
     )
     monkeypatch.setattr(doctor_provider_checks, "load_projections", lambda _layout: (record,))
     codex = descriptor(
-        executable(tmp_path / "codex", "codex-cli 0.145.0"),
-        "codex-cli 0.145.0",
+        executable(tmp_path / "codex", "codex-cli 0.154.0"),
+        "codex-cli 0.154.0",
     )
 
     checks = provider_checks(root, monkeypatch, codex=codex)

@@ -55,10 +55,10 @@ jobs:
         run: |
           "$RUNNER_TEMP/npm-12/bin/npm" install --global \
             --prefix "$RUNNER_TEMP/provider-cli" \
-            @openai/codex@0.145.0
+            @openai/codex@0.154.0
           echo "$RUNNER_TEMP/provider-cli/bin" >> "$GITHUB_PATH"
           test "$("$RUNNER_TEMP/provider-cli/bin/codex" --version)" = \
-            "codex-cli 0.145.0"
+            "codex-cli 0.154.0"
       - name: Enable Linux sandbox namespaces
         if: runner.os == 'Linux'
         run: |
@@ -131,11 +131,11 @@ jobs:
           "$RUNNER_TEMP/npm-12/bin/npm" install --global \
             --prefix "$RUNNER_TEMP/provider-cli" \
             --allow-scripts=@anthropic-ai/claude-code \
-            @openai/codex@0.145.0 \
+            @openai/codex@0.154.0 \
             @anthropic-ai/claude-code@2.1.218
           echo "$RUNNER_TEMP/provider-cli/bin" >> "$GITHUB_PATH"
           test "$("$RUNNER_TEMP/provider-cli/bin/codex" --version)" = \
-            "codex-cli 0.145.0"
+            "codex-cli 0.154.0"
           test "$("$RUNNER_TEMP/provider-cli/bin/claude" --version)" = \
             "2.1.218 (Claude Code)"
       - name: Enable Linux sandbox namespaces

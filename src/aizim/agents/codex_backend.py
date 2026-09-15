@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from aizim.async_lifecycle import await_cleanup
+from aizim.config import CODEX_CLI_VERSION
 from aizim.domain import sha256_file
 from aizim.runtime.provider_executables import ResolvedExecutable
 
@@ -14,7 +15,7 @@ from .backend import AgentRequest, AgentResult, BackendIdentity
 from .launcher import CodexLaunchOutcome, CodexLaunchSpec
 from .sandbox import SandboxLaunchSpec, validate_launch_spec
 
-_CODEX_VERSION = "codex-cli 0.145.0"
+_CODEX_VERSION = f"codex-cli {CODEX_CLI_VERSION}"
 type SandboxCompiler = Callable[[AgentRequest], SandboxLaunchSpec]
 type CodexVersion = Callable[[Path], str]
 type CodexLauncher = Callable[[CodexLaunchSpec], Awaitable[CodexLaunchOutcome]]

@@ -17,7 +17,7 @@ def _dependencies() -> MacOSSandboxDependencies:
     return MacOSSandboxDependencies(
         platform="darwin",
         codex_executable=Path("/opt/homebrew/bin/codex"),
-        codex_version=lambda: "codex-cli 0.145.0",
+        codex_version=lambda: "codex-cli 0.154.0",
         sandbox_is_apple=lambda: True,
         developer_root=lambda: Path("/Library/Developer/CommandLineTools"),
     )

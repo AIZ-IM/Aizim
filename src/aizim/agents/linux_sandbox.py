@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from aizim.config import CODEX_CLI_VERSION
+
 from .linux_profile import compile_linux_profile, validate_linux_profile
 from .macos_sandbox import SandboxHostError
 from .permission_profile import normalize_sandbox_request
@@ -22,7 +24,7 @@ from .sandbox import (
     validate_launch_spec,
 )
 
-_CODEX_VERSION: Final = "codex-cli 0.145.0"
+_CODEX_VERSION: Final = f"codex-cli {CODEX_CLI_VERSION}"
 
 
 @dataclass(frozen=True, slots=True)

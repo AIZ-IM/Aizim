@@ -152,7 +152,7 @@ test("documents external agent ownership, compatibility, and upgrade recovery", 
 
   for (const document of [readme, npmReadme, distribution]) {
     assert.match(document, /does not install Codex or Claude/u);
-    assert.match(document, /Codex CLI 0\.145\.0/u);
+    assert.match(document, /Codex CLI 0\.154\.0/u);
     assert.match(document, /Claude Code 2\.1\.218/u);
   }
   const operations = `${distribution}\n${foundation}`;

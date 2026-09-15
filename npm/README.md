@@ -18,12 +18,12 @@ The first command invocation downloads the locked CPython 3.14.6 runtime and
 hash-verified Python dependencies through the bundled uv 0.11.31 binary.
 Subsequent invocations reuse the versioned local runtime cache.
 
-Install the user-owned agent CLIs independently. Codex CLI 0.145.0 is always
+Install the user-owned agent CLIs independently. Codex CLI 0.154.0 is always
 required for Worker and sandbox readiness. Claude Code 2.1.218 is required
 only when `claude` is the selected Controller.
 
 ```sh
-npm install --global @openai/codex@0.145.0
+npm install --global @openai/codex@0.154.0
 npm install --global --allow-scripts=@anthropic-ai/claude-code \
   @anthropic-ai/claude-code@2.1.218
 ```
@@ -43,7 +43,7 @@ aizim init /absolute/lean/project
 aizim controller configure \
   --project /absolute/lean/project \
   --provider codex \
-  --model gpt-5.6-sol
+  --model gpt-6-astra
 aizim worker register \
   --project /absolute/lean/project \
   --worker-id proof-a \
@@ -52,7 +52,7 @@ aizim worker assign \
   --project /absolute/lean/project \
   --worker-id proof-a \
   --task "prove the current Lean target"
-AIZIM_MODEL=gpt-5.6-sol aizim controller start \
+AIZIM_MODEL=gpt-6-astra aizim controller start \
   --project /absolute/lean/project \
   --foreground
 ```

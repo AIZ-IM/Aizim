@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from aizim.config import CODEX_CLI_VERSION
+
 from .macos_profile import compile_macos_profile, validate_macos_profile
 from .permission_profile import canonical_directory, normalize_sandbox_request
 from .probe_execution import execute_probe
@@ -20,7 +22,7 @@ from .sandbox import (
     validate_launch_spec,
 )
 
-_CODEX_VERSION: Final = "codex-cli 0.145.0"
+_CODEX_VERSION: Final = f"codex-cli {CODEX_CLI_VERSION}"
 _SANDBOX_EXECUTABLE: Final = Path("/usr/bin/sandbox-exec")
 class SandboxHostError(RuntimeError):
     pass

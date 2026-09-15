@@ -17,7 +17,7 @@ The distribution supports:
 Consumers need Node.js 22.22.2 or newer, `rg`, and an external Lean toolchain managed by `elan`.
 The npm package supplies uv 0.11.31 and a managed CPython 3.14.6 runtime.
 It does not install Codex or Claude.
-Codex CLI 0.145.0 is always required for Worker and sandbox readiness. Claude Code 2.1.218 is
+Codex CLI 0.154.0 is always required for Worker and sandbox readiness. Claude Code 2.1.218 is
 required only when `claude` is the selected Controller. musl Linux and Windows are unsupported.
 Intel macOS is unsupported; macOS packages target Apple silicon only.
 Linux hosts must permit unprivileged user namespaces for the supported external Codex
@@ -49,7 +49,7 @@ package never removes a Lean project or the runtime cache.
 Install the exact supported Codex independently. Install Claude only for a Claude Controller:
 
 ```sh
-npm install --global @openai/codex@0.145.0
+npm install --global @openai/codex@0.154.0
 npm install --global --allow-scripts=@anthropic-ai/claude-code \
   @anthropic-ai/claude-code@2.1.218
 ```
@@ -67,10 +67,17 @@ SHA-256. It revalidates all three before every provider launch. This detects rep
 the operation, but it does not attest user-owned provider provenance. Users and their package
 manager remain responsible for that provenance.
 
-Version compatibility is exact: `codex --version` must print `codex-cli 0.145.0`, and
+Version compatibility is exact: `codex --version` must print `codex-cli 0.154.0`, and
 `claude --version` must print `2.1.218 (Claude Code)`. A rejection reports
 `observed=...; supported=...` and names the matching override. Install a supported side-by-side
 CLI and set that override to its absolute path instead of downgrading an unrelated default CLI.
+
+When upgrading a project initialized with Codex CLI 0.145.0, stop its Controller before editing
+the `[foundation]` section of `.aizim/config.toml` to set `codex_cli_version = "0.154.0"`.
+Then select `gpt-6-astra` through `controller configure --provider codex --model gpt-6-astra`
+and `AIZIM_MODEL=gpt-6-astra` for Workers. Run `doctor` and the no-model `security-probe` again
+before autonomous execution with the upgraded CLI. Keep existing state and historical run
+artifacts intact; they record the version used for those runs.
 
 Upgrading from a release that bundled agent packages preserves project state and credentials.
 The new package removes its old dependency edges and does not use the old nested agent packages.
@@ -152,7 +159,7 @@ aizim init /absolute/lean/project
 aizim controller configure \
   --project /absolute/lean/project \
   --provider codex \
-  --model gpt-5.6-sol
+  --model gpt-6-astra
 aizim worker register \
   --project /absolute/lean/project \
   --worker-id proof-a \
@@ -161,7 +168,7 @@ aizim worker assign \
   --project /absolute/lean/project \
   --worker-id proof-a \
   --task "prove the current Lean target"
-AIZIM_MODEL=gpt-5.6-sol aizim controller start \
+AIZIM_MODEL=gpt-6-astra aizim controller start \
   --project /absolute/lean/project \
   --foreground
 ```

@@ -14,7 +14,7 @@ def test_linux_sandbox_passes_only_after_host_validation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    codex = executable(tmp_path / "codex", "codex-cli 0.145.0")
+    codex = executable(tmp_path / "codex", "codex-cli 0.154.0")
     validated: list[Path] = []
 
     def validate_host(adapter: LinuxSandboxAdapter) -> Path:
@@ -41,7 +41,7 @@ def test_linux_sandbox_fails_closed_when_host_validation_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    codex = executable(tmp_path / "codex", "codex-cli 0.145.0")
+    codex = executable(tmp_path / "codex", "codex-cli 0.154.0")
 
     def fail_host(_adapter: LinuxSandboxAdapter) -> Path:
         raise OSError("bwrap unavailable")

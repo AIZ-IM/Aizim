@@ -16,7 +16,7 @@ from aizim.runtime.distribution import (
 )
 
 
-def _executable(path: Path, version: str = "codex-cli 0.145.0") -> Path:
+def _executable(path: Path, version: str = "codex-cli 0.154.0") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"#!/bin/sh\nprintf '%s\\n' '{version}'\n")
     path.chmod(0o755)

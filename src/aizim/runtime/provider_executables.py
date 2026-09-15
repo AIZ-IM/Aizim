@@ -11,9 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from aizim.config import CODEX_CLI_VERSION
 from aizim.domain import sha256_file
 
-CODEX_VERSIONS: Final = frozenset({"codex-cli 0.145.0"})
+CODEX_VERSIONS: Final = frozenset({f"codex-cli {CODEX_CLI_VERSION}"})
 CLAUDE_VERSIONS: Final = frozenset({"2.1.218 (Claude Code)"})
 _VERSION_ENVIRONMENT: Final = frozenset({"HOME", "LANG", "LC_ALL", "PATH", "TMPDIR"})
 

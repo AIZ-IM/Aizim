@@ -114,7 +114,7 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
 
             assert report.passed
             assert report.platform_id == "linux"
-            assert report.codex_version == "codex-cli 0.145.0"
+            assert report.codex_version == "codex-cli 0.154.0"
             assert report.sandbox_executable.endswith("/codex-resources/bwrap")
             assert tuple(attempt.operation for attempt in report.attempts) == tuple(
                 ProbeOperation

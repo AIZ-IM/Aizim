@@ -51,7 +51,7 @@ def executable(tmp_path: Path, provider: ControllerProviderId = CODEX) -> Path:
     root.mkdir(exist_ok=True)
     path = root / provider.value
     version = {
-        CODEX: "codex-cli 0.145.0",
+        CODEX: "codex-cli 0.154.0",
         CLAUDE: "2.1.218 (Claude Code)",
     }[provider]
     path.write_text(
@@ -71,7 +71,7 @@ def executable(tmp_path: Path, provider: ControllerProviderId = CODEX) -> Path:
 
 def descriptor(path: Path, provider: ControllerProviderId) -> ResolvedExecutable:
     canonical = path.resolve()
-    version = "codex-cli 0.145.0" if provider == CODEX else "2.1.218 (Claude Code)"
+    version = "codex-cli 0.154.0" if provider == CODEX else "2.1.218 (Claude Code)"
     return ResolvedExecutable(
         canonical,
         version,
@@ -131,7 +131,7 @@ async def test_backend_constructor_discovers_version_inside_running_loop(
 
     backend = CodexControllerBackend(descriptor(binary, CODEX), None, project, {})
 
-    assert backend.identity.version == "codex-cli 0.145.0"
+    assert backend.identity.version == "codex-cli 0.154.0"
 
 
 @pytest.mark.parametrize("provider", (CODEX, CLAUDE))
