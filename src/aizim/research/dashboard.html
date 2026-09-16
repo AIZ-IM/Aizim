@@ -1,48 +1,113 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aizim Research</title><style>
-:root{font:15px/1.6 system-ui,sans-serif;color:#192a38;background:#f4f6f7}body{max-width:1200px;margin:auto;padding:32px}
-header{display:flex;justify-content:space-between;align-items:center}h1{font-size:32px;letter-spacing:-1px;margin:0}
-h2{font-size:20px;margin-top:30px}.muted{color:#617181}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
-.card{background:white;border:1px solid #dbe2e7;border-radius:12px;padding:20px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7f9;padding:12px;border-radius:6px}
-.tag{display:inline-block;padding:3px 9px;border-radius:16px;background:#eef2f5;font-size:12px;margin-right:8px}.verified{background:#ddf5e5;color:#17633b}.blocked{background:#fff0d5;color:#885c12}
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aizim Research</title>
+<style>
+:root{font:15px/1.6 system-ui,sans-serif;color:#192a38;background:#f4f6f7}
+body{max-width:1200px;margin:auto;padding:32px}header{display:flex;justify-content:space-between;gap:20px;align-items:center}
+h1{font-size:32px;letter-spacing:-1px;margin:0}h2{font-size:21px;margin-top:30px}h3{font-size:16px;margin:18px 0 8px}
+.muted{color:#617181}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.card{background:white;border:1px solid #dbe2e7;border-radius:12px;padding:20px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7f9;padding:12px;border-radius:6px}
+.tag{display:inline-block;padding:3px 9px;border-radius:16px;background:#eef2f5;font-size:12px;margin:0 8px 6px 0}
+.verified{background:#ddf5e5;color:#17633b}.blocked,.paused{background:#fff0d5;color:#885c12}
 table{width:100%;border-collapse:collapse;background:white}th,td{text-align:left;padding:10px;border-bottom:1px solid #e0e6eb;vertical-align:top}
-details{margin-top:10px}summary{cursor:pointer}p{overflow-wrap:anywhere}.note{border-left:3px solid #487590;padding-left:15px}.row{display:flex;flex-wrap:wrap;gap:10px}
-select,input{padding:8px;border:1px solid #bbc8d1;border-radius:6px;background:white}.empty{color:#617181;font-style:italic}
-svg{width:100%;min-height:100px;background:white;border-radius:12px}footer{margin:30px 0;color:#617181;font-size:12px}
-</style></head><body>
-<header><div><div class="muted">AIZIM · RESEARCH RECORD</div><h1 id="project">Research</h1></div><span id="refresh" class="muted"></span></header>
+details{margin-top:10px}summary{cursor:pointer}p{overflow-wrap:anywhere}.note{border-left:3px solid #487590;padding-left:15px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}select,input,button{font:inherit;padding:8px 12px;border:1px solid #bbc8d1;border-radius:6px;background:white}
+button{cursor:pointer;color:#255976}button:hover{background:#edf5fa}button:focus-visible,a:focus-visible{outline:3px solid #407c9e;outline-offset:3px}
+.empty{color:#617181;font-style:italic}svg{width:100%;min-height:100px;background:white;border-radius:12px}
+footer{margin:30px 0;color:#617181;font-size:12px;overflow-wrap:anywhere}.section{margin-top:20px}.records{display:grid;gap:10px}.record{border-left:2px solid #dbe2e7;padding:4px 14px}
+#dossier{scroll-margin-top:20px}#dossier .statement{font-size:16px}.metrics .card{padding:14px 20px}.metric{font-size:25px;font-weight:650;display:block}
+.table-wrap{overflow-x:auto}a{color:#255976}ul{padding-left:22px}.off{display:none}
+@media(max-width:640px){body{padding:16px}header{display:block}.grid{grid-template-columns:minmax(0,1fr)}label,select,input{max-width:100%;box-sizing:border-box}.card{min-width:0;overflow-wrap:anywhere}}
+</style>
+</head>
+<body>
+<header><div><div class="muted">AIZIM · RESEARCH RECORD</div><h1 id="project">Research</h1></div><span id="refresh" class="muted" role="status"></span></header>
 <p class="note">Lean checks formal validity. Human reviews record meaning, research value, library quality, and exposition separately.</p>
-<div class="row"><label>Filter targets <input id="query" placeholder="Title or statement"></label><label>Status <select id="status"><option value="">All</option><option>pending</option><option>running</option><option>verified</option><option>blocked</option></select></label></div>
-<h2>Targets and dependencies</h2><div id="tasks" class="grid"></div><h2>Dependency graph</h2><div id="graph"></div>
+<div id="metrics" class="grid metrics"></div>
+<h2>Targets and dependencies</h2>
+<div class="row"><label>Filter targets <input id="query" placeholder="Title or statement"></label><label>Status <select id="status"><option value="">All</option><option>pending</option><option>running</option><option>verified</option><option>blocked</option><option>paused</option></select></label></div>
+<div id="tasks" class="grid section"></div>
+<h2>Research notebook</h2>
+<div class="row"><label>Read a target <select id="target-picker"><option value="">Choose a target</option></select></label></div>
+<div id="dossier" class="section" aria-live="polite"></div>
+<h2>Dependency graph</h2><div id="graph"></div>
 <h2>Human contributions and reviews</h2><div id="humans" class="grid"></div>
 <h2>Operator inbox</h2><div id="inbox" class="grid"></div>
 <h2>Research memory</h2><div id="memory" class="grid"></div>
-<h2>Measured usage</h2><div id="usage"></div><p id="usage-note" class="muted"></p>
-<h2>Attempts</h2><div id="attempts"></div>
-<footer id="footer"></footer><script>
-const initial=__SNAPSHOT__;let state=initial;
-const el=(tag,text,cls)=>{let n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n};
-const clear=id=>{let n=document.getElementById(id);n.replaceChildren();return n};
-function cards(id,entries){let root=clear(id);if(!entries.length)root.append(el('p','No records yet.','empty'));for(const e of entries){let c=el('article',undefined,'card');c.append(el('span',e.role||e.kind||e.status,'tag'),el('strong',e.author||e.worker_id||e.id),el('p',e.body||e.feedback||''));if(e.task_id)c.append(el('small','Target: '+e.task_id));if(e.verdict)c.append(el('p','Review: '+e.verdict));if(e.created_at)c.append(el('p','Recorded: '+e.created_at,'muted'));if(e.consumed_by)c.append(el('small',' · Read in '+e.consumed_by.length+' rounds'));root.append(c)}}
-function table(id,rows,keys){let root=clear(id),t=el('table'),h=el('tr');for(let k of keys)h.append(el('th',k.replaceAll('_',' ')));t.append(h);for(let row of rows){let r=el('tr');for(let k of keys)r.append(el('td',row[k]===null||row[k]===undefined?'Unknown':String(row[k])));t.append(r)}root.append(t)}
-function render(){if(!state)return;let r=state.records;document.getElementById('project').textContent=state.project;document.getElementById('refresh').textContent=state.generated_at;
- let root=clear('tasks'),q=document.getElementById('query').value.toLowerCase(),s=document.getElementById('status').value;
- for(let task of r.task.filter(t=>(!s||t.status===s)&&JSON.stringify(t).toLowerCase().includes(q))){let c=el('article',undefined,'card');c.id='target-'+task.task_id;c.append(el('span',task.paused?'paused':task.status,'tag '+task.status),el('strong',task.title),el('pre',task.statement),el('p','Proposed by '+task.author),el('small','Round '+task.rounds+'/'+task.max_rounds+' · Dependencies: '+(task.depends_on.join(', ')||'none')));let d=el('details');d.append(el('summary','Evidence and feedback'),el('pre',JSON.stringify({target_hash:task.target_hash,verified_declarations:task.verified_declarations,source_refs:task.source_refs,feedback:task.feedback},null,2)));c.append(d);root.append(c)}
- cards('humans',[...r.contribution,...r.review]);cards('inbox',r.inbox);cards('memory',r.memory);
- table('usage',state.usage,['model','input_tokens','cached_input_tokens','output_tokens','unknown_stages','known_usage_usd','estimated_usd']);document.getElementById('usage-note').textContent=state.usage_scope+' Prices are operator-supplied estimates, not a bill.';
- table('attempts',r.attempt,['task_id','round','status','feedback']);document.getElementById('footer').textContent='Local private record · Identity: '+state.identity_assurance+' · Record hash: '+state.content_hash;
- const ns='http://www.w3.org/2000/svg',g=clear('graph'),svg=document.createElementNS(ns,'svg');
- const nodes=r.task,byId=new Map(nodes.map(t=>[t.task_id,t])),levels=new Map(),rows=new Map(),positions=new Map();
- function level(id,seen=new Set()){if(levels.has(id))return levels.get(id);if(seen.has(id))return 0;seen.add(id);const t=byId.get(id);const deps=(t?.depends_on||[]).filter(d=>byId.has(d));const value=deps.length?1+Math.max(...deps.map(d=>level(d,new Set(seen)))):0;levels.set(id,value);return value}
+<h2>Measured usage</h2><div id="usage" class="table-wrap"></div><p id="usage-note" class="muted"></p>
+<h2>Attempts</h2><div id="attempts" class="table-wrap"></div>
+<footer id="footer"></footer>
+<script>
+const initial=__SNAPSHOT__;
+let state=initial, selected=new URLSearchParams(location.hash.slice(1)).get('target')||'', timer;
+const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n};
+const clear=id=>{const n=document.getElementById(id);n.replaceChildren();return n};
+const statusOf=t=>t.paused?'paused':t.status;
+const sameIds=(a=[],b=[])=>{const right=[...b].sort();return a.length===b.length&&[...a].sort().every((id,i)=>id===right[i])};
+const currentReview=(review,task)=>review.target_hash===task.target_hash&&sameIds(review.verified_declarations,task.verified_declarations);
+function latestReview(task,kind){return state.records.review.filter(r=>r.task_id===task.task_id&&r.kind===kind&&currentReview(r,task)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))[0]}
+function selectTarget(id,scroll=true){selected=id;history.replaceState(null,'','#'+new URLSearchParams({target:id}));renderNotebook();document.getElementById('target-picker').value=id;if(scroll)document.getElementById('dossier').scrollIntoView({behavior:'smooth'})}
+function targetLink(id){const button=el('button',id);button.type='button';button.addEventListener('click',()=>selectTarget(id));return button}
+function record(entry,task){
+ const box=el('article',undefined,'record');box.append(el('span',entry.role||entry.kind||entry.status,'tag'),el('strong',entry.author||entry.worker_id||entry.id),el('p',entry.body||entry.feedback||''));
+ if(entry.verdict){box.append(el('p','Review: '+entry.verdict));if(task)box.append(el('small',currentReview(entry,task)?'Applies to the current target and evidence':'Recorded against earlier target or evidence','muted'))}
+ if(entry.created_at)box.append(el('p','Recorded: '+entry.created_at,'muted'));
+ if(entry.consumed_by)box.append(el('small','Read in '+entry.consumed_by.length+' rounds'));
+ return box;
+}
+function cards(id,entries){const root=clear(id);if(!entries.length)root.append(el('p','No records yet.','empty'));for(const entry of entries){const task=state.records.task.find(t=>t.task_id===entry.task_id),card=record(entry,task);card.classList.add('card');if(task)card.append(targetLink(task.task_id));root.append(card)}}
+function table(id,rows,keys){const root=clear(id);if(!rows.length){root.append(el('p','No records yet.','empty'));return}const t=el('table'),head=el('thead'),header=el('tr'),body=el('tbody');for(const key of keys)header.append(el('th',key.replaceAll('_',' ')));head.append(header);t.append(head);for(const row of rows){const tr=el('tr');for(const key of keys)tr.append(el('td',row[key]===null||row[key]===undefined?'Unknown':String(row[key])));body.append(tr)}t.append(body);root.append(t)}
+function section(parent,title,entries,task){const part=el('section');part.append(el('h3',title));if(entries.length){const list=el('div',undefined,'records');for(const item of entries)list.append(record(item,task));part.append(list)}else part.append(el('p','No records yet.','empty'));parent.append(part)}
+function references(parent,refs){const list=el('ul');for(const ref of refs){const item=el('li');try{const url=new URL(ref);if(!['https:','http:'].includes(url.protocol))throw Error();const a=el('a',ref);a.href=url.href;a.rel='noopener noreferrer';a.target='_blank';item.append(a)}catch{item.textContent=ref}list.append(item)}parent.append(list)}
+function renderNotebook(){
+ const root=clear('dossier'),r=state?.records,task=r?.task.find(t=>t.task_id===selected);
+ if(!task){root.append(el('p','Choose a target to read its statement, strategy, explanation, and reviews together.','empty'));return}
+ const card=el('article',undefined,'card');card.append(el('h2',task.title),el('span','Execution: '+statusOf(task),'tag '+statusOf(task)));
+ const semantic=latestReview(task,'semantic_alignment');card.append(el('span','Semantic review: '+(semantic?.verdict||'not recorded'),'tag'));
+ card.append(el('h3','Question'),el('pre',task.statement,'statement'),el('p','Formulated by '+task.author),el('p','Imports: '+task.imports.join(', '),'muted'));
+ if(task.depends_on.length){const deps=el('div',undefined,'row');deps.append(el('span','Depends on:'));for(const id of task.depends_on)deps.append(targetLink(id));card.append(deps)}
+ if(task.source_refs.length){card.append(el('h3','Sources'));references(card,task.source_refs)}
+ const contributions=r.contribution.filter(c=>c.task_id===selected);
+ section(card,'Definitions and problem formulation',contributions.filter(c=>['problem_formulation','definitions'].includes(c.role)),task);
+ section(card,'Proof strategy and counterexamples',[...contributions.filter(c=>['strategy','counterexample'].includes(c.role)),...r.memory.filter(m=>m.task_id===selected&&['strategy','counterexample','dead_end'].includes(m.kind))],task);
+ section(card,'Explanation',contributions.filter(c=>c.role==='exposition'),task);
+ section(card,'Formalization, library design, and sources',contributions.filter(c=>['formalization','library_design','source_material','semantic_review'].includes(c.role)),task);
+ section(card,'Reviews',r.review.filter(e=>e.task_id===selected),task);
+ section(card,'Guidance',r.inbox.filter(e=>e.task_id===selected),task);
+ const evidence=el('details');evidence.append(el('summary','Formal evidence and target identity'),el('pre',JSON.stringify({target_hash:task.target_hash,verified_declarations:task.verified_declarations,evidence:state.formal_evidence.filter(e=>task.verified_declarations.includes((e.payload||e).declaration_id)),feedback:task.feedback},null,2)));card.append(evidence);root.append(card);
+}
+function renderGraph(){
+ const ns='http://www.w3.org/2000/svg',root=clear('graph'),svg=document.createElementNS(ns,'svg'),nodes=state.records.task;
+ const byId=new Map(nodes.map(t=>[t.task_id,t])),levels=new Map(),rows=new Map(),positions=new Map();
+ function level(id,seen=new Set()){if(levels.has(id))return levels.get(id);if(seen.has(id))return 0;seen.add(id);const deps=(byId.get(id)?.depends_on||[]).filter(d=>byId.has(d));const value=deps.length?1+Math.max(...deps.map(d=>level(d,new Set(seen)))):0;levels.set(id,value);return value}
  function shape(tag,attrs){const n=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,String(v));return n}
- for(const t of nodes){const depth=level(t.task_id),row=rows.get(depth)||0;rows.set(depth,row+1);positions.set(t.task_id,[30+depth*350,25+row*85])}
+ for(const task of nodes){const depth=level(task.task_id),row=rows.get(depth)||0;rows.set(depth,row+1);positions.set(task.task_id,[30+depth*350,25+row*85])}
  const width=Math.max(720,(Math.max(0,...levels.values())+1)*350+30),height=Math.max(100,...[...rows.values()].map(n=>n*85+20));svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
  const defs=shape('defs',{}),marker=shape('marker',{id:'arrow',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:6,markerHeight:6,orient:'auto-start-reverse'});marker.append(shape('path',{d:'M 0 0 L 10 5 L 0 10 z',fill:'#7593a6'}));defs.append(marker);svg.append(defs);
- for(const t of nodes){const[x,y]=positions.get(t.task_id);for(const dep of t.depends_on){const p=positions.get(dep);if(p)svg.append(shape('line',{x1:p[0]+290,y1:p[1]+25,x2:x-5,y2:y+25,stroke:'#7593a6','stroke-width':2,'marker-end':'url(#arrow)'}))}}
- for(const t of nodes){const[x,y]=positions.get(t.task_id),group=shape('g',{tabindex:0,role:'button','aria-label':t.task_id});group.style.cursor='pointer';group.append(shape('rect',{x,y,width:290,height:50,rx:8,fill:t.status==='verified'?'#ddf5e5':'#f2f5f7',stroke:'#ccd8df'}));const label=shape('text',{x:x+12,y:y+31,'font-size':14});label.textContent=(t.task_id.length>24?t.task_id.slice(0,22)+'…':t.task_id)+' · '+t.status;group.append(label);const select=()=>{document.getElementById('query').value='';document.getElementById('status').value='';render();document.getElementById('target-'+t.task_id)?.scrollIntoView({behavior:'smooth'})};group.addEventListener('click',select);group.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')select()});svg.append(group)}g.append(svg);
+ for(const task of nodes){const[x,y]=positions.get(task.task_id);for(const dep of task.depends_on){const p=positions.get(dep);if(p)svg.append(shape('line',{x1:p[0]+290,y1:p[1]+25,x2:x-5,y2:y+25,stroke:'#7593a6','stroke-width':2,'marker-end':'url(#arrow)'}))}}
+ for(const task of nodes){const[x,y]=positions.get(task.task_id),group=shape('g',{tabindex:0,role:'button','aria-label':task.task_id});group.style.cursor='pointer';group.append(shape('rect',{x,y,width:290,height:50,rx:8,fill:task.status==='verified'?'#ddf5e5':'#f2f5f7',stroke:'#ccd8df'}));const label=shape('text',{x:x+12,y:y+31,'font-size':14});label.textContent=(task.task_id.length>24?task.task_id.slice(0,22)+'…':task.task_id)+' · '+statusOf(task);group.append(label);group.addEventListener('click',()=>selectTarget(task.task_id));group.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();selectTarget(task.task_id)}});svg.append(group)}root.append(svg);
 }
+function render(){
+ if(!state)return;const r=state.records;document.getElementById('project').textContent=state.project;document.getElementById('refresh').textContent=state.generated_at;
+ const metrics=clear('metrics');for(const[label,value]of [['Targets',r.task.length],['Lean verified',r.task.filter(t=>t.status==='verified').length],['Current semantic accept reviews',r.task.filter(t=>latestReview(t,'semantic_alignment')?.verdict==='accept').length]]){const card=el('div',undefined,'card');card.append(el('span',value,'metric'),el('span',label,'muted'));metrics.append(card)}
+ const root=clear('tasks'),query=document.getElementById('query').value.toLowerCase(),status=document.getElementById('status').value;
+ const visible=r.task.filter(t=>(!status||statusOf(t)===status)&&[t.task_id,t.title,t.statement].join(' ').toLowerCase().includes(query));
+ if(!visible.length)root.append(el('p','No targets match this filter.','empty'));
+ for(const task of visible){const card=el('article',undefined,'card');card.id='target-'+task.task_id;card.append(el('span',statusOf(task),'tag '+statusOf(task)),el('strong',task.title),el('pre',task.statement),el('p','Proposed by '+task.author),el('small','Round '+task.rounds+'/'+task.max_rounds+' · Dependencies: '+(task.depends_on.join(', ')||'none')));const button=el('button','Read research record');button.type='button';button.addEventListener('click',()=>selectTarget(task.task_id));const actions=el('p');actions.append(button);card.append(actions);root.append(card)}
+ const picker=clear('target-picker');picker.append(el('option','Choose a target'));picker.firstChild.value='';for(const task of r.task){const option=el('option',task.title+' · '+task.task_id);option.value=task.task_id;picker.append(option)}picker.value=selected;
+ renderNotebook();renderGraph();cards('humans',[...r.contribution,...r.review]);cards('inbox',r.inbox);cards('memory',r.memory);
+ table('usage',state.usage,['model','input_tokens','cached_input_tokens','output_tokens','unknown_stages','known_usage_usd','estimated_usd']);document.getElementById('usage-note').textContent=state.usage_scope+' Prices are operator-supplied estimates, not a bill.';
+ table('attempts',r.attempt,['task_id','round','status','feedback']);document.getElementById('footer').textContent='Local private record · Identity: '+state.identity_assurance+' · Record hash: '+state.content_hash;
+}
+// Preserve open evidence sections while a live snapshot with unchanged content is refreshed.
+async function refresh(){try{const res=await fetch('/api/snapshot',{cache:'no-store'});if(!res.ok)throw Error('State temporarily unavailable');const next=await res.json(),changed=state?.content_hash!==next.content_hash;state=next;if(changed)render();else document.getElementById('refresh').textContent=state.generated_at}catch(error){document.getElementById('refresh').textContent=String(error)}finally{timer=setTimeout(refresh,document.hidden?10000:3000)}}
 document.getElementById('query').addEventListener('input',render);document.getElementById('status').addEventListener('change',render);
-async function refresh(){try{let res=await fetch('/api/snapshot',{cache:'no-store'});if(!res.ok)throw Error('State temporarily unavailable');state=await res.json();render()}catch(e){document.getElementById('refresh').textContent=String(e)}}
-if(initial){render()}else{refresh();setInterval(refresh,3000)}
-</script></body></html>
+document.getElementById('target-picker').addEventListener('change',event=>selectTarget(event.target.value,false));
+window.addEventListener('hashchange',()=>{selected=new URLSearchParams(location.hash.slice(1)).get('target')||'';if(state){renderNotebook();document.getElementById('target-picker').value=selected}});
+if(initial)render();else refresh();
+</script>
+</body>
+</html>

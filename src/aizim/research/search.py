@@ -3,54 +3,89 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections import Counter
+from collections import Counter, OrderedDict, defaultdict
 from pathlib import Path
+from threading import RLock
 
 from aizim.domain.serialization import JsonValue
-from aizim.lean.source_layout import source_files
 
+from .compiled_index import compiled_index
+from .declaration_index import DeclarationIndex, source_index
 from .records import ResearchError, ResearchStore, records, text
 
 _WORDS = re.compile(r"[\w]+", re.UNICODE)
-_DECLARATION = re.compile(
-    r"(?m)^\s*(?:noncomputable\s+)?(theorem|lemma|def|abbrev|structure|class)\s+([^\s(:{\[]+)([^\n]*)"
-)
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+_CORPORA: OrderedDict[str, SearchCorpus] = OrderedDict()
+_LOCK = RLock()
 
 
 def tokens(value: str) -> list[str]:
-    return [word.casefold() for word in _WORDS.findall(value)]
+    result = []
+    for word in _WORDS.findall(value):
+        result.append(word.casefold())
+        parts = _CAMEL.sub(" ", word).replace("_", " ").split()
+        if len(parts) > 1:
+            result.extend(part.casefold() for part in parts)
+    return result
+
+
+class SearchCorpus:
+    """Compute document frequencies once, then score only matching postings."""
+
+    def __init__(self, documents: list[dict[str, JsonValue]]) -> None:
+        self.documents = documents
+        self.lengths: list[int] = []
+        self.postings: dict[str, list[tuple[int, int]]] = defaultdict(list)
+        for index, document in enumerate(documents):
+            if "signature" in document:
+                words = (
+                    tokens(str(document.get("full_name", document.get("name", "")))) * 3
+                    + tokens(str(document.get("signature", "")))
+                    + tokens(str(document.get("docstring", ""))) * 2
+                )
+            else:
+                words = tokens(json.dumps(document, ensure_ascii=False))
+            self.lengths.append(len(words))
+            for term, count in Counter(words).items():
+                self.postings[term].append((index, count))
+        self.average = sum(self.lengths) / len(documents) if documents else 1.0
+
+    def search(self, query: str, limit: int) -> list[dict[str, JsonValue]]:
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ResearchError("INVALID_SEARCH_LIMIT")
+        scores: dict[int, float] = defaultdict(float)
+        for term in sorted(set(tokens(query))):
+            postings = self.postings.get(term, [])
+            frequency = len(postings)
+            inverse = math.log(1 + (len(self.documents) - frequency + 0.5) / (frequency + 0.5))
+            for index, occurrence in postings:
+                scores[index] += (
+                    inverse
+                    * occurrence
+                    * 2.2
+                    / (
+                        occurrence
+                        + 1.2 * (0.25 + 0.75 * self.lengths[index] / (self.average or 1.0))
+                    )
+                )
+        for index in scores:
+            doc = self.documents[index]
+            if query.casefold().strip() in {
+                str(doc.get("name", "")).casefold(),
+                str(doc.get("full_name", "")).casefold(),
+            }:
+                scores[index] += 10.0
+        ranked_scores = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+        return [
+            {**self.documents[index], "score": round(score, 6)}
+            for index, score in ranked_scores[:limit]
+        ]
 
 
 def ranked(
     query: str, documents: list[dict[str, JsonValue]], limit: int
 ) -> list[dict[str, JsonValue]]:
-    if not 1 <= limit <= 100:
-        raise ResearchError("INVALID_SEARCH_LIMIT")
-    terms = tokens(query)
-    if not terms or not documents:
-        return []
-    words = [tokens(json.dumps(document, ensure_ascii=False)) for document in documents]
-    frequencies = [Counter(row) for row in words]
-    average = sum(map(len, words)) / len(words) or 1.0
-    scores: list[tuple[float, int]] = []
-    for index, (document_words, counts) in enumerate(zip(words, frequencies, strict=True)):
-        score = 0.0
-        for term in set(terms):
-            occurrence = counts[term]
-            if not occurrence:
-                continue
-            frequency = sum(term in row for row in frequencies)
-            inverse = math.log(1 + (len(words) - frequency + 0.5) / (frequency + 0.5))
-            score += (
-                inverse
-                * occurrence
-                * 2.2
-                / (occurrence + 1.2 * (0.25 + 0.75 * len(document_words) / average))
-            )
-        if score:
-            scores.append((score, index))
-    scores.sort(key=lambda item: (-item[0], item[1]))
-    return [{**documents[index], "score": round(score, 6)} for score, index in scores[:limit]]
+    return SearchCorpus(documents).search(query, limit)
 
 
 def memory_search(
@@ -61,57 +96,46 @@ def memory_search(
     worker_id: str = "",
     limit: int = 10,
 ) -> list[dict[str, JsonValue]]:
-    documents = []
-    for entry in records(store, "memory"):
-        if entry["task_id"] not in {"", task_id}:
-            continue
-        if entry["worker_id"] not in {"", worker_id}:
-            continue
-        documents.append(entry)
+    documents = [
+        entry
+        for entry in records(store, "memory")
+        if entry["task_id"] in {"", task_id} and entry["worker_id"] in {"", worker_id}
+    ]
     return ranked(query, documents, limit)
 
 
 def declarations(root: Path, *, include_dependencies: bool = False) -> list[dict[str, JsonValue]]:
-    roots = [root.resolve(strict=True)]
-    if include_dependencies:
-        packages = root / ".lake/packages"
-        if packages.is_dir():
-            roots.extend(
-                path.resolve(strict=True)
-                for path in sorted(packages.iterdir())
-                if path.is_dir() and (path / "lean-toolchain").is_file()
+    return source_index(root, include_dependencies=include_dependencies).documents
+
+
+def _index(root: Path, include_dependencies: bool) -> DeclarationIndex:
+    has_compiler = (root / ".aizim/search/compiler-v1.json").is_file()
+    source = source_index(root, include_dependencies=include_dependencies or has_compiler)
+    index = compiled_index(root, source) if has_compiler else None
+    if index is not None:
+        indexed = {
+            (entry["library"], entry["file"], entry["full_name"]) for entry in index.documents
+        }
+        remaining = [
+            entry
+            for entry in source.documents
+            if (entry["library"], entry["file"], entry["full_name"]) not in indexed
+        ]
+        if remaining:
+            index = DeclarationIndex(
+                [*index.documents, *remaining], index.fingerprint, index.files, 0, "mixed"
             )
-    documents: list[dict[str, JsonValue]] = []
-    for project in roots:
-        try:
-            files = source_files(project)
-        except ValueError:
-            continue
-        for relative in files:
-            if relative.suffix != ".lean" or relative.name == "lakefile.lean":
-                continue
-            path = project / relative
-            if path.is_symlink() or not path.is_file() or path.stat().st_size > 4 * 1024 * 1024:
-                continue
-            source = path.read_text(encoding="utf-8")
-            for match in _DECLARATION.finditer(source):
-                tail = source[match.start() : match.start() + 1500]
-                signature = tail.split(":=", 1)[0].strip()
-                prefix = source[max(0, match.start() - 500) : match.start()]
-                docstring = prefix.rsplit("/-", 1)[-1].split("-/", 1)[0] if "/-" in prefix else ""
-                documents.append(
-                    {
-                        "name": match.group(2),
-                        "kind": match.group(1),
-                        "signature": signature,
-                        "docstring": docstring,
-                        "module": relative.with_suffix("").as_posix().replace("/", "."),
-                        "file": relative.as_posix(),
-                        "line": source.count("\n", 0, match.start()) + 1,
-                        "library": project.name,
-                    }
-                )
-    return documents
+    index = index or source
+    if include_dependencies:
+        return index
+    documents = [
+        entry
+        for entry in index.documents
+        if entry.get("project_local", entry["library"] == root.name)
+    ]
+    return DeclarationIndex(
+        documents, index.fingerprint + ":project", index.files, index.parsed_files, index.origin
+    )
 
 
 def lean_search(
@@ -123,17 +147,31 @@ def lean_search(
     include_dependencies: bool = True,
 ) -> list[dict[str, JsonValue]]:
     text(query, limit=4096)
-    if mode not in {"text", "name", "type"} or not 1 <= limit <= 100:
+    if mode not in {"text", "name", "type"} or type(limit) is not int or not 1 <= limit <= 100:
         raise ResearchError("INVALID_SEARCH_MODE")
-    docs = declarations(root, include_dependencies=include_dependencies)
+    root = root.resolve(strict=True)
+    index = _index(root, include_dependencies)
     if mode == "text":
-        return ranked(query, docs, limit)
+        with _LOCK:
+            corpus = _CORPORA.get(index.fingerprint)
+            if corpus is None:
+                corpus = _CORPORA[index.fingerprint] = SearchCorpus(index.documents)
+            _CORPORA.move_to_end(index.fingerprint)
+            while len(_CORPORA) > 4:
+                _CORPORA.popitem(last=False)
+        return corpus.search(query, limit)
     if mode == "name":
-        return [entry for entry in docs if query.casefold() in text(entry["name"]).casefold()][
-            :limit
-        ]
-    # A discoverability aid only; Lean checks every proposed use of a result.
-    pattern = ".*?".join(re.escape(part) for part in re.split(r"\?[A-Za-z_][\w]*|_", query))
-    return [entry for entry in docs if re.search(pattern, text(entry["signature"]), re.DOTALL)][
-        :limit
-    ]
+        return [
+            dict(entry)
+            for entry in index.documents
+            if query.casefold() in str(entry["full_name"]).casefold()
+        ][:limit]
+    # Textual wildcard matching is a discovery aid, not Lean type unification.
+    pattern = ".*?".join(
+        re.escape(part) for part in re.split(r"\?[A-Za-z_][\w]*|(?<!\w)_(?!\w)", query)
+    )
+    return [
+        dict(entry)
+        for entry in index.documents
+        if re.search(pattern, str(entry["signature"]), re.DOTALL)
+    ][:limit]

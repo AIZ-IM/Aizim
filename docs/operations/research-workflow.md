@@ -40,6 +40,60 @@ The original `worker assign` interface remains a one-assignment execution interf
 tasks use `--task 'prove LEAN_STATEMENT'`; free-form tasks are rejected instead of being replaced
 with `True`. Use research targets for dependencies, repair rounds, and durable research context.
 
+## Declaration search and indexing
+
+Search keeps a disposable local index under `.aizim/search/`. Unchanged source files are reused
+across queries and CLI processes. Source edits, additions, removals, and Lake/toolchain control
+changes invalidate the relevant data. Search results include `full_name` and an `origin` field:
+`source` means best-effort source discovery; `compiler` means a type extracted from an already
+built Lean environment. Both are retrieval hints; formal verification still uses promotion.
+
+```sh
+uv run aizim research index --project /absolute/path/to/project
+uv run aizim research search --project /absolute/path/to/project 'add zero'
+uv run aizim research search --project /absolute/path/to/project \
+  'ResearchLab.addition_identity' --mode name --project-only
+```
+
+The text ranker splits snake_case and camelCase names and weights names, types, and docstrings.
+It computes document frequencies once and reuses its in-memory search data. `--mode type` is
+textual wildcard matching (`_` or `?name`), not Lean type unification or semantic vector search.
+Use `research index --rebuild` to reparse source files explicitly.
+
+For fully qualified names and elaborated types, first build the project's chosen modules with
+its existing toolchain, then extract a compiler index:
+
+```sh
+# Build with the project's installed, pinned toolchain.
+lake --dir /absolute/path/to/project build
+uv run aizim research index --project /absolute/path/to/project \
+  --compiled --module ResearchLab --lake /absolute/path/to/toolchain/bin/lake
+```
+
+Repeat `--module` for multiple roots. The extractor imports their compiled dependency closure;
+ordinary source discovery remains available for other project modules. `search --project-only`
+filters out library dependencies. The compiled index supports the pinned Lean 4.32.1 toolchain;
+`--lake` may be omitted when the matching native Lake executable or installed Elan toolchain is
+available. The command checks Lake's existing build traces with `--no-build --no-cache`, and
+rejects stale builds. Importing a compiled project loads its Lean environment extensions, so
+this is an operator command for the same trusted project used by the normal build workflow.
+
+Source and recorded build-artifact changes invalidate the compiled cache. Searches then use
+source discovery until `research index --compiled ...` is run again. The compiler index does
+not publish declarations or turn a source entry into proof evidence.
+
+## Reading a research record
+
+The dashboard and HTML export include a research notebook for each target. Select a target
+or a dependency-graph node to read its formulation, definitions, strategy, counterexamples,
+explanation, guidance, reviews, and formal evidence together. Target selections have shareable
+fragment links within the local page; keyboard navigation and narrow screens are supported.
+
+Execution status and semantic review are shown separately. A review applies to the current
+evidence only when its target hash and declaration IDs match; otherwise its historical record
+is still visible with an earlier-evidence label. An unchanged live refresh preserves open
+evidence sections. This reading interface uses existing records and remains read-only.
+
 ## Verification and recovery
 
 Before real research execution, the no-model security gate must pass. A worker submission is not

@@ -85,6 +85,14 @@ def add_research_parser(commands) -> None:
     search.add_argument("--mode", choices=("text", "name", "type"), default="text")
     search.add_argument("--limit", type=int, default=10)
     search.add_argument("--project-only", action="store_true")
+    index = verbs.add_parser("index", help="Refresh local declaration search data")
+    _common(index)
+    index.add_argument("--compiled", action="store_true", help="Extract built Lean declarations")
+    index.add_argument("--module", action="append", default=[])
+    index.add_argument("--lake", type=Path, help="Installed toolchain's Lake executable")
+    index.add_argument("--timeout-seconds", type=int, default=120)
+    index.add_argument("--rebuild", action="store_true", help="Reparse all source files")
+    index.add_argument("--project-only", action="store_true")
     run = verbs.add_parser("run")
     _common(run)
     run.add_argument("--watch", action="store_true")
@@ -120,6 +128,34 @@ def _run(args: argparse.Namespace) -> int:
     command = args.research_command
     layout = ProjectLayout.from_lean_project(args.project)
     layout.validate_runtime()
+    if command == "index":
+        from aizim.research.compiled_index import build_compiler_index
+        from aizim.research.declaration_index import source_index
+
+        if args.compiled:
+            if args.project_only:
+                raise ResearchError("USE_PROJECT_ONLY_ON_SEARCH_TO_FILTER_COMPILED_RESULTS")
+            _print(
+                build_compiler_index(
+                    layout.root, args.module, lake=args.lake, timeout=args.timeout_seconds
+                )
+            )
+        else:
+            if args.module or args.lake:
+                raise ResearchError("MODULE_AND_LAKE_REQUIRE_COMPILED_INDEX")
+            index = source_index(
+                layout.root, include_dependencies=not args.project_only, rebuild=args.rebuild
+            )
+            _print(
+                {
+                    "origin": index.origin,
+                    "declarations": len(index.documents),
+                    "files": len(index.files),
+                    "parsed_files": index.parsed_files,
+                    "fingerprint": index.fingerprint,
+                }
+            )
+        return 0
     if command == "search":
         _print(
             lean_search(
