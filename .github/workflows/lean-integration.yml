@@ -24,28 +24,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/aizim-private-tmp"
           chmod 700 "$RUNNER_TEMP/aizim-private-tmp"
           echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"
-      - name: Install Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
-          package-manager-cache: false
-      - name: Install latest pinned npm
-        run: |
-          npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1
-          echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"
-          test "$(node --version)" = "v26.5.0"
-          test "$("$RUNNER_TEMP/npm-12/bin/npm" --version)" = "12.0.1"
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: "0.11.31"
+          version: "0.13.7"
           enable-cache: false
-      - name: Install Codex Worker CLI
-        run: |
-          npm install --global @openai/codex@0.154.0
-          test "$(codex --version)" = "codex-cli 0.154.0"
       - name: Install pinned Lean toolchain
-        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9 # v1.5.0
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
         with:
           auto-config: false
           lake-package-directory: examples/smoke_lean
@@ -53,17 +38,19 @@ jobs:
           use-mathlib-cache: false
       - name: Install locked dependencies
         run: uv sync --frozen
-      - name: Test Lean and sandbox surfaces without a model API
+      - name: Test Lean integration without a model API
         run: >-
           uv run pytest
-          -m "macos_sandbox or lean_integration"
-          --ignore=tests/e2e/test_real_codex_smoke.py
+          tests/integration/test_research_lean.py
+          tests/integration/test_research_benchmark_lean.py
+          tests/integration/test_compiled_research_index.py
+          tests/integration/test_shared_lean_runtime.py
+          tests/integration/test_two_worker_shared_run.py
+          tests/integration/test_virtual_attempts.py
+          tests/integration/test_promotion_real.py
+          tests/integration/test_promotion_activation_recovery.py
+          tests/integration/test_lean_runtime_recovery.py
+          tests/integration/test_smoke_project.py
+          tests/unit/test_lean_mcp_contract.py
+          -m lean_integration
           -q
-      - name: Run Gate B without a model
-        run: |
-          cp -R tests/fixtures/attack_probe_project "$RUNNER_TEMP/attack-probe-project"
-          uv run aizim init "$RUNNER_TEMP/attack-probe-project"
-          uv run aizim security-probe \
-            --project "$RUNNER_TEMP/attack-probe-project" \
-            --backend codex \
-            --no-model

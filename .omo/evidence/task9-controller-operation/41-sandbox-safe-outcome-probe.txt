@@ -1,0 +1,24 @@
+........................................................................................................Initialized Aizim state at /private/tmp/aizim-controller-cli-q48thxs6/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-cli-z4vhtnye/lean-project/.aizim
+...................aizim init: initialization failed
+.aizim init: initialization failed
+...............Initialized Aizim state at /private/tmp/aizim-controller-_l796nyw/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-xwb5ghaa/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-g3kz4q6e/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-lhlh9wwg/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-jyy_y44e/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-8tp15q6m/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-q_5jduau/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-xw85kjl5/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-jvdu1ps5/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-dc1m7u6z/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-guards-83yfs39g/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-guards-phgeowte/lean-project/.aizim
+..Initialized Aizim state at /private/tmp/aizim-controller-guards-g6gxixsf/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-guards-3jnj2pdb/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-guards-00f84fkc/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-guards-_4evo0dt/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-guards-pmr5vi58/lean-project/.aizim
+.Initialized Aizim state at /private/tmp/aizim-controller-guards-y9vmleox/lean-project/.aizim
+...........................................s............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+805 passed, 1 skipped, 22 deselected in 65.20s (0:01:05)

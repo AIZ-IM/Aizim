@@ -1,0 +1,25 @@
+final_head=1221ddc0202b1891e1e05279a96921aa1d7713ef
+tracked_diff_clean=true
+diff_check=pass
+status=## main...origin/main [ahead 25] ?? .omo/ 
+build/npm/build-summary.json_sha=1221ddc0202b1891e1e05279a96921aa1d7713ef
+build/npm/test-summary.json_sha=1221ddc0202b1891e1e05279a96921aa1d7713ef
+build/npm/install-smoke-evidence.json_sha=1221ddc0202b1891e1e05279a96921aa1d7713ef
+dist/npm/pack-summary.json_sha=1221ddc0202b1891e1e05279a96921aa1d7713ef
+controller_loop=true
+npm_test_observables:
+805 passed, 1 skipped, 22 deselected in 91.55s (0:01:31)
+CONTROLLER SMOKE PASS
+assignment_executions=1
+restart_duplicates=0
+Checked npm distribution for darwin-arm64
+artifact_sizes:
+00-preflight.txt=249
+01-npm-build.txt=33654
+02-npm-test.txt=10982
+03-npm-check.txt=163
+04-npm-pack.txt=158
+05-source-controller-smoke.txt=67
+06-manual-controller-gate.txt=253
+07-fresh-consumer.txt=245
+08-consumer-cleanup.txt=51

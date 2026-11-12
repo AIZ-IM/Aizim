@@ -10,6 +10,7 @@ from pathlib import Path
 import anyio
 import pytest
 
+from aizim.config.model import ResourcePolicy
 from aizim.domain import AgentRole, canonical_json
 from aizim.domain.serialization import JsonValue
 from aizim.gateway import (
@@ -27,6 +28,7 @@ from aizim.gateway.transport import (
     GatewayTransportError,
     connect_gateway,
 )
+from aizim.orchestration.resources import ResourceGovernor
 
 
 def _socket_path(tmp_path: Path) -> Path:
@@ -43,6 +45,17 @@ async def _write_success(writer: asyncio.StreamWriter, sequence: int) -> None:
     body = canonical_json({"ok": True, "result": {"sequence": sequence}})
     writer.write(len(body).to_bytes(4, "big") + body)
     await writer.drain()
+
+
+async def test_transport_error_propagates_through_proof_slot() -> None:
+    governor = ResourceGovernor(ResourcePolicy(), disk_free=lambda _path: 3_000_000_000)
+    error = GatewayTransportError()
+
+    with pytest.raises(GatewayTransportError) as caught:
+        async with governor.proof_slot():
+            raise error
+
+    assert caught.value is error
 
 
 async def test_transport_close_unblocks_an_inflight_call(tmp_path: Path) -> None:

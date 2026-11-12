@@ -14,15 +14,13 @@ The distribution supports:
 | `linux-arm64` | Linux arm64 with glibc |
 | `linux-x64` | Linux x64 with glibc |
 
-Consumers need Node.js 22.22.2 or newer, `rg`, and an external Lean toolchain managed by `elan`.
-The npm package supplies uv 0.11.31 and a managed CPython 3.14.6 runtime.
-It does not install Codex or Claude.
-Codex CLI 0.154.0 is always required for Worker and sandbox readiness. Claude Code 2.1.218 is
-required only when `claude` is the selected Controller. musl Linux and Windows are unsupported.
-Intel macOS is unsupported; macOS packages target Apple silicon only.
-Linux hosts must permit unprivileged user namespaces for the supported external Codex
-bubblewrap sandbox; on Ubuntu 24.04, grant that permission with an AppArmor profile for the
-installed executable.
+Consumers need Node.js 22.22.2 or newer and `rg`; research additionally requires an external Lean
+4.35.0 toolchain managed by `elan`, omp 18.18.2, and magpie 0.1.3338. The npm package supplies uv
+0.13.7 and a managed CPython 3.15.2 runtime; it does not install or configure omp, magpie, or Lean.
+The external Lean host is currently research-only: it is not bundled and does not participate in
+npm build, pack, installation, or release qualification. musl Linux and Windows are unsupported.
+Intel macOS is unsupported; macOS packages target Apple silicon only. Linux requires `bwrap` and
+unprivileged user namespaces; macOS requires `/usr/bin/sandbox-exec`.
 
 ## Install as a consumer
 
@@ -40,55 +38,28 @@ npm install --save-dev @aiz.im/aizim
 npx --no-install aizim --version
 ```
 
-The first invocation may download and assemble CPython 3.14.6 below the Aizim runtime cache. A
+The first invocation may download and assemble CPython 3.15.2 below the Aizim runtime cache. A
 successful second invocation reuses the same verified `READY.json` record. Uninstalling the npm
 package never removes a Lean project or the runtime cache.
 
-## Install and resolve external agents
+## Configure external research services
 
-Install the exact supported Codex independently. Install Claude only for a Claude Controller:
+Install omp 18.18.2 and magpie 0.1.3338 independently, and configure magpie with a responding
+local gateway and an available model. Model selection, provider accounts, and credentials belong
+to magpie. Aizim does not install these tools, modify their configuration, or copy credentials.
+Run `aizim doctor --project PROJECT` to check readiness, including omp RPC, magpie, the selected
+model, the restricted host-tool transport, and Lean prerequisites. Fix reported failures before
+starting research.
 
-```sh
-npm install --global @openai/codex@0.154.0
-npm install --global --allow-scripts=@anthropic-ai/claude-code \
-  @anthropic-ai/claude-code@2.1.218
-```
-
-Resolution is independent by role and has no autodetection of the Controller provider:
-
-- Codex resolves `AIZIM_CODEX_EXECUTABLE` before `codex` on `PATH`.
-- Claude resolves `AIZIM_CLAUDE_EXECUTABLE` before `claude` on `PATH`.
-- An empty override falls through to `PATH`; a non-empty override must be an absolute executable
-  path and never falls back after an error.
-
-The external executable is outside Aizim's distribution-signing boundary. At each Controller
-start, Aizim establishes trust on first use by recording the canonical path, exact version, and
-SHA-256. It revalidates all three before every provider launch. This detects replacement during
-the operation, but it does not attest user-owned provider provenance. Users and their package
-manager remain responsible for that provenance.
-
-Version compatibility is exact: `codex --version` must print `codex-cli 0.154.0`, and
-`claude --version` must print `2.1.218 (Claude Code)`. A rejection reports
-`observed=...; supported=...` and names the matching override. Install a supported side-by-side
-CLI and set that override to its absolute path instead of downgrading an unrelated default CLI.
-
-When upgrading a project initialized with Codex CLI 0.145.0, stop its Controller before editing
-the `[foundation]` section of `.aizim/config.toml` to set `codex_cli_version = "0.154.0"`.
-Then select `gpt-6-astra` through `controller configure --provider codex --model gpt-6-astra`
-and `AIZIM_MODEL=gpt-6-astra` for Workers. Run `doctor` and the no-model `security-probe` again
-before autonomous execution with the upgraded CLI. Keep existing state and historical run
-artifacts intact; they record the version used for those runs.
-
-Upgrading from a release that bundled agent packages preserves project state and credentials.
-The new package removes its old dependency edges and does not use the old nested agent packages.
-Before starting a Controller after upgrade, expose a supported external Codex and, for a Claude
-Controller, a supported external Claude. Aizim does not delete `~/.codex/`, `~/.claude/`, project
-state, or runtime caches.
+Upgrades preserve existing project state, credentials, and runtime caches. Historical events and
+artifacts retain the execution identities recorded at the time; they are not evidence of a new
+omp/magpie run.
 
 ## Build the current host from source
 
-Use the exact stable versions pinned by `.node-version`, `package.json`, `rust-toolchain.toml`,
-`pyproject.toml`, and `lean-toolchain`.
+Use Node.js 26.13.0 with npm 12.2.2, Rust 1.99.1, Python 3.15.2, and uv 0.13.7, as pinned by
+`.node-version`, `package.json`, `rust-toolchain.toml`, `.python-version`, and `pyproject.toml`.
+The npm source build does not require a Lean host.
 
 ```sh
 npm install --ignore-scripts
@@ -112,7 +83,7 @@ Python-only development remains:
 
 ```sh
 uv sync --frozen
-uv run pytest -m "not manual_real_codex and not manual_real_controller" -q
+uv run pytest -m "not lean_integration and not linux_sandbox and not macos_sandbox" -q
 ```
 
 ## Install freshly packed tarballs
@@ -142,49 +113,35 @@ npm install --global --ignore-scripts --prefix "$AIZIM_NPM_PREFIX" \
 "$AIZIM_NPM_PREFIX/bin/aizim" --version
 ```
 
-Use `node scripts/npm/install-smoke.mjs` for the automated provider-free local/global install,
-version/help, expected role-aware doctor failure, cache reuse, deterministic run, deterministic
-controller-loop, bundled-agent upgrade, missing-platform, and corrupt-integrity scenarios. The
-upgrade path proves project-state and credential-sentinel digests stay byte-identical. The
-controller smoke runs `scripts/qa/controller_smoke.py` with the provisioned runtime's own
-`venv/bin/python`; imports therefore come from the wheel installed in that runtime, not repository
-uv, a repository virtual environment, or global Python.
+Use `node scripts/npm/install-smoke.mjs` for the automated local/global install, version/help,
+expected missing-dependency doctor failure, research task add/list roundtrip, cache reuse,
+bundled-agent upgrade, missing-platform, and corrupt-integrity scenarios. The upgrade path checks
+that project-state and credential-sentinel digests remain byte-identical. These checks do not run
+a model or prove a Lean theorem.
 
-## Operate the foreground controller
+## Run research
 
-The npm and source commands have the same public control surface:
+Initialize a Lean project, check readiness, add a target, and run the bounded supervisor:
 
 ```sh
 aizim init /absolute/lean/project
-aizim controller configure \
-  --project /absolute/lean/project \
-  --provider codex \
-  --model gpt-6-astra
-aizim worker register \
-  --project /absolute/lean/project \
-  --worker-id proof-a \
-  --role proof_explorer
-aizim worker assign \
-  --project /absolute/lean/project \
-  --worker-id proof-a \
-  --task "prove (n : Nat) : n + 0 = n"
-AIZIM_MODEL=gpt-6-astra aizim controller start \
-  --project /absolute/lean/project \
-  --foreground
+aizim doctor --project /absolute/lean/project
+aizim research task add --project /absolute/lean/project \
+  --task-id smoke-true --title 'Prove True' --statement True \
+  --max-rounds 2 --max-failures 1 --timeout-seconds 120
+aizim research run --project /absolute/lean/project --max-seconds 300
+aizim research task list --project /absolute/lean/project --json
 ```
 
-For Claude planning, repeat configuration with `--provider claude --model
-claude-opus-4-6`, then start with the same `AIZIM_MODEL` worker setting. The provider changes only
-the controller backend; workers remain Codex-backed. `controller show` exposes the validated
-runtime state, and `worker list` exposes the current assignment's validated execution state.
-Codex is always required for Worker and sandbox readiness. Claude is required only when `claude`
-is the selected Controller.
+Research execution runs the existing security gate before scheduling and can make model requests
+through magpie. Only trusted Lean publication can verify a target; a completed model response is
+not proof.
 
 ## Stable failure codes
 
 | Exit code | Meaning |
 | --- | --- |
-| 3 | Role readiness failed; inspect `doctor --json` |
+| 3 | Readiness failed; inspect `doctor --json` |
 | 64 | CLI usage error |
 | 69 | Required child service unavailable |
 | 70 | Internal software failure |
@@ -192,18 +149,17 @@ is the selected Controller.
 | 78 | Unsupported host, missing platform package, or invalid configuration |
 
 An Aizim artifact integrity or platform failure is fail-closed. Do not bypass it with a different
-Python or uv. Provider compatibility failures are also fail-closed; use a supported side-by-side
-CLI through the explicit override rather than changing Aizim-owned manifests.
+Python or uv. External service readiness failures also block research until the reported
+prerequisites are repaired.
 
 ## Three-platform evidence
 
 `.github/workflows/ci.yml` builds the exact three targets without restored npm, Cargo, uv, Python,
-or build caches. Every target runs source build, full tests, pack, local/global tarball
-installation with no provider on `PATH`, managed Python preparation, cache reuse, expected
-role-aware doctor failure, deterministic fake execution, deterministic controller restart
-behavior, bundled-agent upgrade preservation, and negative integrity/platform checks. A separate
-Node 22.22.2 job verifies the minimum runtime.
-
+or build caches. Each target runs source build, tests, pack, local/global tarball installation,
+managed Python preparation, cache reuse, a missing-dependency doctor failure, a research task
+roundtrip, bundled-agent upgrade preservation, and negative integrity/platform checks. A separate
+Node 22.22.2 job verifies the minimum runtime. Distribution smoke does not run a model or Lean.
+Lean integration and real research evidence are separate from this release bundle.
 Each target emits a path-free native evidence document bound to the full Git SHA, package version,
 runner ABI, tarball size, SHA-256, npm integrity, clean tracked inputs, and no restored build
 cache. The aggregate job rejects a missing or duplicate target, mismatched meta package, stale
@@ -221,9 +177,9 @@ receives no npm or model credential, and contains no publish job. Its bundle is 
 days.
 
 `.github/workflows/npm-registry-smoke.yml` is also manual-only and read-only. After a separately
-authorized publication, it installs one exact public version on all three targets without agent
-packages and requires version/help success, the expected doctor failure, cache reuse, a Lean
-build, and `AIZIM RUN PASS`. It never writes to the registry.
+authorized publication, it installs one exact public version on all three targets and checks
+version/help, the expected doctor failure, cache reuse, and a research task roundtrip. It never
+writes to the registry.
 
 ## First-publication procedure
 

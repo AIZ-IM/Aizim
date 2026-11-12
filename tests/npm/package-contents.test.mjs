@@ -91,11 +91,6 @@ async function packageFixture(kind) {
   return { allowlist, root };
 }
 
-test("meta package allowlist omits provider resolver modules", () => {
-  assert.equal(META_ALLOWLIST.includes("lib/claude.mjs"), false);
-  assert.equal(META_ALLOWLIST.includes("lib/codex.mjs"), false);
-});
-
 for (const kind of ["meta", "platform"]) {
   test(`npm packs the exact ${kind} package allowlist`, async () => {
     // Given

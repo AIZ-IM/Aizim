@@ -13,6 +13,7 @@ from aizim.domain import canonical_json, sha256_bytes, sha256_json
 from aizim.domain.serialization import JsonValue
 from aizim.modes.formal_trace import FormalTraceRecord, build_formal_trace, formal_trace_bytes
 from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE, NamedArtifact, register_artifact
+from aizim.omp.runtime import OMP_VERSION
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
@@ -61,8 +62,10 @@ def _append_run_evidence(
 ) -> bytes:
     start_manifest: dict[str, JsonValue] = {
         "agent_harness_binary_hash": HASHES[0],
-        "agent_harness_name": "codex",
-        "agent_harness_version": "codex-cli 0.154.0",
+        "agent_harness_name": "codex" if defect == "legacy-codex-run" else "omp",
+        "agent_harness_version": (
+            "codex-cli 0.154.0" if defect == "legacy-codex-run" else f"omp/{OMP_VERSION}"
+        ),
         "alignment_review": {
             "protocol_revision": None,
             "review_kind": "none",
@@ -73,21 +76,23 @@ def _append_run_evidence(
         "cache_state": "cold",
         "capability_profile": "gateway-fixture",
         "dependency_versions": [
-            ["mcp", "1.28.1"],
-            ["lean-lsp-mcp", "0.28.1"],
-            ["leanclient", "0.12.1"],
+            ["mcp", "2.2.0"],
+            ["lean-lsp-mcp", "0.33.0"],
+            ["leanclient", "0.13.2"],
         ],
         "environment_fingerprint": HASHES[8],
         "environment_transition_policy": "reject",
         "epoch_pair": {"base_epoch": HASHES[1], "knowledge_epoch": start_epoch},
         "event_schema_version": 1,
-        "lean_lsp_mcp_version": "0.28.1",
-        "lean_version": "4.32.1",
-        "leanclient_version": "0.12.1",
+        "lean_lsp_mcp_version": "0.33.0",
+        "lean_version": "4.35.0",
+        "leanclient_version": "0.13.2",
         "mathlib_version": None,
-        "model_backend": "codex",
+        "model_backend": "codex" if defect == "legacy-codex-run" else "magpie",
         "model_identifier": "fixture-model",
-        "process_isolation_profile": "macos-sandbox-aizim-worker",
+        "process_isolation_profile": (
+            "macos-sandbox-aizim-worker" if defect == "legacy-codex-run" else "aizim-worker"
+        ),
         "prompts": [["proof_worker", HASHES[2]], ["alignment_auditor", HASHES[3]]],
         "reasoning_settings": [
             ["allowed_imports_hash", sha256_json(("Std",))],
@@ -116,7 +121,7 @@ def _append_run_evidence(
         "search_permissions": [],
         "started_at": "2026-07-22T00:00:00+00:00",
         "timeouts_seconds": [["alignment_auditor", 60.0], ["proof_worker", 60.0]],
-        "toolchain_version": "leanprover/lean4:v4.32.1",
+        "toolchain_version": "leanprover/lean4:v4.35.0",
     }
     state.append_event(
         AppendEventCommand(
@@ -354,7 +359,11 @@ def _append_run_evidence(
             {
                 "kind": "machine",
                 "review_id": "alignment-1",
-                "reviewer": "codex-alignment-auditor",
+                "reviewer": (
+                    "codex-alignment-auditor"
+                    if defect == "legacy-codex-run"
+                    else "omp-alignment-auditor"
+                ),
                 "verdict": "aligned",
             },
         )
@@ -391,7 +400,11 @@ def _append_run_evidence(
         "alignment_review": {
             "protocol_revision": "alignment-v1",
             "review_kind": "machine",
-            "reviewer_identity": "codex-alignment-auditor",
+            "reviewer_identity": (
+                "codex-alignment-auditor"
+                if defect == "legacy-codex-run"
+                else "omp-alignment-auditor"
+            ),
             "verdict": "aligned",
         },
     }
@@ -405,12 +418,15 @@ def _append_gate_terminal(state: StateService, fixture: _GateFixture) -> None:
         if fixture.defect == "failed-gate-after-attempts"
         else "SandboxProbePassed"
     )
-    terminal_payload: dict[str, JsonValue] = {"probe_id": "authority-probe:gate_b_complete"}
+    operation = (
+        "gate_b_complete" if fixture.defect == "legacy-codex-gate" else "omp_security_gate_complete"
+    )
+    terminal_payload: dict[str, JsonValue] = {"probe_id": f"authority-probe:{operation}"}
     if terminal_type == "SandboxProbeFailed":
         terminal_payload["reason_code"] = "AGGREGATE_EVIDENCE_FAILED"
     else:
         terminal_payload.update(
-            {"operation": "gate_b_complete", "policy_hash": fixture.policy_hash}
+            {"operation": operation, "policy_hash": fixture.policy_hash}
         )
     state.append_event(
         AppendEventCommand(
@@ -432,9 +448,10 @@ def _append_gate_b_evidence(state: StateService, fixture: _GateFixture) -> None:
         "traverse_to_unleased_file",
         "scratch_symlink_to_state",
         "connect_gateway_unix_socket",
-        "connect_nonallowlisted_tcp",
         "read_secret_environment",
     )
+    if fixture.defect == "legacy-codex-gate":
+        denied += ("connect_nonallowlisted_tcp",)
     if fixture.defect == "terminal-before-attempts":
         _append_gate_terminal(state, fixture)
     for operation in denied:
@@ -458,7 +475,10 @@ def _append_gate_b_evidence(state: StateService, fixture: _GateFixture) -> None:
                 payload,
             )
         )
-    for operation in ("write_allowed_scratch", "read_allowed_view"):
+    allowed = ("write_allowed_scratch", "read_allowed_view")
+    if fixture.defect != "legacy-codex-gate":
+        allowed += ("connect_host_tcp",)
+    for operation in allowed:
         state.append_event(
             AppendEventCommand(
                 "SandboxProbePassed",
@@ -525,7 +545,11 @@ def _register_artifacts(
     alignment_body = canonical_json(
         {
             "review_kind": "machine",
-            "reviewer": "codex-alignment-auditor",
+            "reviewer": (
+                "codex-alignment-auditor"
+                if defect == "legacy-codex-run"
+                else "omp-alignment-auditor"
+            ),
             "verdict": "aligned",
         }
     )
@@ -725,15 +749,16 @@ def test_checker_help_limits_16_of_16_to_replayable_runtime_evidence() -> None:
     assert "does not independently prove CI-only or test-only rows" in output
 
 
-def test_operator_docs_preserve_runtime_and_overall_matrix_boundaries() -> None:
-    for source in (REPOSITORY_ROOT / "README.md", FOUNDATION_RUNBOOK):
-        body = " ".join(source.read_text().split())
-        assert "replayable real-run predicates" in body
-        assert "does not independently prove CI-only or test-only rows" in body
-        assert "overall handoff matrix" in body
+def test_operator_docs_preserve_runtime_and_network_boundaries() -> None:
+    body = " ".join(FOUNDATION_RUNBOOK.read_text().split())
+    assert "replayable real-run predicates" in body
+    assert "does not independently prove CI-only or test-only rows" in body
+    assert "overall handoff matrix" in body
+    assert "host network is shared" in body
+    assert "legacy" in body
     recovery = RECOVERY_RUNBOOK.read_text()
     assert "umask 077" in recovery
-    assert "${TMPDIR%/}/aizim-status." in recovery
+    assert "aizim-status." in recovery
     assert "/tmp/aizim-status.json" not in recovery
 
 
@@ -876,6 +901,8 @@ def test_latest_valid_gate_group_supplies_real_completion_policy(
         "trace-duplicated",
         "trace-relabeled",
         "post-seal-event",
+        "legacy-codex-run",
+        "legacy-codex-gate",
     ),
 )
 def test_incomplete_foundation_evidence_fails_closed(foundation_project: Path, defect: str) -> None:

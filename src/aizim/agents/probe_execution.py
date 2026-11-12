@@ -48,7 +48,7 @@ async def execute_probe(
     adapter: SandboxAdapter,
     request: ProbeRequest,
     *,
-    codex_version: str,
+    agent_version: str,
     sandbox_executable: str,
 ) -> ProbeReport:
     protected_before = protected_asset_digests(request)
@@ -83,15 +83,17 @@ async def execute_probe(
     logical_after = request.event_sink.logical_digest()
     protected_after = protected_asset_digests(request)
     expected = tuple(ProbeOperation)
+    allowed = {ProbeOperation.CONNECT_HOST_TCP, ProbeOperation.WRITE_ALLOWED_SCRATCH,
+               ProbeOperation.READ_ALLOWED_VIEW}
     verdicts_match = all(
-        attempt.verdict == ("denied" if index < 9 else "allowed")
-        and attempt.reason_code
-        == ("SANDBOX_ENFORCED" if index < 9 else "OPERATION_ALLOWED")
-        for index, attempt in enumerate(attempts)
+        attempt.verdict == ("allowed" if attempt.operation in allowed else "denied")
+        and attempt.reason_code == (
+            "OPERATION_ALLOWED" if attempt.operation in allowed else "SANDBOX_ENFORCED"
+        )
+        for attempt in attempts
     )
-    unexpected_allows = tuple(
-        attempt.operation for attempt in attempts[:9] if attempt.verdict == "allowed"
-    )
+    unexpected_allows = tuple(attempt.operation for attempt in attempts
+                              if attempt.operation not in allowed and attempt.verdict == "allowed")
     passed = (
         tuple(attempt.operation for attempt in attempts) == expected
         and verdicts_match
@@ -101,7 +103,7 @@ async def execute_probe(
     return ProbeReport(
         platform_id=adapter.platform_id,
         passed=passed,
-        codex_version=codex_version,
+        agent_version=agent_version,
         sandbox_executable=sandbox_executable,
         policy_hash=spec.policy_hash,
         attempts=attempts,

@@ -106,7 +106,7 @@ class GoalHypothesis:
 @dataclass(frozen=True, slots=True)
 class Goal:
     hypotheses: tuple[GoalHypothesis, ...]
-    target: str
+    target: str | None
     status: str
     pretty: str
 
@@ -162,10 +162,13 @@ class AttemptResult:
     diagnostics: tuple[Diagnostic, ...]
     timed_out: bool
     proof_status: str | None
+    # Goals the snippet leaves open, so a worker can choose its next step from them.
+    goals: tuple[str, ...] = ()
 
     def payload(self) -> dict[str, JsonValue]:
         return {
             "snippet": self.snippet,
+            "goals": list(self.goals),
             "diagnostics": [item.payload() for item in self.diagnostics],
             "timed_out": self.timed_out,
             "proof_status": self.proof_status,
@@ -184,7 +187,7 @@ class MultiAttemptResult:
 @dataclass(frozen=True, slots=True)
 class DiagnosticsResult:
     partial: bool
-    still_elaborating_lines: tuple[int, ...] | None
+    still_elaborating_lines: tuple[tuple[int, int], ...] | None
     success: bool
     timed_out: bool
     items: tuple[Diagnostic, ...]
@@ -195,7 +198,9 @@ class DiagnosticsResult:
         return {
             "partial": self.partial,
             "still_elaborating_lines": (
-                None if self.still_elaborating_lines is None else list(self.still_elaborating_lines)
+                None
+                if self.still_elaborating_lines is None
+                else [list(item) for item in self.still_elaborating_lines]
             ),
             "success": self.success,
             "timed_out": self.timed_out,

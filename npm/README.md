@@ -1,75 +1,49 @@
 # Aizim for npm
 
-Aizim combines a Python research control plane, a native Rust bootstrap
-launcher, and Lean 4 verification. It does not install Codex or Claude.
+Aizim combines an independent Python research supervisor, a native Rust bootstrap launcher,
+omp RPC, the magpie local gateway, and Lean 4 verification.
 
 ## Install
 
-Node.js 22.22.2 or newer, `rg`, and a Lean toolchain managed by `elan` are
-required. The package has no installation lifecycle script; the verified
-Python runtime is provisioned on first use.
+Node.js 22.22.2 or newer, `rg`, a Lean toolchain managed by `elan`, omp 18.18.2, and
+magpie 0.1.3338 are required. The package has no installation lifecycle script; the verified
+Python runtime is provisioned on first use. Linux requires `bwrap` and unprivileged user
+namespaces; macOS requires `/usr/bin/sandbox-exec`.
 
 ```sh
 npm install --global @aiz.im/aizim
 aizim --version
 ```
 
-The first command invocation downloads the locked CPython 3.14.6 runtime and
-hash-verified Python dependencies through the bundled uv 0.11.31 binary.
+The first command invocation downloads the locked CPython 3.15.2 runtime and
+hash-verified Python dependencies through the bundled uv 0.13.7 binary.
 Subsequent invocations reuse the versioned local runtime cache.
 
-Install the user-owned agent CLIs independently. Codex CLI 0.154.0 is always
-required for Worker and sandbox readiness. Claude Code 2.1.218 is required
-only when `claude` is the selected Controller.
+Install omp and magpie independently and configure magpie with a responding local gateway and an
+available model. Magpie owns model selection and provider credentials. Aizim does not install
+these services or change their configuration. Run `aizim doctor --project PROJECT` to check
+readiness before starting research.
 
-```sh
-npm install --global @openai/codex@0.154.0
-npm install --global --allow-scripts=@anthropic-ai/claude-code \
-  @anthropic-ai/claude-code@2.1.218
-```
-
-`AIZIM_CODEX_EXECUTABLE` takes precedence over `codex` on `PATH`;
-`AIZIM_CLAUDE_EXECUTABLE` independently takes precedence over `claude` on
-`PATH`. Aizim records each canonical path, exact version, and SHA-256 as
-trust-on-first-use evidence for user-owned provider provenance, then
-revalidates it before each launch. A version error reports `observed=...` and
-`supported=...`; install a supported side-by-side CLI and point the matching
-override at its absolute path.
-
-## Run the foreground controller
+## Run research
 
 ```sh
 aizim init /absolute/lean/project
-aizim controller configure \
-  --project /absolute/lean/project \
-  --provider codex \
-  --model gpt-6-astra
-aizim worker register \
-  --project /absolute/lean/project \
-  --worker-id proof-a \
-  --role proof_explorer
-aizim worker assign \
-  --project /absolute/lean/project \
-  --worker-id proof-a \
-  --task "prove (n : Nat) : n + 0 = n"
-AIZIM_MODEL=gpt-6-astra aizim controller start \
-  --project /absolute/lean/project \
-  --foreground
+aizim doctor --project /absolute/lean/project
+aizim research task add --project /absolute/lean/project \
+  --task-id smoke-true --title 'Prove True' --statement True \
+  --max-rounds 2 --max-failures 1 --timeout-seconds 120
+aizim research run --project /absolute/lean/project --max-seconds 300
+aizim research task list --project /absolute/lean/project --json
 ```
 
-Select Claude for controller planning with `--provider claude --model
-claude-opus-4-6`. The worker remains Codex-backed and uses `AIZIM_MODEL`; the
-controller provider does not change worker authority or tooling.
-
-Upgrading from an older bundled-agent package preserves project state and
-credentials, but the new package does not use the old nested agent packages.
-Expose a supported external Codex, and Claude when selected, before starting
-the Controller.
+The supervisor runs its security gate before scheduling. Research can make model requests
+through magpie; only trusted Lean publication can verify a target. Upgrades preserve project
+state, credentials, and runtime caches, and historical execution records keep their identities.
 
 ## Build from source
 
 Source builds use the exact toolchain versions recorded in the repository:
-Node.js 26.5.0, npm 12.0.1, Rust 1.97.1, and uv 0.11.31.
+Node.js 26.13.0, npm 12.2.2, Rust 1.99.1, and uv 0.13.7.
 
 ```sh
 npm install
@@ -81,3 +55,8 @@ npm run pack
 `npm run build` creates the wheel, locked requirements, Rust launcher, bundled
 uv, and strict manifests. `npm run pack` writes verified current-platform
 tarballs below `dist/npm/` without publishing them.
+
+Installation smoke checks resolve npm and npx from the build environment's `PATH`
+and run them with the current Node.js executable. Node.js and npm may be installed
+in separate directories. Consumer processes retain their private home, cache, and
+restricted `PATH`.

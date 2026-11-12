@@ -1,0 +1,400 @@
+npm notice run @aiz.im/aizim@0.1.0 test
+npm notice run node scripts/npm/test.mjs
+✔ resolves the complete installed distribution from absolute paths (16.664625ms)
+✔ reports a missing optional platform package (5.263209ms)
+✔ reports an incomplete distribution without launcher (6.747542ms)
+✔ reports an incomplete distribution without distributionManifest (4.58175ms)
+✔ hashes files as lowercase SHA-256 and uses a timing-safe comparison (11.934625ms)
+✔ deletes a mismatched uv archive without extracting it (24.338916ms)
+✔ extracts verified uv without a shell and requires an executable file (6.422666ms)
+✔ rejects a non-executable extracted uv binary (4.327ms)
+✔ build target detection agrees with runtime target detection (0.464625ms)
+✔ rejects a version mismatch across source manifests (0.367958ms)
+✔ measures artifact size and digest from file content (3.103834ms)
+✔ source digest covers every declared input and ignores generated output (7.921ms)
+✔ source input discovery ignores Python bytecode caches (11.824625ms)
+▶ requires every install observation before composing native evidence
+  ✔ failed security gate (2.19525ms)
+  ✔ changed ready marker (0.175625ms)
+  ✔ missing global Codex resolution (0.084125ms)
+  ✔ missing negative integrity test (0.067375ms)
+  ✔ missing controller loop smoke (0.2465ms)
+✔ requires every install observation before composing native evidence (4.043833ms)
+✔ composes native evidence only from matching build, test, pack, and install summaries (2.466625ms)
+✔ CI pins current actions and qualifies the exact three native runners without publishing (7.844542ms)
+✔ aggregates exactly three native targets and the minimum Node runtime (36.945ms)
+▶ rejects unknown fields, false checks, and target ABI mismatches
+  ✔ unknown field (10.012458ms)
+  ✔ false check (8.580958ms)
+  ✔ Linux without glibc (9.185625ms)
+✔ rejects unknown fields, false checks, and target ABI mismatches (28.327042ms)
+▶ rejects stale commits and duplicate or missing targets
+  ✔ stale commit (9.838041ms)
+  ✔ duplicate target (5.482375ms)
+✔ rejects stale commits and duplicate or missing targets (15.639208ms)
+▶ rejects modified tarballs, path traversal, and divergent meta bytes
+  ✔ modified tarball (4.030958ms)
+  ✔ path traversal (3.262458ms)
+  ✔ divergent meta bytes (4.333916ms)
+✔ rejects modified tarballs, path traversal, and divergent meta bytes (11.890875ms)
+✔ resolves the exact nested native Claude executable (6.570917ms)
+✔ rejects wrong meta version without a PATH fallback (4.498667ms)
+✔ rejects wrong native version without a PATH fallback (2.172875ms)
+✔ rejects missing native alias without a PATH fallback (1.566833ms)
+✔ rejects missing executable without a PATH fallback (3.598167ms)
+✔ rejects non-executable file without a PATH fallback (2.796167ms)
+✔ rejects an executable directory as a typed configuration error (3.340542ms)
+✔ resolves the exact nested native Codex executable (6.180833ms)
+✔ rejects wrong meta version without a PATH fallback (5.243167ms)
+✔ rejects wrong native version without a PATH fallback (5.056458ms)
+✔ rejects missing native alias without a PATH fallback (2.652208ms)
+✔ rejects missing executable without a PATH fallback (3.885875ms)
+✔ rejects non-executable file without a PATH fallback (4.367042ms)
+✔ private smoke roots reject shared and non-private directories (0.54875ms)
+✔ private smoke roots allow an owned mode-700 child of a shared temp root (0.0895ms)
+✔ the smoke layout isolates every consumer-owned surface (0.142291ms)
+✔ installs exactly the platform and meta tarballs without scripts (0.4295ms)
+✔ consumer environment is minimal and removes injection variables (0.526625ms)
+✔ doctor failures name the exact failed checks (0.295167ms)
+✔ controller smoke uses the provisioned wheel runtime and exact output (0.244209ms)
+✔ launches with internal flags, one separator, and inherited stdio (3.540334ms)
+✔ maps child exit 69 to 69 (0.347958ms)
+✔ maps child exit undefined to 70 (0.093375ms)
+✔ forwards SIGINT to the child once (0.132625ms)
+✔ forwards SIGTERM to the child once (0.066292ms)
+✔ forwards SIGHUP to the child once (0.050708ms)
+✔ removes forwarding handlers before mirroring a child signal (0.097667ms)
+✔ rejects a child-process start error with a stable code (1.709333ms)
+✔ prints one safe configuration error line and returns 78 (0.26525ms)
+✔ classifies an invalid package-local Claude executable as configuration (0.108083ms)
+✔ npm packs the exact meta package allowlist (322.177375ms)
+✔ npm packs the exact platform package allowlist (168.668917ms)
+✔ rejects forbidden names even when npm would omit them (3.260292ms)
+✔ rejects missing executable modes and lifecycle scripts (2.251833ms)
+✔ uses one version and exact dependencies when manifests are loaded (2.149583ms)
+✔ retains platform selectors when public package manifests are inspected (0.288833ms)
+✔ maps exactly three native Claude packages without darwin x64 (0.226333ms)
+✔ declares no package lifecycle hook when installation metadata is inspected (0.28775ms)
+✔ commits a dependency-free Lake manifest for the smoke project (0.079584ms)
+✔ maps darwin arm64 to darwin-arm64 (0.401041ms)
+✔ maps linux arm64 to linux-arm64 (0.051959ms)
+✔ maps linux x64 to linux-x64 (0.071209ms)
+✔ rejects {"platform":"win32","arch":"x64"} (0.223833ms)
+✔ rejects {"platform":"darwin","arch":"x64"} (0.050708ms)
+✔ rejects {"platform":"darwin","arch":"ia32"} (0.038292ms)
+✔ rejects {"platform":"linux","arch":"x64","report":{"header":{}}} (0.040083ms)
+✔ verifies a clean three-target release bundle with one common meta tarball (20.365542ms)
+▶ rejects dirty tracked inputs and cross-language version drift
+  ✔ dirty tracked inputs (3.47875ms)
+  ✔ version drift (0.138375ms)
+✔ rejects dirty tracked inputs and cross-language version drift (3.900375ms)
+✔ reads the same release version from Python, npm, Cargo, and every platform (0.842583ms)
+✔ registry verification distinguishes 404 and integrity mismatch (0.211792ms)
+✔ registry wait mode stops after twelve 404 attempts at five-second intervals (0.109334ms)
+✔ registry smoke aggregate requires READY, Gate B, and a run on all targets (0.153334ms)
+✔ release record is deterministic and excludes sensitive runtime context (0.282958ms)
+✔ release workflow is manual-only, exact-commit, three-target, and non-publishing (3.970416ms)
+✔ registry smoke workflow is manual-only, three-target, read-only, and exact-version (0.768ms)
+✔ selects only the native sandbox tests for the current platform (1.24675ms)
+ℹ tests 91
+ℹ suites 0
+ℹ pass 91
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 575.462583
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running unittests src/lib.rs (target/debug/deps/aizim_launcher-e0d00806da354504)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/aizim_launcher-45c7381ca8b332c3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cache_contract.rs (target/debug/deps/cache_contract-1648e45a358d65a2)
+
+running 7 tests
+test computes_platform_cache_roots_and_override ... ok
+test rejects_relative_missing_symlink_and_non_directory_roots ... ok
+test staging_cleanup_is_scoped_to_the_current_leaf_prefix ... ok
+test ready_runtime_is_reused_without_mutation_and_invalid_marker_is_not ... ok
+test cache_path_changes_for_every_identity_input_and_schema ... ok
+test promotion_never_overwrites_a_complete_environment ... ok
+test exclusive_lock_is_os_backed_and_persistent_file_is_reusable ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/manifest_contract.rs (target/debug/deps/manifest_contract-7c61a4811d538d4f)
+
+running 9 tests
+test parses_closed_internal_arguments_and_preserves_user_bytes ... ok
+test version_mismatch_diagnostic_is_safe_and_actionable ... ok
+test rejects_an_artifact_symlink_escape ... ok
+test rejects_missing_duplicate_unknown_and_relative_internal_arguments ... ok
+test verifies_valid_manifests_and_returns_canonical_artifacts ... ok
+test rejects_unknown_manifest_fields ... ok
+test rejects_absolute_and_parent_artifact_paths_as_configuration ... ok
+test rejects_size_hash_and_non_regular_artifacts_as_integrity_failures ... ok
+test rejects_schema_version_and_closed_target_mismatches ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/provision_contract.rs (target/debug/deps/provision_contract-c21d8e4e807722e4)
+
+running 7 tests
+test wrong_version_is_unavailable_and_not_promoted ... ok
+test final_exec_preserves_opaque_args_and_sets_the_closed_distribution_context ... ok
+test final_exec_rejects_a_missing_bundled_ripgrep ... ok
+test promoted_console_scripts_reference_the_final_runtime ... ok
+test warm_runtime_runs_no_commands_and_emits_no_bootstrap_status ... ok
+test cold_bootstrap_uses_the_exact_command_sequence_and_clean_environment ... ok
+test every_command_failure_leaves_no_final_or_staging_runtime ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+   Doc-tests aizim_launcher
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Checked 50 packages in 1ms
+All checks passed!
+All checks passed!
+........................................................................ [  8%]
+........................................................................ [ 17%]
+.........................................................s.............. [ 26%]
+................................................F....................... [ 35%]
+........................................................................ [ 44%]
+........................................................................ [ 53%]
+........................................................................ [ 62%]
+........................................................................ [ 71%]
+........................................................................ [ 80%]
+........................................................................ [ 89%]
+........................................................................ [ 98%]
+..............                                                           [100%]
+=================================== FAILURES ===================================
+_____________ test_real_outer_sandbox_runs_secret_safe_fake_claude _____________
+
+spec = ControllerLaunchSpec(argv=('/Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/node_modules/@openai/codex/bin/codex.js', '-...xm1fkj0sz8prbcr9b4115m0000gn/T/aizim-controller-_2inlwj9/aizim-view-empty'), timeout_seconds=5.0, output_limit=1048576)
+
+    async def launch(spec: ControllerLaunchSpec) -> ControllerLaunchOutcome:
+        rendered = repr(spec) + "\0".join(spec.argv)
+        assert all(secret not in rendered for secret in secrets)
+>       return await launch_controller_process(spec)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/security/test_controller_provider_isolation.py:278: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+spec = ControllerLaunchSpec(argv=('/Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/node_modules/@openai/codex/bin/codex.js', '-...xm1fkj0sz8prbcr9b4115m0000gn/T/aizim-controller-_2inlwj9/aizim-view-empty'), timeout_seconds=5.0, output_limit=1048576)
+
+    async def launch_controller_process(
+        spec: ControllerLaunchSpec,
+    ) -> ControllerLaunchOutcome:
+        try:
+            outcome = await launch_host_command(
+                HostCommandSpec(
+                    spec.argv,
+                    spec.cwd,
+                    spec.env,
+                    spec.stdin,
+                    spec.timeout_seconds,
+                    spec.output_limit,
+                )
+            )
+        except AgentLaunchError as error:
+            _raise_controller_error(error)
+        if outcome.returncode != 0:
+>           raise ControllerLaunchError("CONTROLLER_PROCESS_FAILED")
+E           aizim.orchestration.controller_process.ControllerLaunchError: CONTROLLER_PROCESS_FAILED
+
+src/aizim/orchestration/controller_process.py:115: ControllerLaunchError
+
+The above exception was the direct cause of the following exception:
+
+self = <aizim.orchestration.claude_controller.ClaudeControllerBackend object at 0x10bdb8f50>
+context = ControllerContext(assignment_id='assignment', task_version=1, worker_id='proof-a', role=<AgentRole.FORMALIZER: 'formal..., knowledge_epoch=0, allowed_operations=('project.read',), max_budget=1, max_timeout_seconds=5.0, controller_version=1)
+
+    async def plan(self, context: cb.ControllerContext) -> cb.ControllerDecision:
+        try:
+>           return await self._plan(context)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/aizim/orchestration/claude_controller.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <aizim.orchestration.claude_controller.ClaudeControllerBackend object at 0x10bdb8f50>
+context = ControllerContext(assignment_id='assignment', task_version=1, worker_id='proof-a', role=<AgentRole.FORMALIZER: 'formal..., knowledge_epoch=0, allowed_operations=('project.read',), max_budget=1, max_timeout_seconds=5.0, controller_version=1)
+
+    async def _plan(self, context: cb.ControllerContext) -> cb.ControllerDecision:
+        self._validate_image()
+        with process.private_workspace("aizim-controller-") as roots:
+            private, _view, _scratch = roots
+            model = () if self._model is None else ("--model", self._model)
+            command = (str(self._executable), *_COMMAND_FLAGS, *model)
+            try:
+                outcome = await self._run(
+                    private,
+                    command,
+                    cb.controller_context_bytes(context),
+                    context.max_timeout_seconds,
+                )
+            except process.ControllerLaunchError as error:
+                if error.code == "CONTROLLER_TIMEOUT":
+                    raise TimeoutError from error
+>               raise ClaudeControllerError("CONTROLLER_PROCESS_FAILED") from error
+E               aizim.orchestration.claude_controller.ClaudeControllerError: CONTROLLER_PROCESS_FAILED
+
+src/aizim/orchestration/claude_controller.py:117: ClaudeControllerError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/private/var/folders/z9/98xm1fkj0sz8prbcr9b4115m0000gn/T/pytest-of-fwmbam4/pytest-152/test_real_outer_sandbox_runs_s0')
+
+    @pytest.mark.macos_sandbox
+    async def test_real_outer_sandbox_runs_secret_safe_fake_claude(tmp_path: Path) -> None:
+        codex = Path(value) if (value := shutil.which("codex")) else pytest.fail("codex missing")
+        project = tmp_path / "manual-project"
+        state = project / ".aizim/run"
+        state.mkdir(parents=True)
+        for path in (project / "secret.txt", state / "state.sock"):
+            path.write_text("project-authority-secret")
+        binary = executable(tmp_path, ControllerProvider.CLAUDE)
+        home = tmp_path / "approved-home"
+        script = (
+            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo '2.1.218 (Claude Code)'; exit; fi\n"
+            '[ "$ANTHROPIC_API_KEY" = approved-anthropic-auth ] || exit 41; '
+            '[ "$CLAUDE_CODE_OAUTH_TOKEN" = approved-claude-oauth ] || exit 42\n'
+            f'[ "$HOME" = {str(home)!r} ] || exit 43; '
+            '[ -z "$NPM_TOKEN$DATABASE_URL$AIZIM_CAPABILITY$AIZIM_STATE_SOCKET" ] || exit 44\n'
+            f"cat {str(project / 'secret.txt')!r} >/dev/null 2>&1 && exit 45; "
+            f"cat {str(state / 'state.sock')!r} >/dev/null 2>&1 && exit 46\n"
+            'echo \'{"structured_output":{"action":"blocked","reason_code":"NO_SAFE_ACTION"}}\'\n'
+        )
+        binary.write_text(script)
+        binary.chmod(0o700)
+        secrets = ("approved-anthropic-auth", "approved-claude-oauth", "unrelated-secret")
+        environment = {
+            "PATH": f"{codex.parent}:/usr/bin:/bin",
+            "HOME": str(home),
+            "ANTHROPIC_API_KEY": secrets[0],
+            "CLAUDE_CODE_OAUTH_TOKEN": secrets[1],
+            "NPM_TOKEN": secrets[2],
+            "DATABASE_URL": secrets[2],
+            "AIZIM_CAPABILITY": secrets[2],
+            "AIZIM_STATE_SOCKET": str(state / "state.sock"),
+        }
+    
+        async def launch(spec: ControllerLaunchSpec) -> ControllerLaunchOutcome:
+            rendered = repr(spec) + "\0".join(spec.argv)
+            assert all(secret not in rendered for secret in secrets)
+            return await launch_controller_process(spec)
+    
+        backend = ClaudeControllerBackend(binary, None, project, environment, launch)
+    
+>       decision = await backend.plan(controller_context())
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/security/test_controller_provider_isolation.py:282: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <aizim.orchestration.claude_controller.ClaudeControllerBackend object at 0x10bdb8f50>
+context = ControllerContext(assignment_id='assignment', task_version=1, worker_id='proof-a', role=<AgentRole.FORMALIZER: 'formal..., knowledge_epoch=0, allowed_operations=('project.read',), max_budget=1, max_timeout_seconds=5.0, controller_version=1)
+
+    async def plan(self, context: cb.ControllerContext) -> cb.ControllerDecision:
+        try:
+            return await self._plan(context)
+        except ClaudeControllerError as error:
+>           raise cb.ControllerBackendError("CONTROLLER_DECISION_INVALID") from error
+E           aizim.orchestration.controller_backend.ControllerBackendError: CONTROLLER_DECISION_INVALID
+
+src/aizim/orchestration/claude_controller.py:99: ControllerBackendError
+
+During handling of the above exception, another exception occurred:
+
+self = <Coroutine test_real_outer_sandbox_runs_secret_safe_fake_claude>
+
+    def runtest(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        runner = self._request.getfixturevalue(runner_fixture_id)
+        context = contextvars.copy_context()
+        synchronized_obj = _synchronize_coroutine(
+            getattr(*self._synchronization_target_attr), runner, context
+        )
+>       with MonkeyPatch.context() as c:
+             ^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:567: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <contextlib._GeneratorContextManager object at 0x10b85e430>
+typ = <class 'aizim.orchestration.controller_backend.ControllerBackendError'>
+value = ControllerBackendError(code='CONTROLLER_DECISION_INVALID')
+traceback = <traceback object at 0x10bea9d40>
+
+    def __exit__(self, typ, value, traceback):
+        if typ is None:
+            try:
+                next(self.gen)
+            except StopIteration:
+                return False
+            else:
+                try:
+                    raise RuntimeError("generator didn't stop")
+                finally:
+                    self.gen.close()
+        else:
+            if value is None:
+                # Need to force instantiation so we can reliably
+                # tell if we get the same exception back
+                value = typ()
+            try:
+                self.gen.throw(value)
+            except StopIteration as exc:
+                # Suppress StopIteration *unless* it's the same exception that
+                # was passed to throw().  This prevents a StopIteration
+                # raised inside the "with" statement from being suppressed.
+                return exc is not value
+            except RuntimeError as exc:
+                # Don't re-raise the passed in exception. (issue27122)
+                if exc is value:
+>                   exc.__traceback__ = traceback
+                    ^^^^^^^^^^^^^^^^^
+E                   dataclasses.FrozenInstanceError: cannot assign to field '__traceback__'
+
+../../../../.local/share/uv/python/cpython-3.14.6-macos-aarch64-none/lib/python3.14/contextlib.py:171: FrozenInstanceError
+=========================== short test summary info ============================
+FAILED tests/security/test_controller_provider_isolation.py::test_real_outer_sandbox_runs_secret_safe_fake_claude
+1 failed, 804 passed, 1 skipped, 22 deselected in 73.29s (0:01:13)
+file:///Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/scripts/npm/lib/command.mjs:6
+  return new Error(`${basename(program)} exited with ${outcome}`);
+         ^
+
+Error: uv exited with status 1
+    at processError (file:///Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/scripts/npm/lib/command.mjs:6:10)
+    at ChildProcess.<anonymous> (file:///Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/scripts/npm/lib/command.mjs:29:14)
+    at Object.onceWrapper (node:events:631:12)
+    at ChildProcess.emit (node:events:509:20)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)
+
+Node.js v26.5.0
+file:///Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/scripts/npm/lib/command.mjs:6
+  return new Error(`${basename(program)} exited with ${outcome}`);
+         ^
+
+Error: node exited with status 1
+    at processError (file:///Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/scripts/npm/lib/command.mjs:6:10)
+    at ChildProcess.<anonymous> (file:///Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/scripts/npm/lib/command.mjs:29:14)
+    at Object.onceWrapper (node:events:631:12)
+    at ChildProcess.emit (node:events:509:20)
+    at ChildProcess._handle.onexit (node:internal/child_process:294:12)
+
+Node.js v26.5.0

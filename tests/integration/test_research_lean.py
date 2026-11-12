@@ -69,7 +69,7 @@ async def test_real_lean_proves_a_non_smoke_research_target(
                 connect=connect_gateway,
                 cursor={},
             )
-            executor = LeanExecutor(state, project, host, backend, "deterministic-tool-actions")
+            executor = LeanExecutor(state, project, host, backend)
             await ResearchEngine(
                 state, executor, "research-lean-test", "deterministic-tool-actions", workers=1
             ).run()

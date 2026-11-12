@@ -79,8 +79,10 @@ def test_foundation_hash_bindings_accept_lowercase_sha256(
     assert _event(event_type, {**payload, field: _HASH}).event_type == event_type
 
 
-def test_agent_result_exposes_optional_policy_contract_hash() -> None:
-    assert tuple(field.name for field in fields(AgentResult))[-2:] == ("policy_hash", "usage")
+def test_agent_result_exposes_optional_policy_hash_usage_and_model() -> None:
+    optional_fields = fields(AgentResult)[-3:]
+    assert tuple(field.name for field in optional_fields) == ("policy_hash", "usage", "model")
+    assert all(field.default is None for field in optional_fields)
 
 
 def test_agent_result_persists_optional_policy_contract_hash(tmp_path: Path) -> None:
@@ -93,7 +95,22 @@ def test_agent_result_persists_optional_policy_contract_hash(tmp_path: Path) -> 
     assert payload["policy_hash"] == _HASH
 
 
-def test_sandbox_probe_event_persists_policy_contract_hash(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("attempt", "event_type"),
+    (
+        (
+            ProbeAttempt(ProbeOperation.READ_STATE_DATABASE, "denied", "SANDBOX_ENFORCED"),
+            "SandboxProbeDenied",
+        ),
+        (
+            ProbeAttempt(ProbeOperation.CONNECT_HOST_TCP, "allowed", "HOST_NETWORK_SHARED"),
+            "SandboxProbePassed",
+        ),
+    ),
+)
+def test_sandbox_probe_event_persists_policy_contract_hash(
+    tmp_path: Path, attempt: ProbeAttempt, event_type: str
+) -> None:
     with StateService(StateServiceConfig(tmp_path, "probe-policy-evidence")) as state:
         request = ProbeRequest(
             "probe-1",
@@ -113,8 +130,12 @@ def test_sandbox_probe_event_persists_policy_contract_hash(tmp_path: Path) -> No
             {},
             state,
         )
-        attempt = ProbeAttempt(ProbeOperation.READ_STATE_DATABASE, "denied", "SANDBOX_ENFORCED")
         append_probe_event(request, attempt, _HASH)
-        payload = state.query_events("run-1")[-1].envelope.payload
+        record = state.query_events("run-1")[-1].envelope
+        payload = record.payload
 
     assert payload["policy_hash"] == _HASH
+    assert record.event_type == event_type
+    assert payload["operation"] == attempt.operation.value
+    if attempt.verdict == "denied":
+        assert payload["reason_code"] == "SANDBOX_ENFORCED"

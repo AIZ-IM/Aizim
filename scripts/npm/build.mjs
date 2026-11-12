@@ -36,13 +36,14 @@ import { writeNotices } from "./write-notices.mjs";
 
 const expected = Object.freeze({
   aizim: "0.1.0",
-  node: "26.5.0",
-  npm: "12.0.1",
+  node: "26.13.0",
+  npm: "12.2.2",
   minimumNode: "22.22.2",
-  python: "3.14.6",
-  pythonRange: ">=3.12,<3.15",
-  rust: "1.97.1",
-  uv: "0.11.31",
+  python: "3.15.2",
+  pythonRange: ">=3.12,<3.16",
+  rust: "1.99.1",
+  minimumRust: "1.97.1",
+  uv: "0.13.7",
 });
 
 const platformIds = [
@@ -89,6 +90,7 @@ async function sourceVersions() {
   const meta = await readJson(join(repositoryRoot, "package.json"));
   const python = await readFile(join(repositoryRoot, "pyproject.toml"), "utf8");
   const cargo = await readFile(join(repositoryRoot, "Cargo.toml"), "utf8");
+  const rustToolchain = await readFile(join(repositoryRoot, "rust-toolchain.toml"), "utf8");
   const platforms = await Promise.all(
     platformIds.map(async (target) => {
       const source = await readJson(
@@ -121,7 +123,8 @@ async function sourceVersions() {
     meta.peerDependencies !== undefined ||
     !python.includes(`requires-python = "${expected.pythonRange}"`) ||
     !python.includes(`uv_build==${expected.uv}`) ||
-    !cargo.includes(`rust-version = "${expected.rust}"`)
+    !cargo.includes(`rust-version = "${expected.minimumRust}"`) ||
+    !rustToolchain.includes(`channel = "${expected.rust}"`)
   ) {
     throw new Error("toolchain source version mismatch");
   }

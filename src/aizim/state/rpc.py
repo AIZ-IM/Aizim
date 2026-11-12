@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK -- the foundation contract requires asyncio Unix servers
+import asyncio  # ANYIO_OK: the foundation contract requires asyncio Unix servers
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -215,7 +215,7 @@ class RpcServer:
             return
         try:
             cleanup_task.result()
-        except BaseException as cleanup_error:  # noqa: BROAD_EXCEPT_OK -- cleanup boundary
+        except BaseException as cleanup_error:  # BROAD_EXCEPT_OK: cleanup boundary
             raise cleanup_error from interruption
         raise interruption
 

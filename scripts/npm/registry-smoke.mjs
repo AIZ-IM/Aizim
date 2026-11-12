@@ -30,7 +30,10 @@ import { fileURLToPath } from "node:url";
 import { detectTarget } from "../../lib/platform.mjs";
 import {
   assertNoAgentDependencies,
+  findExecutable,
   validateProviderFreeCliEvidence,
+  researchTaskRoundtrip,
+  validateResearchTaskList,
 } from "./install-smoke.mjs";
 import { repositoryRoot } from "./lib/paths.mjs";
 import { CI_TARGETS } from "./verify-ci-evidence.mjs";
@@ -41,8 +44,7 @@ const checkNames = [
   "provider_free_cli",
   "expected_doctor_failure",
   "cache_reused",
-  "lean_build",
-  "aizim_run",
+  "research_task_roundtrip",
 ];
 const preservedEnvironment = new Set([
   "HTTP_PROXY",
@@ -86,21 +88,6 @@ async function requireSuccess(program, arguments_, options, label) {
   return result;
 }
 
-async function findExecutable(name) {
-  for (const directory of (process.env.PATH ?? "").split(delimiter)) {
-    if (!directory) {
-      continue;
-    }
-    const candidate = join(directory, name);
-    try {
-      await access(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      continue;
-    }
-  }
-  throw new Error(`required ${name} executable is unavailable`);
-}
 
 async function hashFile(path) {
   const value = await readFile(path);
@@ -138,14 +125,11 @@ async function copyFixture(source, destination) {
   });
 }
 
-async function providerFreeTools(layout, lake) {
+async function providerFreeTools(layout) {
   await mkdir(layout.tools, { mode: 0o700 });
   await symlink(process.execPath, join(layout.tools, "node"));
-  await symlink(lake, join(layout.tools, "lake"));
-  for (const name of ["lean", "rg"]) {
-    await symlink(await findExecutable(name), join(layout.tools, name));
-  }
-  for (const name of ["codex", "claude"]) {
+  await symlink(await findExecutable("rg"), join(layout.tools, "rg"));
+  for (const name of ["codex", "claude", "omp", "magpie"]) {
     for (const directory of [layout.tools, "/usr/bin", "/bin"]) {
       try {
         await access(join(directory, name), constants.X_OK);
@@ -163,12 +147,8 @@ function consumerEnvironment(layout) {
       preservedEnvironment.has(name),
     ),
   );
-  const elanHome =
-    process.env.ELAN_HOME ??
-    (process.env.HOME ? join(process.env.HOME, ".elan") : undefined);
   return {
     ...environment,
-    ...(elanHome ? { ELAN_HOME: elanHome } : {}),
     AIZIM_CACHE_DIR: layout.cache,
     HOME: layout.home,
     LANG: "C.UTF-8",
@@ -248,8 +228,7 @@ export function createRegistrySmokeAggregate(documents, version) {
       provider_free_cli: true,
       expected_doctor_failure: true,
       cache_reused: true,
-      lean_build: true,
-      aizim_run: true,
+      research_task_roundtrip: true,
     },
   };
 }
@@ -277,7 +256,6 @@ export async function registrySmoke({ version, output }) {
     cache: join(generated, "cache"),
     home: join(generated, "home"),
     project: join(generated, "project"),
-    runProject: join(generated, "run-project"),
     tools: join(generated, "tools"),
     temporary: join(generated, "tmp"),
   };
@@ -296,10 +274,9 @@ export async function registrySmoke({ version, output }) {
       '{"name":"aizim-registry-smoke","version":"0.0.0","private":true}\n',
       { mode: 0o600 },
     );
-    const lake = await findExecutable("lake");
-    await providerFreeTools(layout, lake);
+    await providerFreeTools(layout);
     const environment = consumerEnvironment(layout);
-    const npm = join(dirname(process.execPath), "npm");
+    const npm = await findExecutable("npm");
     const packageSpec = `@aiz.im/aizim@${version}`;
     await requireSuccess(
       process.execPath,
@@ -433,39 +410,19 @@ export async function registrySmoke({ version, output }) {
       version,
     );
 
-    await copyFixture(
-      join(repositoryRoot, "examples", "smoke_lean"),
-      layout.runProject,
+    await researchTaskRoundtrip(localBinary, layout.project, {
+      cwd: layout.local,
+      env: environment,
+    });
+    validateResearchTaskList(
+      await execute(
+        join(layout.prefix, "bin", "aizim"),
+        ["research", "task", "list", "--project", layout.project, "--json"],
+        { cwd: layout.root, env: environment },
+      ),
+      "global registry research task list",
+      true,
     );
-    await requireSuccess(
-      lake,
-      ["build"],
-      { cwd: layout.runProject, env: environment },
-      "registry Lean build",
-    );
-    await requireSuccess(
-      localBinary,
-      ["init", layout.runProject],
-      { cwd: layout.local, env: environment },
-      "registry run init",
-    );
-    const run = await requireSuccess(
-      localBinary,
-      [
-        "run",
-        "--project",
-        layout.runProject,
-        "--profile",
-        "autonomous-shared",
-        "--backend",
-        "fake",
-      ],
-      { cwd: layout.local, env: environment },
-      "registry deterministic run",
-    );
-    if (!run.stdout.includes("AIZIM RUN PASS")) {
-      throw new Error("registry run mismatch");
-    }
 
     const evidence = {
       schema_version: 1,
@@ -476,8 +433,7 @@ export async function registrySmoke({ version, output }) {
         provider_free_cli: true,
         expected_doctor_failure: true,
         cache_reused: true,
-        lean_build: true,
-        aizim_run: true,
+        research_task_roundtrip: true,
       },
     };
     validateSmokeDocument(evidence, version);

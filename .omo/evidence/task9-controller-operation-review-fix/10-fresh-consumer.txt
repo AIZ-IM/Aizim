@@ -1,0 +1,15 @@
+consumer_dir=/tmp/aizim-task9-review-fix-consumer.BR9HrG
+consumer_mode=700
+version=aizim 0.1.0
+Initialized Aizim state at /private/tmp/aizim-task9-review-fix-consumer.BR9HrG/lean-project/.aizim
+{
+  "doctor_ready": true,
+  "codex_status": "PASS",
+  "codex_detail": "codex-cli 0.145.0",
+  "claude_status": "PASS",
+  "claude_detail": "2.1.218 (Claude Code)",
+  "no_global_fallback": true
+}
+doctor_payload:
+{"checks":[{"detail":"3.14.6","id":"python","status":"PASS"},{"detail":"bundled uv 0.11.31","id":"uv","status":"PASS"},{"detail":"Lean (version 4.32.1, arm64-apple-darwin24.6.0, commit f054605aea4b840552cca2e725580bffd1e1b704, Release)","id":"lean","status":"PASS"},{"detail":"Lake version 5.0.0-src+f054605 (Lean version 4.32.1)","id":"lake","status":"PASS"},{"detail":"/private/tmp/aizim-task9-review-fix-consumer.BR9HrG/lean-project","id":"lean_project","status":"PASS"},{"detail":"11697684480 bytes free","id":"disk_floor","status":"PASS"},{"detail":"shared","id":"runtime_mode","status":"PASS"},{"detail":"2.1.218 (Claude Code)","id":"claude","status":"PASS"},{"detail":"codex-cli 0.145.0","id":"codex","status":"PASS"},{"detail":"sandbox-exec available","id":"sandbox_exec","status":"PASS"},{"detail":"0.28.1","id":"lean_lsp_mcp","status":"PASS"},{"detail":"0.12.1","id":"leanclient","status":"PASS"},{"detail":"schema 1 ready","id":"state_service","status":"PASS"}],"ready":true}
+exit_status=0

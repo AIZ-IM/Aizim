@@ -39,6 +39,7 @@ from .promotion_types import (
     accepted,
 )
 from .rebase import rebase_patch
+from .target_binding import validate_target_context
 
 
 class PromotionService:
@@ -87,17 +88,25 @@ class PromotionService:
             if type(event.run_id) is not str:
                 raise PromotionError("INVALID_CONTRIBUTION")
             run_id, payload = event.run_id, thaw_payload(event.payload)
-            if is_stale(self._state, payload, current):
-                return self._rebase(entry, run_id, payload, current)
             source = self._artifacts.load(
                 run_id, "contributions", text_field(payload, "payload_hash")
+            )
+            binding = validate_target_context(
+                self._state, run_id, text_field(payload, "worker_id"),
+                text_field(payload, "candidate_name"), text_field(payload, "complete_type"),
+                strings_field(payload, "imports"), source,
             )
             validate_candidate_source(
                 source,
                 text_field(payload, "candidate_name"),
                 text_field(payload, "complete_type"),
-                self._allowed_imports,
+                self._allowed_imports if binding is None else binding.imports,
             )
+            if is_stale(self._state, payload, current):
+                return self._rebase(
+                    entry, run_id, payload, current,
+                    self._allowed_imports if binding is None else binding.imports,
+                )
             name = research_name(
                 text_field(payload, "candidate_name"),
                 text_field(payload, "payload_hash"),
@@ -205,13 +214,14 @@ class PromotionService:
         run_id: str,
         payload: dict[str, JsonValue],
         current: EpochPair,
+        allowed_imports: tuple[str, ...],
     ) -> PromotionOutcome:
         patch = None
         if text_field(payload, "payload_kind") == "patch":
             document = document_for(self._state, payload)
             if document is None:
                 raise PromotionError("DOCUMENT_NOT_FOUND")
-            patch = rebase_patch(payload, document, run_id, self._artifacts, self._allowed_imports)
+            patch = rebase_patch(payload, document, run_id, self._artifacts, allowed_imports)
         rebased = sha256_json({"contribution_id": entry.contribution_id, "epoch": current})
         next_payload: dict[str, JsonValue] = {
             **payload,

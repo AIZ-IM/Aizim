@@ -6,24 +6,23 @@ import secrets
 import socket
 import stat
 import sys
-from collections.abc import Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile, mkdtemp
 
 import aizim.gateway as gateway_api
+from aizim.agents.omp_backend import inspect_omp_worker
 from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import (
     ProbeAttempt,
     ProbeOperation,
-    ProbeReport,
     ProbeRequest,
     SandboxPlatform,
     record_gate_completion,
 )
 from aizim.agents.workspace_view import ViewSource, WorkspaceView, WorkspaceViewBuilder
-from aizim.cli.doctor_command import scrubbed_command_environment
+from aizim.cli.doctor_environment import scrubbed_command_environment
 from aizim.domain import AgentRole, sha256_file
 from aizim.gateway.authority_probe import (
     AUTHORITY_DENIAL_REASONS,
@@ -32,14 +31,8 @@ from aizim.gateway.authority_probe import (
     run_authority_probe,
 )
 from aizim.lean.source_layout import lakefile, source_files
+from aizim.omp.executable import resolve_omp
 from aizim.runtime.layout import ProjectLayout
-from aizim.runtime.provider_executables import (
-    ProviderExecutableError,
-    ResolvedExecutable,
-    codex_runtime_root,
-    resolve_codex,
-    revalidate_codex,
-)
 from aizim.state import StateService, StateServiceConfig
 
 
@@ -61,6 +54,12 @@ class SecurityGateReport:
     replayed_gateway_denials: tuple[str, ...]
     replayed_sandbox_denials: tuple[str, ...]
     policy_hash: str
+    model: str
+    network_destination_isolation: bool = False
+    network_boundary: str = (
+        "omp can access other local and external TCP destinations; "
+        "sandbox does not enforce destination isolation"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,18 +83,26 @@ class _ObservedBroker(gateway_api.GatewaySessionBroker):
         super()._accept(reader, writer)
 
 
-async def run_security_gate(
-    project_root: Path,
-    executable: ResolvedExecutable | None = None,
-) -> SecurityGateReport:
+async def run_security_gate(project_root: Path) -> SecurityGateReport:
     layout = ProjectLayout.from_lean_project(project_root)
     layout.validate_runtime()
     environment = dict(os.environ)
-    if executable is None:
-        try:
-            executable = resolve_codex(environment)
-        except ProviderExecutableError as error:
-            raise SecurityGateError(error.code) from error
+    try:
+        inspection = await inspect_omp_worker(project_root, environment)
+        if (
+            inspection.get("protocol_version") != 2
+            or inspection.get("ambient_disabled") is not True
+            or inspection.get("tool_names") != ()
+        ):
+            raise SecurityGateError("omp RPC protocol or ambient tool restriction is invalid")
+        model = inspection["model"]
+        if not isinstance(model, str) or not model:
+            raise SecurityGateError("omp has no selected magpie model")
+        executable = resolve_omp(environment).path
+    except SecurityGateError:
+        raise
+    except Exception as error:
+        raise SecurityGateError("restricted omp RPC inspection failed") from error
     leased, unleased = _regular_lean_sources(layout.root)
     source = ViewSource(
         PurePosixPath(leased.relative_to(layout.root).as_posix()), sha256_file(leased)
@@ -116,9 +123,17 @@ async def run_security_gate(
                 state,
                 resources,
                 executable,
-                environment,
+                model,
             )
-    expected_sandbox = tuple(operation.value for operation in tuple(ProbeOperation)[:9])
+    expected_sandbox = tuple(
+        operation.value
+        for operation in ProbeOperation
+        if operation not in {
+            ProbeOperation.CONNECT_HOST_TCP,
+            ProbeOperation.WRITE_ALLOWED_SCRATCH,
+            ProbeOperation.READ_ALLOWED_VIEW,
+        }
+    )
     with StateService(StateServiceConfig(layout.root, "security-gate-replay")) as restarted:
         replay = restarted.replay_verify()
         replayed_gateway = authority_denial_reasons(restarted, run_id)
@@ -147,8 +162,8 @@ async def run_security_gate(
 async def _run_live_gate(
     state: StateService,
     resources: _GateResources,
-    executable: ResolvedExecutable,
-    environment: Mapping[str, str],
+    executable: Path,
+    model: str,
 ) -> tuple[SecurityGateReport, str]:
     setup = await run_authority_probe(state, resources.run_id)
     broker: _ObservedBroker | None = None
@@ -174,22 +189,8 @@ async def _run_live_gate(
         canonical_socket = resources.layout.run_root / "gateway.sock"
         if not stat.S_ISSOCK(canonical_socket.lstat().st_mode):
             raise SecurityGateError("broker did not bind the canonical socket entry")
-        codex_executable = executable.path
-        runtime_read_roots = tuple(
-            dict.fromkeys(
-                (
-                    Path(sys.prefix).resolve(strict=True),
-                    codex_runtime_root(codex_executable),
-                )
-            )
-        )
-        probe = await _launch_attested_probe(
-            executable,
-            environment,
-            replace(
-                _probe_request(state, resources, broker.socket_path),
-                runtime_read_roots=runtime_read_roots,
-            ),
+        probe = await sandbox_adapter(executable).launch_probe(
+            _probe_request(state, resources, broker.socket_path)
         )
     finally:
         try:
@@ -211,7 +212,7 @@ async def _run_live_gate(
     state_unchanged = before_digest == state.logical_digest() == probe.logical_digest_after
     if not (
         probe.passed
-        and broker.connection_count == tcp_connections == 0
+        and broker.connection_count == 0 and tcp_connections == 1
         and assets_unchanged
         and state_unchanged
     ):
@@ -231,22 +232,12 @@ async def _run_live_gate(
             (),
             (),
             probe.policy_hash,
+            model,
         ),
         before_digest,
     )
 
 
-async def _launch_attested_probe(
-    executable: ResolvedExecutable,
-    environment: Mapping[str, str],
-    request: ProbeRequest,
-) -> ProbeReport:
-    probe = await sandbox_adapter(executable.path).launch_probe(request)
-    try:
-        revalidate_codex(executable, environment)
-    except ProviderExecutableError as error:
-        raise SecurityGateError(error.code) from error
-    return probe
 
 
 def _probe_request(

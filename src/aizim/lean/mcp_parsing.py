@@ -24,6 +24,19 @@ def _record(value: object, fields: frozenset[str]) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
+def _optional_record(
+    value: object, required: frozenset[str], optional: frozenset[str]
+) -> dict[str, object]:
+    if (
+        type(value) is not dict
+        or not required <= value.keys()
+        or not value.keys() <= required | optional
+        or any(type(key) is not str for key in value)
+    ):
+        raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+    return cast(dict[str, object], value)
+
+
 def _string(value: object) -> str:
     if type(value) is not str:
         raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
@@ -49,15 +62,23 @@ def _goal(value: object) -> Goal:
         hypotheses.append(GoalHypothesis(_string(entry["name"]), _string(entry["type"])))
     return Goal(
         tuple(hypotheses),
-        _string(payload["goal"]),
+        None if payload["goal"] is None else _string(payload["goal"]),
         _string(payload["status"]),
         _string(payload["pretty"]),
     )
 
 
 def _diagnostic(value: object) -> Diagnostic:
-    payload = _record(value, frozenset({"severity", "message", "line", "column", "lean_tags"}))
-    line, column, tags = payload["line"], payload["column"], payload["lean_tags"]
+    payload = _optional_record(
+        value,
+        frozenset({"severity", "message", "line", "column", "category"}),
+        frozenset({"lean_tags", "hint"}),
+    )
+    if payload["category"] not in ("diagnostic", "linter", "sorry", "suggestion"):
+        raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+    if "hint" in payload:
+        _string(payload["hint"])
+    line, column, tags = payload["line"], payload["column"], payload.get("lean_tags")
     if type(line) is not int or (column is not None and type(column) is not int):
         raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
     if tags is None:
@@ -76,16 +97,18 @@ def _diagnostic(value: object) -> Diagnostic:
 
 
 def parse_goal(value: object, response_hash: str) -> GoalResult:
-    fields = {"line_context", "goals", "goals_before", "goals_after", "status"}
-    payload = _record(value, frozenset(fields))
-    status = payload["status"]
+    payload = _optional_record(
+        value, frozenset({"line_context"}),
+        frozenset({"goals", "goals_before", "goals_after", "status"}),
+    )
+    status = payload.get("status")
     if status is not None:
         status = _string(status)
     return GoalResult(
         _string(payload["line_context"]),
-        _goals(payload["goals"]),
-        _goals(payload["goals_before"]),
-        _goals(payload["goals_after"]),
+        _goals(payload.get("goals")),
+        _goals(payload.get("goals_before")),
+        _goals(payload.get("goals_after")),
         status,
         response_hash,
     )
@@ -98,15 +121,18 @@ def parse_attempts(value: object, response_hash: str) -> MultiAttemptResult:
         raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
     items = []
     for raw in raw_items:
-        fields = {"snippet", "goals", "diagnostics", "timed_out", "proof_status"}
-        item = _record(raw, frozenset(fields))
-        diagnostics, status = item["diagnostics"], item["proof_status"]
+        item = _optional_record(
+            raw, frozenset({"snippet", "goals", "diagnostics", "timed_out"}),
+            frozenset({"proof_status"}),
+        )
+        diagnostics, status = item["diagnostics"], item.get("proof_status")
         if (
             type(item["goals"]) is not list
             or type(diagnostics) is not list
             or type(item["timed_out"]) is not bool
         ):
             raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+        goals = tuple(_string(goal) for goal in item["goals"])
         if status is not None:
             status = _string(status)
         items.append(
@@ -115,6 +141,7 @@ def parse_attempts(value: object, response_hash: str) -> MultiAttemptResult:
                 tuple(_diagnostic(value) for value in diagnostics),
                 item["timed_out"],
                 status,
+                goals,
             )
         )
     return MultiAttemptResult(tuple(items), response_hash)
@@ -130,18 +157,13 @@ def parse_hover_info(value: object) -> str:
 
 
 def parse_diagnostics(value: object, response_hash: str) -> DiagnosticsResult:
-    fields = {
-        "partial",
-        "still_elaborating_lines",
-        "success",
-        "timed_out",
-        "items",
-        "failed_dependencies",
-    }
-    payload = _record(value, frozenset(fields))
-    pending = payload["still_elaborating_lines"]
+    payload = _optional_record(
+        value, frozenset({"partial", "success", "timed_out", "items"}),
+        frozenset({"still_elaborating_lines", "failed_dependencies"}),
+    )
+    pending = payload.get("still_elaborating_lines")
     items = payload["items"]
-    failed = payload["failed_dependencies"]
+    failed = payload.get("failed_dependencies", [])
     if (
         type(payload["partial"]) is not bool
         or type(payload["success"]) is not bool
@@ -153,9 +175,15 @@ def parse_diagnostics(value: object, response_hash: str) -> DiagnosticsResult:
     if pending is None:
         parsed_pending = None
     elif type(pending) is list:
-        if any(type(item) is not int for item in pending):
-            raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
-        parsed_pending = tuple(cast(int, item) for item in pending)
+        ranges: list[tuple[int, int]] = []
+        for item in pending:
+            if type(item) is not list or len(item) != 2:
+                raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+            start, end = item
+            if type(start) is not int or type(end) is not int or not 1 <= start <= end:
+                raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+            ranges.append((start, end))
+        parsed_pending = tuple(ranges)
     else:
         raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
     return DiagnosticsResult(

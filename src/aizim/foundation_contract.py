@@ -16,7 +16,6 @@ ARTIFACT_NAMES: Final = frozenset(
 DENIED_OPERATIONS: Final = frozenset(
     {
         "connect_gateway_unix_socket",
-        "connect_nonallowlisted_tcp",
         "read_secret_environment",
         "read_state_database",
         "scratch_symlink_to_state",
@@ -26,7 +25,9 @@ DENIED_OPERATIONS: Final = frozenset(
         "write_unleased_file",
     }
 )
-ALLOWED_OPERATIONS: Final = frozenset({"read_allowed_view", "write_allowed_scratch"})
+ALLOWED_OPERATIONS: Final = frozenset(
+    {"connect_host_tcp", "read_allowed_view", "write_allowed_scratch"}
+)
 STABLE_MANIFEST_FIELDS: Final = (
     "agent_harness_binary_hash",
     "agent_harness_name",

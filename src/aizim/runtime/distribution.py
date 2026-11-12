@@ -8,12 +8,6 @@ from typing import Final, Literal
 
 from aizim import __version__
 
-from .provider_executables import (
-    ProviderExecutableError,
-    codex_ripgrep_executable,
-    discover_codex_executable,
-)
-
 DISTRIBUTION_ENVIRONMENT: Final[frozenset[str]] = frozenset(
     {
         "AIZIM_DISTRIBUTION_MODE",
@@ -75,11 +69,7 @@ def resolve_ripgrep_executable(environ: Mapping[str, str]) -> Path:
             raise DistributionError("RIPGREP_EXECUTABLE_UNAVAILABLE") from error
         if executable.is_file() and os.access(executable, os.X_OK):
             return executable
-    try:
-        codex = discover_codex_executable(environ)
-        return codex_ripgrep_executable(codex)
-    except ProviderExecutableError as error:
-        raise DistributionError("RIPGREP_EXECUTABLE_UNAVAILABLE") from error
+    raise DistributionError("RIPGREP_EXECUTABLE_UNAVAILABLE")
 
 
 def without_distribution_environment(environ: Mapping[str, str]) -> dict[str, str]:

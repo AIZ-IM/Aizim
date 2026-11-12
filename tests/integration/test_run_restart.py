@@ -49,6 +49,11 @@ class WaitingBackend:
         raise AssertionError("unreachable")
 
 
+class AbstainedBackend:
+    async def run(self, request: AgentRequest) -> AgentResult:
+        return AgentResult(request.worker_id, "abstained", "no proof", "a" * 64, "b" * 64, 0)
+
+
 class FailedBackend:
     async def run(self, request: AgentRequest) -> AgentResult:
         return AgentResult(request.worker_id, "failed", "failed", "a" * 64, "b" * 64, 4)
@@ -152,5 +157,23 @@ async def test_failed_backend_is_propagated_after_lease_cleanup(tmp_path: Path) 
         events = [item.envelope.event_type for item in state.query_events("run-1")]
         assert events[-1] == "LeaseReleased"
         assert "AgentRunCompleted" in events
+    finally:
+        state.close()
+
+
+@pytest.mark.asyncio
+async def test_abstained_backend_is_distinguished_from_a_failed_backend(tmp_path: Path) -> None:
+    state, broker = _open(tmp_path, "abstained-result")
+    try:
+        with pytest.raises(WorkerExecutionError, match=r"^WORKER_ABSTAINED$"):
+            await _runner(state, broker, tmp_path).run(_directive(), AbstainedBackend())
+
+        assert state.active_document_leases() == ()
+        stopped = [
+            item.envelope.payload["reason_code"]
+            for item in state.query_events("run-1")
+            if item.envelope.event_type == "WorkerStopped"
+        ]
+        assert stopped == ["WORKER_ABSTAINED"]
     finally:
         state.close()

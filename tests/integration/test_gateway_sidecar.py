@@ -9,7 +9,7 @@ from pathlib import Path
 
 import anyio
 import pytest
-from mcp.shared.memory import create_connected_server_and_client_session
+from conftest import create_connected_server_and_client_session
 
 from aizim.cli import main as cli_main
 from aizim.domain import AgentRole
@@ -135,14 +135,14 @@ async def test_sidecar_lists_role_tools_and_forwards_public_results(tmp_path: Pa
             await broker.aclose()
 
     assert tuple(tool.name for tool in listed.tools) == (GatewayTool.STATE_QUERY.value,)
-    assert listed.tools[0].inputSchema["properties"]["payload"] == {
+    assert listed.tools[0].input_schema["properties"]["payload"] == {
         "type": "object",
         "properties": {"query": {"type": "string", "minLength": 1}},
         "required": ["query"],
         "additionalProperties": False,
     }
-    assert result.isError is False
-    assert result.structuredContent == {
+    assert result.is_error is False
+    assert result.structured_content == {
         "ok": True,
         "result": {"worker_id": "worker-7", "payload": {"query": "workers"}},
     }
@@ -188,12 +188,12 @@ async def test_forged_undiscovered_tool_reaches_call_time_denial(tmp_path: Path)
             if event.envelope.event_type == "CapabilityDenied"
         )
 
-    assert result.isError is True
-    assert result.structuredContent is not None
-    assert result.structuredContent["error"]["code"] == "CAPABILITY_DENIED"
+    assert result.is_error is True
+    assert result.structured_content is not None
+    assert result.structured_content["error"]["code"] == "CAPABILITY_DENIED"
     assert calls == []
     assert len(denials) == 1
-    rendered = json.dumps(result.structuredContent)
+    rendered = json.dumps(result.structured_content)
     assert RAW_TOKEN not in rendered
     assert str(socket_path) not in rendered
 

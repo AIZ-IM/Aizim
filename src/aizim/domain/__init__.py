@@ -8,7 +8,7 @@ from ..config.model import (
     RunManifest,
     RunPolicy,
 )
-from .controller_provider import ControllerProviderId, is_controller_provider_id
+from .controller_provider import is_controller_provider_id
 from .model import (
     AgentRole,
     Contribution,
@@ -34,7 +34,6 @@ __all__ = [
     "AlignmentReviewKind",
     "Contribution",
     "ContributionPayloadKind",
-    "ControllerProviderId",
     "EpochPair",
     "FileLease",
     "FormalParticipation",

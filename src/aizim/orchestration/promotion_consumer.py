@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
+from datetime import timedelta
 
 from aizim.knowledge import (
     ArtifactStore,
@@ -12,6 +14,11 @@ from aizim.knowledge import (
 from aizim.state import PublicationQueueState, StateService
 
 from .knowledge_stream import KnowledgeStream
+
+# A live owner heartbeats every second; a claim this old belongs to a consumer that stopped.
+STALE_PROMOTION_CLAIM = timedelta(minutes=1)
+# How often a long-lived consumer looks for promotions that no submission announced.
+_RECOVERY_POLL_SECONDS = 15.0
 
 
 class PromotionConsumerError(RuntimeError):
@@ -44,11 +51,11 @@ class PromotionConsumer:
         self._wake.set()
 
     async def run(self, stop: asyncio.Event) -> None:
+        # Drain persisted work immediately, including submissions made by an earlier process.
         while not stop.is_set():
-            await self._wake.wait()
             self._wake.clear()
             while not stop.is_set():
-                outcome = await self._service().promote_next()
+                outcome = await self._next_outcome()
                 if outcome is None:
                     break
                 if outcome.state is not PublicationQueueState.PUBLISHED:
@@ -61,6 +68,22 @@ class PromotionConsumer:
                     return
                 self._published.set()
                 await self._knowledge.notify_published()
+            if not stop.is_set():
+                await self._next_wake()
+
+    async def _next_wake(self) -> None:
+        # Every consumer also finds claims whose owner stopped heartbeating, even if no
+        # submission in this process announced them. Failure handling is independent.
+        with suppress(TimeoutError):
+            await asyncio.wait_for(self._wake.wait(), _RECOVERY_POLL_SECONDS)
+
+    async def _next_outcome(self) -> PromotionOutcome | None:
+        service = self._service()
+        outcome = await service.promote_next()
+        if outcome is None:
+            # An abandoned claim blocks every later promotion until it is taken over.
+            outcome = await service.recover_next(STALE_PROMOTION_CLAIM)
+        return outcome
 
     async def wait_for_epoch(self, epoch: int) -> None:
         while KnowledgeReader(self._state).read(epoch - 1) == ():

@@ -1,0 +1,73 @@
+consumer_mode=0700
+version_exact=true
+version=aizim 0.1.0
+{
+  "checks": [
+    {
+      "detail": "project readiness is unavailable",
+      "id": "python",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "uv",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "lean",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "lake",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "lean_project",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "disk_floor",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "runtime_mode",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "claude",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "codex",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "sandbox_exec",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "lean_lsp_mcp",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "leanclient",
+      "status": "FAIL"
+    },
+    {
+      "detail": "project readiness is unavailable",
+      "id": "state_service",
+      "status": "FAIL"
+    }
+  ],
+  "ready": false
+}

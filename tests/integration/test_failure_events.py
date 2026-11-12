@@ -9,9 +9,9 @@ from typing import cast
 
 import pytest
 
-import aizim.orchestration.conductor as conductor_module
 from aizim.config.model import ResourcePolicy
 from aizim.domain import EpochPair, FileLease, sha256_bytes
+from aizim.gateway.socket_alias import ProjectSocketAlias
 from aizim.knowledge import (
     ArtifactStore,
     ContributionDraft,
@@ -27,7 +27,7 @@ from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.knowledge_stream import KnowledgeStream
 from aizim.orchestration.promotion_consumer import PromotionConsumer, PromotionConsumerError
 from aizim.orchestration.resources import ResourceGovernor
-from aizim.orchestration.runner import RunFailureCategory, _run_exit_code
+from aizim.orchestration.worker_host import WorkerExecutionHost, _HostFactories
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 _BASE = "a" * 64
@@ -82,7 +82,11 @@ class FailingConsumer:
 
     async def wait_for_failure(self) -> None:
         await self._failed.wait()
-        raise RuntimeError("PROMOTION_FAILED")
+        raise PromotionConsumerError("PROMOTION_FAILED")
+
+    async def wait_for_epoch(self, epoch: int) -> None:
+        del epoch
+        await self.wait_for_failure()
 
 
 def _state(tmp_path: Path) -> StateService:
@@ -100,21 +104,12 @@ def _state(tmp_path: Path) -> StateService:
 
 
 @pytest.mark.asyncio
-@pytest.mark.lean_integration
 @pytest.mark.parametrize(
-    ("verifier", "reason_code", "category"),
+    ("verifier", "reason_code"),
     (
-        (
-            RejectingVerifier(),
-            "LEAN_VERIFICATION_FAILED",
-            RunFailureCategory.LEAN_VERIFICATION,
-        ),
-        (
-            EpochFailingVerifier(),
-            "EPOCH_PROJECT_MISMATCH",
-            RunFailureCategory.AUTHORIZATION,
-        ),
-        (RuntimeFailingVerifier(), "PROMOTION_FAILED", RunFailureCategory.RUNTIME),
+        (RejectingVerifier(), "LEAN_VERIFICATION_FAILED"),
+        (EpochFailingVerifier(), "EPOCH_PROJECT_MISMATCH"),
+        (RuntimeFailingVerifier(), "PROMOTION_FAILED"),
     ),
 )
 async def test_failed_promotion_wakes_the_terminal_epoch_waiter(
@@ -122,7 +117,6 @@ async def test_failed_promotion_wakes_the_terminal_epoch_waiter(
     monkeypatch: pytest.MonkeyPatch,
     verifier: RejectingVerifier,
     reason_code: str,
-    category: RunFailureCategory,
 ) -> None:
     state = _state(tmp_path)
     source = b"import Std\ntheorem candidate : True := True.intro\n"
@@ -177,10 +171,20 @@ async def test_failed_promotion_wakes_the_terminal_epoch_waiter(
         with pytest.raises(PromotionConsumerError) as raised:
             await asyncio.wait_for(waiter, timeout=0.5)
         assert raised.value.reason_code == reason_code
-        assert _run_exit_code(raised.value) == category
-        assert "PromotionFailed" in [
-            record.envelope.event_type for record in state.query_events("run-1")
-        ]
+        with pytest.raises(PromotionConsumerError) as failure:
+            await asyncio.wait_for(consumer.wait_for_failure(), timeout=0.5)
+        assert failure.value.reason_code == reason_code
+        failed = next(
+            record.envelope.payload
+            for record in state.query_events("run-1")
+            if record.envelope.event_type == "PromotionFailed"
+        )
+        assert failed["contribution_id"] == "contribution-1"
+        assert failed["reason_code"] == reason_code
+        artifact_hash = failed["artifact_hash"]
+        assert type(artifact_hash) is str
+        diagnostics = json.loads(artifacts.load("run-1", "diagnostics", artifact_hash))
+        assert diagnostics["reason"] == reason_code
     finally:
         if not waiter.done():
             waiter.cancel()
@@ -193,10 +197,10 @@ async def test_failed_promotion_wakes_the_terminal_epoch_waiter(
 
 
 @pytest.mark.asyncio
-async def test_conductor_aborts_waiting_worker_after_failed_promotion(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+async def test_worker_host_cancels_waiting_knowledge_read_after_failed_promotion(
+    tmp_path: Path,
 ) -> None:
-    state = StateService(StateServiceConfig(tmp_path, "conductor-failure"))
+    state = StateService(StateServiceConfig(tmp_path, "host-promotion-failure"))
     epoch = smoke_base_epoch(_SMOKE_ROOT)
     state.append_event(
         AppendEventCommand(
@@ -207,30 +211,23 @@ async def test_conductor_aborts_waiting_worker_after_failed_promotion(
             {"project_id": "project", "base_epoch": epoch, "knowledge_epoch": 0},
         )
     )
-    waiting = tmp_path / "waiting.json"
-    waiting.write_text(
-        json.dumps(
-            {
-                "actions": [
-                    {
-                        "operation": "knowledge.read",
-                        "payload": {"after_knowledge_epoch": 0, "wait": True},
-                    }
-                ]
-            }
-        )
-    )
-    monkeypatch.setattr(conductor_module, "PromotionConsumer", FailingConsumer)
-    conductor = conductor_module.ResearchConductor(
+    host = await WorkerExecutionHost._open_with_factories(
         state,
         tmp_path,
         _SMOKE_ROOT,
         ResourceGovernor(ResourcePolicy(), disk_free=lambda _path: 3_000_000_000),
+        "run-1",
+        _HostFactories(ProjectSocketAlias, FailingConsumer),
     )
+    waiting = asyncio.create_task(KnowledgeStream(state).read("run-1", "worker-1", 0, wait=True))
     try:
-        with pytest.raises(RuntimeError, match="PROMOTION_FAILED"):
-            await asyncio.wait_for(conductor.run_fake(waiting, waiting), timeout=1)
-        events = [record.envelope.event_type for record in state.query_events()]
-        assert "RunAborted" in events
+        with pytest.raises(PromotionConsumerError, match="PROMOTION_FAILED"):
+            await asyncio.wait_for(host._race_failure(waiting), timeout=1)
+        assert waiting.cancelled()
+        assert state.active_document_leases() == ()
     finally:
-        state.close()
+        try:
+            await host.aclose()
+            assert not (tmp_path / ".aizim/run/gateway.sock").exists()
+        finally:
+            state.close()

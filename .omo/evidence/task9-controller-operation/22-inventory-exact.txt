@@ -1,0 +1,4 @@
+inventory_match=true
+presplit_cases=26
+postsplit_cases=26
+duplicate_postsplit_cases=0

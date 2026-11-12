@@ -5,6 +5,7 @@ import hashlib
 import os
 import shutil
 import socket
+import sys
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
@@ -13,6 +14,8 @@ import pytest
 from aizim.agents.macos_sandbox import MacOSSandboxAdapter
 from aizim.agents.sandbox import ProbeOperation, ProbeRequest
 from aizim.agents.workspace_view import ViewSource, WorkspaceViewBuilder
+from aizim.omp.executable import resolve_omp
+from aizim.omp.runtime import OMP_VERSION
 from aizim.runtime.layout import ProjectLayout
 from aizim.state import StateService, StateServiceConfig
 
@@ -46,9 +49,10 @@ def accepted(server: socket.socket) -> bool:
 
 
 @pytest.mark.macos_sandbox
-def test_real_macos_sandbox_denies_all_protected_surfaces() -> None:
-    with TemporaryDirectory(prefix="aizim-attack-") as directory:
-        root = Path(shutil.copytree(FIXTURE, Path(directory) / "project"))
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS")
+def test_real_macos_sandbox_denies_protected_surfaces_and_allows_host_tcp() -> None:
+    with TemporaryDirectory(prefix="aizim-attack-", dir=Path.home()) as directory:
+        root = Path(shutil.copytree(FIXTURE, Path(directory) / "project")).resolve()
         layout = ProjectLayout.from_lean_project(root)
         layout.prepare_runtime()
         allowed = root / "Allowed.lean"
@@ -75,7 +79,7 @@ def test_real_macos_sandbox_denies_all_protected_surfaces() -> None:
                 tcp_host, tcp_port = tcp.getsockname()
                 environment = dict(os.environ, AIZIM_ATTACK_SECRET=secret)
                 report = asyncio.run(
-                    MacOSSandboxAdapter().launch_probe(
+                    MacOSSandboxAdapter.for_executable(resolve_omp(os.environ).path).launch_probe(
                         ProbeRequest(
                             probe_id="probe-1",
                             run_id="run-1",
@@ -113,21 +117,28 @@ def test_real_macos_sandbox_denies_all_protected_surfaces() -> None:
 
             assert report.passed
             assert report.platform_id == "darwin"
-            assert report.codex_version == "codex-cli 0.154.0"
+            assert report.agent_version == f"omp/{OMP_VERSION}"
             assert report.sandbox_executable == "/usr/bin/sandbox-exec"
             assert len(report.policy_hash) == 64
             assert tuple(attempt.operation for attempt in report.attempts) == tuple(ProbeOperation)
-            assert all(attempt.verdict == "denied" for attempt in report.attempts[:9])
-            assert all(attempt.verdict == "allowed" for attempt in report.attempts[9:])
+            allowed_operations = {
+                ProbeOperation.CONNECT_HOST_TCP, ProbeOperation.WRITE_ALLOWED_SCRATCH,
+                ProbeOperation.READ_ALLOWED_VIEW,
+            }
+            assert all(
+                attempt.verdict
+                == ("allowed" if attempt.operation in allowed_operations else "denied")
+                for attempt in report.attempts
+            )
             assert report.unexpected_allows == ()
             assert before_assets == after_assets
             assert before_digest == after_digest == report.logical_digest_before
             assert report.logical_digest_after == before_digest
-            assert not accepted(tcp)
+            assert accepted(tcp)
             assert not accepted(gateway)
             assert len(events) == 11
-            assert [event.event_type for event in events].count("SandboxProbeDenied") == 9
-            assert [event.event_type for event in events].count("SandboxProbePassed") == 2
+            assert [event.event_type for event in events].count("SandboxProbeDenied") == 8
+            assert [event.event_type for event in events].count("SandboxProbePassed") == 3
             probe_ids: list[str] = []
             for event in events:
                 probe_id = event.payload["probe_id"]

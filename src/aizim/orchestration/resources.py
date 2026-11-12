@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -49,11 +49,11 @@ class ResourceGovernor:
             raise ResourcePolicyError("DISK_FLOOR_NOT_MET")
 
     @asynccontextmanager
-    async def proof_slot(self) -> AsyncIterator[None]:
+    async def proof_slot(self) -> AsyncGenerator[None]:
         async with self._proof_slots, self._scratch_slots:
             yield
 
     @asynccontextmanager
-    async def lsp_slot(self) -> AsyncIterator[None]:
+    async def lsp_slot(self) -> AsyncGenerator[None]:
         async with self._lsp_slots:
             yield

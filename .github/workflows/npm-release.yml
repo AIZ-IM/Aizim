@@ -45,26 +45,10 @@ jobs:
           chmod 700 "$RUNNER_TEMP/aizim-private-tmp"
           echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"
       - name: Install Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - name: Install Lean without caches
-        uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9 # v1.5.0
-        with:
-          auto-config: "false"
-          build: "false"
-          test: "false"
-          use-github-cache: "false"
-          use-mathlib-cache: "false"
-          lake-package-directory: examples/smoke_lean
-      - name: Enable Linux sandbox namespaces
-        if: runner.os == 'Linux'
-        run: |
-          sudo sysctl -w kernel.unprivileged_userns_clone=1
-          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
       - name: Validate exact release inputs
         run: |
           node -e 'const {AIZIM_RELEASE_COMMIT:c,AIZIM_RELEASE_VERSION:v}=process.env;if(!/^[0-9a-f]{40}$/.test(c)||!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v))process.exit(1)'
@@ -72,10 +56,10 @@ jobs:
           test "$(node -p 'require("./package.json").version')" = "$AIZIM_RELEASE_VERSION"
       - name: Install latest pinned npm
         run: |
-          npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1
+          npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.2.2
           echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"
-          test "$(node --version)" = "v26.5.0"
-          test "$("$RUNNER_TEMP/npm-12/bin/npm" --version)" = "12.0.1"
+          test "$(node --version)" = "v26.13.0"
+          test "$("$RUNNER_TEMP/npm-12/bin/npm" --version)" = "12.2.2"
       - name: Build and test release candidate
         run: |
           npm install
@@ -92,7 +76,7 @@ jobs:
         env:
           AIZIM_TARGET: ${{ matrix.target }}
       - name: Upload native release evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: aizim-release-${{ matrix.target }}-${{ inputs.commit_sha }}
           if-no-files-found: error
@@ -117,12 +101,12 @@ jobs:
           ref: ${{ inputs.commit_sha }}
           persist-credentials: false
       - name: Install Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           package-manager-cache: false
       - name: Download native release evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: aizim-release-*-${{ inputs.commit_sha }}
           path: ${{ runner.temp }}/aizim-release-bundle
@@ -135,7 +119,7 @@ jobs:
             --version "$AIZIM_RELEASE_VERSION" \
             --output "$RUNNER_TEMP/aizim-release-bundle/aggregate.json"
       - name: Upload verified release bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: aizim-release-bundle-${{ inputs.version }}-${{ inputs.commit_sha }}
           if-no-files-found: error

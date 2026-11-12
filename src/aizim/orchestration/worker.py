@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+from datetime import timedelta
 from pathlib import Path
 
 from aizim.agents import AgentRequest
@@ -21,6 +22,7 @@ from .worker_events import record_crashed, record_schedule, record_started, reco
 from .worker_lifecycle import record_agent_result, release_worker_lease
 
 _PROOF_WORKER_PROMPT = Path(__file__).parent.parent / "agents/prompts/proof_worker.md"
+_STOP_REASONS = {"submitted": "COMPLETED", "abstained": "WORKER_ABSTAINED"}
 
 
 class WorkerExecutionError(RuntimeError):
@@ -59,22 +61,28 @@ class WorkerRunner:
             execution_id,
             directive.role,
         )
-        lease = await self._broker.create_document(
-            self._run_id,
-            directive.worker_id,
-            worker_path(self._broker.source_root, self._run_id, directive.worker_id),
-            directive.initial_source,
-            current_epoch(self._state),
-        )
-        record_started(self._state, self._run_id, directive.worker_id, directive.role)
-        self._save(directive, execution_id, lease, directive.budget, False)
+        lease: FileLease | None = None
         primary_failure: BaseException | None = None
         try:
             async with self._governor.proof_slot():
-                session = self._authority.issue(self._run_id, directive, lease)
-                result = await asyncio.wait_for(
-                    backend.run(self._request(directive, lease, session)), directive.timeout_seconds
-                )
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + directive.timeout_seconds
+                async with asyncio.timeout_at(deadline):
+                    lease = await self._broker.create_document(
+                        self._run_id,
+                        directive.worker_id,
+                        worker_path(self._broker.source_root, self._run_id, directive.worker_id),
+                        directive.initial_source,
+                        current_epoch(self._state),
+                        lease_lifetime=timedelta(seconds=directive.timeout_seconds),
+                    )
+                    record_started(self._state, self._run_id, directive.worker_id, directive.role)
+                    self._save(directive, execution_id, lease, directive.budget, False)
+                    session = self._authority.issue(self._run_id, directive, lease)
+                    request = self._request(directive, lease, session)
+                    if loop.time() >= deadline:
+                        raise TimeoutError
+                    result = await backend.run(request)
         except TimeoutError as error:
             self._state.append_event(
                 AppendEventCommand(
@@ -86,22 +94,25 @@ class WorkerRunner:
                 )
             )
             record_stopped(self._state, self._run_id, directive.worker_id, "WORKER_TIMEOUT")
-            self._save(directive, execution_id, lease, 0, True)
+            if lease is not None:
+                self._save(directive, execution_id, lease, 0, True)
             primary_failure = WorkerExecutionError("WORKER_TIMEOUT")
             raise primary_failure from error
         except asyncio.CancelledError as error:
             primary_failure = error
             record_crashed(self._state, self._run_id, directive.worker_id, "WORKER_CANCELLED")
-            self._save(directive, execution_id, lease, 0, True)
+            if lease is not None:
+                self._save(directive, execution_id, lease, 0, True)
             raise
         except Exception as error:
             primary_failure = error
             record_crashed(self._state, self._run_id, directive.worker_id, "WORKER_CRASHED")
-            self._save(directive, execution_id, lease, 0, True)
+            if lease is not None:
+                self._save(directive, execution_id, lease, 0, True)
             raise
         else:
             record_agent_result(self._state, self._run_id, execution_id, result)
-            reason = "COMPLETED" if result.status == "submitted" else "BACKEND_FAILED"
+            reason = _STOP_REASONS.get(result.status, "BACKEND_FAILED")
             record_stopped(self._state, self._run_id, directive.worker_id, reason)
             cursor = self._save(directive, execution_id, lease, 0, True)
             if result.status != "submitted":
@@ -109,7 +120,8 @@ class WorkerRunner:
                 raise primary_failure
             return cursor
         finally:
-            await release_worker_lease(self._broker, self._run_id, lease, primary_failure)
+            if lease is not None:
+                await release_worker_lease(self._broker, self._run_id, lease, primary_failure)
 
     def cursor(self, worker_id: str) -> WorkerCursor | None:
         if type(worker_id) is not str or not worker_id:

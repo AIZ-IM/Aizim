@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK -- existing broker locks require asyncio compatibility
+import asyncio  # ANYIO_OK: existing broker locks require asyncio compatibility
+from datetime import timedelta
 from pathlib import Path, PurePosixPath
 
 from aizim.domain import EpochPair, FileLease, sha256_bytes
@@ -48,7 +49,12 @@ class DocumentBroker:
         relative_path: PurePosixPath,
         initial_content: bytes,
         epoch_pair: EpochPair,
+        *,
+        lease_lifetime: timedelta | None = None,
     ) -> FileLease:
+        lifetime = self._dependencies.lease_lifetime if lease_lifetime is None else lease_lifetime
+        if type(lifetime) is not timedelta or lifetime <= timedelta(0):
+            raise DocumentBrokerError("INVALID_LEASE_LIFETIME")
         await self._ensure_recovered()
         try:
             canonical = self._storage.canonical_document(run_id, worker_id, relative_path)
@@ -69,14 +75,14 @@ class DocumentBroker:
         try:
             body_hash = self._storage.create(run_id, canonical, initial_content)
             created = True
-            lease = self._lease(run_id, worker_id, canonical, epoch_pair, body_hash)
+            lease = self._lease(run_id, worker_id, canonical, epoch_pair, body_hash, lifetime)
             self._state.grant_document_lease(lease, canonical)
             return lease
         except (DocumentIoError, LeanPathError, DocumentStateError) as error:
             if created:
                 self._discard_or_raise(run_id, canonical)
             raise DocumentBrokerError(str(error)) from None
-        except Exception:  # noqa: BROAD_EXCEPT_OK -- transactional storage boundary
+        except Exception:  # BROAD_EXCEPT_OK: transactional storage boundary
             if created:
                 self._discard_or_raise(run_id, canonical)
             raise DocumentBrokerError("DOCUMENT_CREATION_FAILED") from None
@@ -90,7 +96,7 @@ class DocumentBroker:
             body = self._storage.read(document)
         except (DocumentIoError, LeanPathError, DocumentStateError) as error:
             raise DocumentBrokerError(str(error)) from None
-        except Exception:  # noqa: BROAD_EXCEPT_OK -- transactional storage boundary
+        except Exception:  # BROAD_EXCEPT_OK: transactional storage boundary
             raise DocumentBrokerError("DOCUMENT_READ_FAILED") from None
         if sha256_bytes(body) != document.content_hash:
             raise DocumentBrokerError("DOCUMENT_CONTENT_MISMATCH")
@@ -144,7 +150,7 @@ class DocumentBroker:
             except DocumentBrokerError:
                 self._compensate_or_raise(preparation, replaced)
                 raise
-            except Exception:  # noqa: BROAD_EXCEPT_OK -- transactional recovery boundary
+            except Exception:  # BROAD_EXCEPT_OK: transactional recovery boundary
                 self._compensate_or_raise(preparation, replaced)
                 raise DocumentBrokerError("DOCUMENT_STATE_COMMIT_FAILED") from None
 
@@ -154,7 +160,7 @@ class DocumentBroker:
             self._state.release_document_lease(run_id, worker_id, lease_id)
         except DocumentStateError as error:
             raise DocumentBrokerError(str(error)) from None
-        except Exception:  # noqa: BROAD_EXCEPT_OK -- state facade boundary
+        except Exception:  # BROAD_EXCEPT_OK: state facade boundary
             raise DocumentBrokerError("DOCUMENT_RELEASE_FAILED") from None
 
     async def _trusted_runtime_document(
@@ -192,7 +198,7 @@ class DocumentBroker:
                     self._state.recover_document_lease(lease)
             except (DocumentIoError, LeanPathError, DocumentStateError) as error:
                 raise DocumentBrokerError(str(error)) from None
-            except Exception:  # noqa: BROAD_EXCEPT_OK -- transactional recovery boundary
+            except Exception:  # BROAD_EXCEPT_OK: transactional recovery boundary
                 raise DocumentBrokerError("DOCUMENT_RECOVERY_FAILED") from None
             self._recovered = True
 
@@ -203,6 +209,7 @@ class DocumentBroker:
         relative: PurePosixPath,
         epoch_pair: EpochPair,
         content_hash: str,
+        lifetime: timedelta,
     ) -> FileLease:
         namespace_hash = sha256_bytes(f"{run_id}\0{worker_id}".encode())[:20]
         return FileLease(
@@ -214,7 +221,7 @@ class DocumentBroker:
             epoch_pair=epoch_pair,
             file_version=0,
             content_hash=content_hash,
-            expires_at=self._dependencies.clock() + self._dependencies.lease_lifetime,
+            expires_at=self._dependencies.clock() + lifetime,
             physical_file=None,
             recovery_metadata=(("display_name", relative.as_posix()),),
         )
@@ -229,13 +236,13 @@ class DocumentBroker:
     def _compensate_or_raise(self, preparation: DocumentPreparation | None, replaced: bool) -> None:
         try:
             self._compensate(preparation, replaced)
-        except Exception:  # noqa: BROAD_EXCEPT_OK -- compensation boundary
+        except Exception:  # BROAD_EXCEPT_OK: compensation boundary
             raise DocumentBrokerError("DOCUMENT_RECOVERY_FAILED") from None
 
     def _discard_or_raise(self, run_id: str, relative: PurePosixPath) -> None:
         try:
             self._storage.discard(run_id, relative)
-        except Exception:  # noqa: BROAD_EXCEPT_OK -- compensation boundary
+        except Exception:  # BROAD_EXCEPT_OK: compensation boundary
             raise DocumentBrokerError("DOCUMENT_RECOVERY_FAILED") from None
 
     @staticmethod

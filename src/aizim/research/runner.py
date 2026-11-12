@@ -7,16 +7,9 @@ import signal
 from datetime import UTC, datetime
 from pathlib import Path
 
+from aizim.agents.omp_backend import create_omp_backend, preflight_omp_worker
 from aizim.config import load_config
-from aizim.domain import ControllerProviderId
 from aizim.domain.serialization import JsonValue
-from aizim.orchestration.codex_worker import create_codex_backend, preflight_codex_worker
-from aizim.orchestration.controller_dispatcher import record_controller_stop
-from aizim.orchestration.controller_lifecycle import recover_unclean_controller, start_controller
-from aizim.orchestration.controller_providers import (
-    build_controller_backend,
-    resolve_controller_runtime,
-)
 from aizim.orchestration.resources import ResourceGovernor
 from aizim.orchestration.worker_host import WorkerExecutionHost
 from aizim.runtime.layout import ProjectLayout
@@ -24,21 +17,17 @@ from aizim.runtime.state_process import acquire_state_process
 from aizim.state import StateService, StateServiceConfig
 from aizim.state.events import MonotoneUlidFactory
 
-from .engine import LeanExecutor, ResearchEngine
-from .records import ResearchError, object_value, records, save, text
+from .engine import RESEARCH_GATEWAY_LIMITS, LeanExecutor, ResearchEngine
+from .records import records, save, text
 from .search import lean_search
 
 
 async def run_research(
     project: Path, *, watch: bool = False, max_seconds: int | None = None
 ) -> dict[str, int]:
-    import json
-
     layout = ProjectLayout.from_lean_project(project)
     layout.validate_runtime()
     config = load_config(layout.root)
-    if not config.model:
-        raise ResearchError("WORKER_MODEL_REQUIRED_SET_AIZIM_MODEL")
     governor = ResourceGovernor(
         config.resources, disk_free=lambda path: shutil.disk_usage(path).free
     )
@@ -49,11 +38,10 @@ async def run_research(
     host: WorkerExecutionHost | None = None
     engine: ResearchEngine | None = None
     registered: list[signal.Signals] = []
-    started = False
     run_record: dict[str, JsonValue] = {
         "id": session,
         "status": "running",
-        "model": config.model,
+        "model": "pending",
         "participation": config.run.participation.value,
         "started_at": datetime.now(UTC).isoformat(),
         "finished_at": "",
@@ -62,58 +50,31 @@ async def run_research(
     try:
         state = StateService(StateServiceConfig(layout.root, session))
         await state.start()
-        recover_unclean_controller(state)
-        configured = state.query_projection("controller", "primary")
-        if configured is None:
-            raise ResearchError("CONTROLLER_NOT_CONFIGURED")
-        settings = object_value(object_value(json.loads(configured.state_json))["payload"])
         environment = dict(os.environ)
-        runtime = resolve_controller_runtime(
-            ControllerProviderId(text(settings["provider"])), environment
-        )
-        configured_model = settings.get("model")
-        controller_model = None if configured_model is None else text(configured_model)
-
-        def controller():
-            return build_controller_backend(runtime, layout.root, controller_model, environment)
-
-        await controller().preflight()
-        await preflight_codex_worker(layout.root, runtime.codex, environment)
+        model = await preflight_omp_worker(layout.root, environment)
+        run_record["model"] = model
         host = await WorkerExecutionHost.open(
-            state, layout.root, layout.root, governor, session, continue_on_failure=True
+            state,
+            layout.root,
+            layout.root,
+            governor,
+            session,
+            continue_on_failure=True,
+            gateway_limits=RESEARCH_GATEWAY_LIMITS,
         )
         await host.prewarm()
-        start_controller(
-            state,
-            session_id=session,
-            controller_version=configured.version,
-            provider=runtime.provider,
-            backend_version=runtime.controller.version,
-            executable_hash=runtime.controller.sha256,
-        )
-        started = True
-
-        def validate_control() -> None:
-            current = state.query_projection("controller", "primary")
-            if current is None or current.version != configured.version:
-                raise ResearchError("CONTROLLER_CONFIGURATION_CHANGED_RESTART_REQUIRED")
-
         executor = LeanExecutor(
             state,
             layout.root,
             host,
-            create_codex_backend(runtime.codex, environment),
-            config.model,
-            controller,
+            create_omp_backend(environment),
         )
         engine = ResearchEngine(
             state,
             executor,
             session,
-            config.model,
+            model,
             workers=min(config.resources.max_proof_workers, config.resources.scratch_slots),
-            controller_model=controller_model or text(settings["provider"]) + "-default",
-            validate_control=validate_control,
             context_search=lambda query: lean_search(layout.root, query, limit=8),
         )
         save(state, "run", session, run_record, actor="research_supervisor", run_id=session)
@@ -127,6 +88,8 @@ async def run_research(
         except TimeoutError:
             engine.request_stop()
             run_record["reason"] = "time_limit"
+        if engine.reason:
+            run_record["reason"] = engine.reason
         run_record["status"] = "interrupted" if engine.stop.is_set() else "finished"
         result: dict[str, int] = {}
         for task in records(state, "task"):
@@ -147,17 +110,6 @@ async def run_research(
                 if state is not None:
                     run_record["finished_at"] = datetime.now(UTC).isoformat()
                     try:
-                        if started:
-                            reason = (
-                                "RESEARCH_IDLE"
-                                if run_record["status"] == "finished"
-                                else "TIME_LIMIT"
-                                if run_record["reason"] == "time_limit"
-                                else "CONTROLLER_FAILED"
-                                if run_record["reason"]
-                                else "OPERATOR_SIGNAL"
-                            )
-                            record_controller_stop(state, session, reason)
                         save(
                             state,
                             "run",

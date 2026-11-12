@@ -69,6 +69,10 @@ def extend[T](codecs: dict[str, T], codec: Callable[..., T]) -> None:
                 },
             ),
             "WorkerTimedOut": codec(("worker_id", "execution_id"), ("reason_code",)),
+            # An authorized gateway target raised; the worker received the reason code.
+            "GatewayCallFailed": codec(
+                ("reason_code", "error_type", "role", "worker_id", "operation", "request_id")
+            ),
             "AgentRunCompleted": codec(
                 (
                     "worker_id",

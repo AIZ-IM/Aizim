@@ -221,6 +221,8 @@ class StateService(DocumentStateMethods, PromotionStateMethods):
         }
         if capability.lease_id is not None:
             payload["lease_id"] = capability.lease_id
+        if capability.call_budget is not None:
+            payload["call_budget"] = capability.call_budget
         event = self._event(
             AppendEventCommand(
                 event_type="CapabilityMinted",

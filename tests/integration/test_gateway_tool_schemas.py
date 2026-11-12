@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mcp.shared.memory import create_connected_server_and_client_session
+from conftest import create_connected_server_and_client_session
 
 from aizim.domain import AgentRole
 from aizim.gateway import GatewaySuccess, GatewayTool
@@ -24,7 +24,7 @@ async def test_proof_tools_describe_their_gateway_payload_contracts() -> None:
     ) as client:
         listed = await client.list_tools()
 
-    schemas = {tool.name: tool.inputSchema["properties"]["payload"] for tool in listed.tools}
+    schemas = {tool.name: tool.input_schema["properties"]["payload"] for tool in listed.tools}
     expected = {
         GatewayTool.PROJECT_READ.value: ({"path"}, set()),
         GatewayTool.LEAN_GOAL.value: ({"document_id", "line"}, {"column"}),
@@ -85,7 +85,7 @@ async def test_every_gateway_tool_has_a_closed_payload_schema() -> None:
             create_gateway_server(channel)
         ) as client:
             listed = await client.list_tools()
-        schemas.extend(tool.inputSchema["properties"]["payload"] for tool in listed.tools)
+        schemas.extend(tool.input_schema["properties"]["payload"] for tool in listed.tools)
 
     assert schemas
     assert all(schema["additionalProperties"] is False for schema in schemas)
@@ -99,5 +99,5 @@ async def test_sidecar_rejects_invalid_tool_payload_before_forwarding() -> None:
             {"payload": {"document": "doc-7", "line": 4}},
         )
 
-    assert result.isError is True
+    assert result.is_error is True
     assert channel.calls == []

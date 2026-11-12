@@ -160,7 +160,7 @@ def define_task(store: ResearchStore, params: dict[str, JsonValue]) -> int:
         "max_failures",
         "timeout_seconds",
     }
-    if params.keys() != required:
+    if not required <= params.keys() or params.keys() - required - {"call_budget"}:
         raise ResearchError("INVALID_TASK_FIELDS")
     identity = identifier(params["task_id"])
     if get(store, "task", identity) is not None:
@@ -173,6 +173,8 @@ def define_task(store: ResearchStore, params: dict[str, JsonValue]) -> int:
             raise ResearchError("DEPENDENCY_NOT_FOUND")
     data = {
         **params,
+        "call_budget": params.get("call_budget", 400),
+        "attempt_sequence": 0,
         "status": "pending",
         "rounds": 0,
         "failures": 0,
@@ -193,16 +195,40 @@ def operator_change(store: ResearchStore, params: dict[str, JsonValue]) -> int:
         return define_task(store, body)
     author = text(body.get("author"), limit=256)
     if action in {"task.pause", "task.resume"}:
-        if body.keys() != {"task_id", "author"}:
+        # Resuming may raise execution limits; the target itself stays immutable.
+        limits = body.keys() - {"task_id", "author"}
+        if not {"task_id", "author"} <= body.keys() or (
+            limits
+            and (
+                action == "task.pause"
+                or not limits <= {"max_rounds", "max_failures", "call_budget"}
+            )
+        ):
             raise ResearchError("INVALID_OPERATOR_REQUEST")
         identity = identifier(body["task_id"])
         task = require_task(store, identity)
         if task["status"] == "verified":
             raise ResearchError("TASK_ALREADY_VERIFIED")
-        task["paused"] = action == "task.pause"
-        if action == "task.resume" and task["status"] == "blocked":
-            raise ResearchError("TASK_LIMIT_REACHED_CREATE_A_NEW_TARGET")
-        return save(store, "task", identity, task, actor=author)
+        if action == "task.pause":
+            return save(store, "task", identity, {**task, "paused": True}, actor=author)
+        for field in sorted(limits):
+            value = integer(
+                body[field], minimum=1, maximum=10000 if field == "call_budget" else 1000
+            )
+            if field == "call_budget" and value < integer(task.get("call_budget", 400)):
+                raise ResearchError("TASK_CALL_BUDGET_CANNOT_DECREASE")
+            task[field] = value
+        # A running round settles against the new limits when it closes; any other task
+        # must have a round left, or it would wait in the queue without ever starting.
+        if task["status"] != "running" and (
+            integer(task["rounds"]) >= integer(task["max_rounds"])
+            or integer(task["failures"]) >= integer(task["max_failures"])
+        ):
+            raise ResearchError("TASK_LIMIT_REACHED_RAISE_LIMITS_TO_RESUME")
+        task.pop("infrastructure_failures", None)
+        if task["status"] == "blocked":
+            task["status"] = "pending"
+        return save(store, "task", identity, {**task, "paused": False}, actor=author)
     identity = identifier(body.get("id"))
     task_id = text(body.get("task_id"), empty=True)
     if task_id:
@@ -310,13 +336,20 @@ def valid_record(payload: Mapping[str, JsonValue]) -> bool:
                 "verified_declarations",
                 "paused",
             }
-            if data.keys() != required or data["status"] not in {
-                "pending",
-                "running",
-                "verified",
-                "blocked",
-            }:
+            if (
+                not required <= data.keys()
+                or data.keys()
+                - required
+                - {"infrastructure_failures", "call_budget", "attempt_sequence"}
+                or data["status"] not in {"pending", "running", "verified", "blocked"}
+            ):
                 return False
+            if "infrastructure_failures" in data:
+                integer(data["infrastructure_failures"], minimum=1)
+            if "call_budget" in data:
+                integer(data["call_budget"], minimum=1, maximum=10000)
+            if "attempt_sequence" in data:
+                integer(data["attempt_sequence"])
             statement = text(data["statement"])
             if ":=" in statement or re.search(
                 r"\b(sorry|admit|axiom|unsafe|theorem|import|initialize)\b", statement
@@ -429,7 +462,16 @@ def _valid_attempt(data: dict[str, JsonValue]) -> bool:
     }
     if (
         not required <= data.keys()
-        or data.keys() - required - {"controller_model", "controller_usage"}
+        or data.keys() - required - {
+            "controller_model",
+            "controller_usage",
+            "awaiting_publication",
+            "infrastructure_failure",
+            "charged",
+            "finished_at",
+            "call_budget",
+        }
+        or data.get("awaiting_publication", True) is not True
         or data["status"]
         not in {
             "running",
@@ -447,6 +489,15 @@ def _valid_attempt(data: dict[str, JsonValue]) -> bool:
     texts(data["inbox_ids"])
     texts(data["verified_declarations"])
     integer(data["round"], minimum=1)
+    if "call_budget" in data:
+        integer(data["call_budget"], minimum=1, maximum=10000)
+    for field in ("infrastructure_failure", "charged"):
+        if field in data and type(data[field]) is not bool:
+            return False
+    if "finished_at" in data:
+        finished_at = datetime.fromisoformat(text(data["finished_at"]))
+        if finished_at.utcoffset() != UTC.utcoffset(finished_at):
+            return False
     text(data.get("controller_model", ""), empty=True)
     for usage in (data["usage"], data.get("controller_usage")):
         if usage is None:

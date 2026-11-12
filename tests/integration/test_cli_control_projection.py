@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-import subprocess
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from aizim.cli.control_projection import controller_document, worker_document
-from aizim.cli.state_client import ProjectionDocument, StateClientError
+from aizim.cli.state_client import ProjectionDocument, StateClientError, load_projections
 from aizim.domain.serialization import JsonValue
+from aizim.runtime.layout import ProjectLayout
+from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
 ASSIGNMENT_ID = "a" * 64
 SESSION_ID = f"controller-{'1' * 32}"
 EXECUTION_ID = f"execution-{'2' * 32}"
-SMOKE_SCRIPT = Path(__file__).parents[2] / "scripts" / "qa" / "controller_smoke.py"
 
 
 def projection(
@@ -36,7 +35,7 @@ def controller() -> ProjectionDocument:
     return projection(
         "controller",
         "primary",
-        {"provider": "codex", "model": "gpt-5.6-sol"},
+        {"controller_id": "primary", "provider": "codex", "model": "gpt-5.6-sol"},
     )
 
 
@@ -59,7 +58,7 @@ def roster() -> ProjectionDocument:
     return projection(
         "worker_roster",
         "proof-a",
-        {"role": "proof_explorer", "status": "idle"},
+        {"worker_id": "proof-a", "role": "proof_explorer", "status": "idle"},
     )
 
 
@@ -70,6 +69,7 @@ def assignment() -> ProjectionDocument:
         {
             "assignment_id": ASSIGNMENT_ID,
             "controller_id": "primary",
+            "worker_id": "proof-a",
             "task": "prove the target",
             "task_hash": "c" * 64,
             "task_version": 1,
@@ -112,11 +112,7 @@ def test_controller_document_adds_null_runtime_without_runtime_projection() -> N
 
 
 def test_controller_document_accepts_well_formed_future_provider() -> None:
-    future = projection(
-        "controller",
-        "primary",
-        {"provider": "future_provider-1"},
-    )
+    future = projection("controller", "primary", {"provider": "future_provider-1"})
 
     assert controller_document((future,)) == {
         "controller_id": "primary",
@@ -129,11 +125,7 @@ def test_controller_document_accepts_well_formed_future_provider() -> None:
 
 @pytest.mark.parametrize("provider", ("", "Codex", "contains/path", "a" * 65))
 def test_controller_document_rejects_malformed_provider(provider: str) -> None:
-    malformed = projection(
-        "controller",
-        "primary",
-        {"provider": provider},
-    )
+    malformed = projection("controller", "primary", {"provider": provider})
 
     with pytest.raises(StateClientError, match="controller projection is malformed"):
         controller_document((malformed,))
@@ -267,14 +259,29 @@ def test_worker_document_rejects_malformed_execution(
         worker_document((controller(), roster(), assignment(), malform()))
 
 
-def test_controller_smoke_stdout_is_byte_exact() -> None:
-    result = subprocess.run(
-        [sys.executable, str(SMOKE_SCRIPT)],
-        check=False,
-        capture_output=True,
-        text=True,
+def test_historical_runtime_remains_projectable_after_replay(tmp_path: Path) -> None:
+    stopped: dict[str, JsonValue] = {
+        "controller_id": "primary",
+        "controller_session_id": SESSION_ID,
+        "reason_code": "OPERATOR_SIGNAL",
+    }
+    history = (
+        ("ControllerConfigured", payload_of(controller())),
+        ("ControllerStarted", payload_of(runtime("running"))),
+        ("ControllerStopped", stopped),
     )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout == (
-        "CONTROLLER SMOKE PASS\nassignment_executions=1\nrestart_duplicates=0\n"
+    with StateService(StateServiceConfig(tmp_path, "historical-projection")) as state:
+        for event_type, payload in history:
+            payload.pop("status", None)
+            state.append_event(
+                AppendEventCommand(event_type, "historical-fixture", None, None, payload)
+            )
+        expected_events = state.query_events()
+        assert state.replay_verify().matched
+        assert state.query_events() == expected_events
+    records = load_projections(ProjectLayout(tmp_path))
+    assert controller_document(records) == controller_document(
+        (controller(), runtime("stopped", "OPERATOR_SIGNAL"))
     )
+    with StateService(StateServiceConfig(tmp_path, "historical-observer")) as state:
+        assert state.query_events() == expected_events

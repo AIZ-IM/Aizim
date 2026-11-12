@@ -1,0 +1,4 @@
+npm notice run @aiz.im/aizim@0.1.0 pack
+npm notice run node scripts/npm/pack.mjs
+dist/npm/aiz.im-aizim-darwin-arm64-0.1.0.tgz
+dist/npm/aiz.im-aizim-0.1.0.tgz

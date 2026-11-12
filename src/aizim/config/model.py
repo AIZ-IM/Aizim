@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING, Final, assert_never
 if TYPE_CHECKING:
     from ..domain.model import EpochPair
 
-LEAN_TOOLCHAIN: Final = "leanprover/lean4:v4.32.1"
-LEAN_LSP_MCP_VERSION: Final = "0.28.1"
-LEANCLIENT_VERSION: Final = "0.12.1"
-MCP_VERSION: Final = "1.28.1"
-CODEX_CLI_VERSION: Final = "0.154.0"
+LEAN_TOOLCHAIN: Final = "leanprover/lean4:v4.35.0"
+LEAN_LSP_MCP_VERSION: Final = "0.33.0"
+LEANCLIENT_VERSION: Final = "0.13.2"
+MCP_VERSION: Final = "2.2.0"
+OMP_VERSION: Final = "18.18.2"
+MAGPIE_VERSION: Final = "0.1.3338"
 MIN_FREE_DISK_BYTES: Final = 2_147_483_648
 PROOF_WORKER_TIMEOUT_SECONDS: Final = 60.0
 ALIGNMENT_AUDITOR_TIMEOUT_SECONDS: Final = 60.0
@@ -265,24 +266,19 @@ class RunManifest:
 class AizimConfig:
     run: RunPolicy = field(default_factory=RunPolicy)
     resources: ResourcePolicy = field(default_factory=ResourcePolicy)
-    model: str | None = None
     lean_toolchain: str = LEAN_TOOLCHAIN
     lean_lsp_mcp_version: str = LEAN_LSP_MCP_VERSION
     leanclient_version: str = LEANCLIENT_VERSION
     mcp_version: str = MCP_VERSION
-    codex_cli_version: str = CODEX_CLI_VERSION
 
     def __post_init__(self) -> None:
         if type(self.run) is not RunPolicy or type(self.resources) is not ResourcePolicy:
             raise ConfigError("config", "run and resources must be typed policy records")
-        if self.model is not None:
-            _text(self.model, "model")
         for location, actual, required in (
             ("lean_toolchain", self.lean_toolchain, LEAN_TOOLCHAIN),
             ("lean_lsp_mcp_version", self.lean_lsp_mcp_version, LEAN_LSP_MCP_VERSION),
             ("leanclient_version", self.leanclient_version, LEANCLIENT_VERSION),
             ("mcp_version", self.mcp_version, MCP_VERSION),
-            ("codex_cli_version", self.codex_cli_version, CODEX_CLI_VERSION),
         ):
             if actual != required:
                 raise ConfigError(location, f"must equal exact foundation pin {required}")

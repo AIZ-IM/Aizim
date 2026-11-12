@@ -10,7 +10,7 @@ from aizim.domain.serialization import JsonValue
 
 @dataclass(frozen=True, slots=True)
 class BackendIdentity:
-    name: Literal["fake", "codex", "claude"]
+    name: Literal["fake", "codex", "claude", "omp"]
     version: str
     executable_sha256: str | None
 
@@ -42,6 +42,7 @@ class AgentResult:
     exit_code: int
     policy_hash: str | None = None
     usage: dict[str, int] | None = None
+    model: str | None = None
 
 
 class AgentBackend(Protocol):

@@ -12,6 +12,8 @@ from aizim.domain.serialization import JsonValue
 
 from .capabilities import (
     CapabilitySession,
+    GatewayError,
+    GatewayFailure,
     GatewayTool,
     advertised_tools,
 )
@@ -26,6 +28,10 @@ from .transport_frames import (
     protocol_failure,
     read_frame,
     write_result,
+)
+
+_INTERNAL_FAILURE = GatewayFailure(
+    GatewayError("GATEWAY_INTERNAL", "gateway operation failed", None)
 )
 
 
@@ -86,6 +92,8 @@ async def serve_gateway_channel(
                 operation,
                 payload,
             )
+        except Exception:  # BROAD_EXCEPT_OK: fail this request closed; keep the channel usable
+            result = _INTERNAL_FAILURE
         finally:
             token = ""
         await write_result(writer, result)

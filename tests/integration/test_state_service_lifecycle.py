@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK -- exercises the asyncio Unix-server lifecycle
+import asyncio  # Exercises the asyncio Unix-server lifecycle.
 import socket
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
@@ -81,7 +81,7 @@ async def _round_trip(
 
 
 @contextmanager
-def _holder(script: str, project_root: Path) -> Iterator[subprocess.Popen[str]]:
+def _holder(script: str, project_root: Path) -> Generator[subprocess.Popen[str]]:
     process = subprocess.Popen(
         [sys.executable, "-c", script, str(project_root)],
         stdin=subprocess.PIPE,
@@ -119,9 +119,17 @@ def test_foundation_initialization_rolls_back_after_precommit_process_crash(
     database = project_root / ".aizim" / "state.sqlite3"
     state = subprocess.run(
         [
-            "/usr/bin/sqlite3",
+            sys.executable,
+            "-c",
+            "import sqlite3\n"
+            "import sys\n"
+            "from contextlib import closing\n"
+            "with closing(sqlite3.connect(sys.argv[1], autocommit=True)) as connection:\n"
+            "    print(connection.execute('PRAGMA user_version').fetchone()[0])\n"
+            "    print(connection.execute(\n"
+            "        \"SELECT COUNT(*) FROM sqlite_master WHERE type='table'\"\n"
+            "    ).fetchone()[0])\n",
             str(database),
-            "PRAGMA user_version; SELECT COUNT(*) FROM sqlite_master WHERE type='table';",
         ],
         check=True,
         capture_output=True,

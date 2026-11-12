@@ -1,0 +1,10 @@
+src/aizim/cli/control_projection.py=249
+src/aizim/cli/control_command.py=157
+scripts/qa/controller_smoke.py=212
+tests/e2e/test_real_controller_smoke.py=171
+tests/integration/cli_control_support.py=165
+tests/integration/test_cli_control.py=205
+tests/integration/test_cli_control_projection.py=220
+tests/integration/test_cli_control_ownership.py=142
+tests/architecture/test_authority_imports.py=220
+tests/security/test_controller_provider_isolation.py=250

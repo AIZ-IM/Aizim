@@ -4,7 +4,6 @@ import json
 import os
 import shutil
 import sys
-from collections.abc import Mapping
 from dataclasses import asdict
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -12,19 +11,20 @@ from pathlib import Path
 from aizim.agents.launcher import AgentLaunchError, HostCommandSpec, run_host_command
 from aizim.config import (
     LEAN_LSP_MCP_VERSION,
+    LEAN_TOOLCHAIN,
     LEANCLIENT_VERSION,
     MIN_FREE_DISK_BYTES,
     AizimConfig,
     load_config,
 )
 from aizim.runtime.distribution import (
-    DISTRIBUTION_ENVIRONMENT,
     DistributionError,
     load_distribution_context,
 )
 from aizim.runtime.layout import LayoutError, ProjectLayout
 
-from .doctor_provider_checks import DoctorCheck, provider_checks
+from .doctor_environment import scrubbed_command_environment
+from .doctor_execution_checks import DoctorCheck, execution_checks
 from .state_client import StateClientError, check_state_health
 
 _CHECK_IDS = (
@@ -35,34 +35,19 @@ _CHECK_IDS = (
     "lean_project",
     "disk_floor",
     "runtime_mode",
-    "controller_configuration",
-    "controller_provider",
-    "controller_executable",
-    "controller_auth",
-    "worker_codex",
-    "sandbox_exec",
+    "omp",
+    "magpie",
+    "omp_rpc",
+    "security_probe",
     "lean_lsp_mcp",
     "leanclient",
     "state_service",
 )
-_SECRET_MARKERS = ("KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL")
-_BUNDLED_UV_VERSION = "0.11.31"
+_BUNDLED_UV_VERSION = "0.13.7"
 
 
 def _check(identifier: str, passed: bool, success: str, failure: str) -> DoctorCheck:
     return DoctorCheck(identifier, "PASS" if passed else "FAIL", success if passed else failure)
-
-
-def scrubbed_command_environment(
-    environ: Mapping[str, str] | None = None,
-) -> dict[str, str]:
-    source = os.environ if environ is None else environ
-    return {
-        name: value
-        for name, value in source.items()
-        if name not in DISTRIBUTION_ENVIRONMENT
-        and not any(marker in name.upper() for marker in _SECRET_MARKERS)
-    }
 
 
 def _command(identifier: str, argv: list[str], expected: str, cwd: Path) -> DoctorCheck:
@@ -121,22 +106,25 @@ def doctor_checks(layout: ProjectLayout) -> tuple[DoctorCheck, ...]:
     config, runtime = _configuration(layout)
     floor = MIN_FREE_DISK_BYTES if config is None else config.resources.min_free_disk_bytes
     free = shutil.disk_usage(layout.root).free
-    python_ready = (3, 12) <= sys.version_info[:2] < (3, 15)
+    python_ready = (3, 12) <= sys.version_info[:2] < (3, 16)
     try:
         check_state_health(layout)
         state = DoctorCheck("state_service", "PASS", "schema 1 ready")
     except StateClientError:
         state = DoctorCheck("state_service", "FAIL", "state service is unavailable")
-    providers = provider_checks(layout, os.environ)
+    execution = execution_checks(layout, os.environ)
     return (
-        _check("python", python_ready, sys.version.split()[0], "Python 3.12-3.14 is required"),
+        _check("python", python_ready, sys.version.split()[0], "Python 3.12-3.15 is required"),
         _uv(layout),
-        _command("lean", ["lake", "env", "lean", "--version"], "4.32.1", layout.root),
+        _command(
+            "lean", ["lake", "env", "lean", "--version"],
+            LEAN_TOOLCHAIN.rsplit(":v", 1)[-1], layout.root,
+        ),
         _command("lake", ["lake", "--version"], "Lake version", layout.root),
         DoctorCheck("lean_project", "PASS", str(layout.root)),
         _check("disk_floor", free >= floor, f"{free} bytes free", "free-space floor not met"),
         runtime,
-        *providers,
+        *execution,
         _package("lean_lsp_mcp", "lean-lsp-mcp", LEAN_LSP_MCP_VERSION),
         _package("leanclient", "leanclient", LEANCLIENT_VERSION),
         state,

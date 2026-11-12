@@ -9,11 +9,11 @@ from .sandbox import SandboxAdapter
 
 
 def sandbox_adapter(
-    codex_executable: Path,
+    agent_executable: Path,
     platform: str = sys.platform,
 ) -> SandboxAdapter:
     if platform == "darwin":
-        return MacOSSandboxAdapter.for_executable(codex_executable)
+        return MacOSSandboxAdapter.for_executable(agent_executable)
     if platform == "linux":
-        return LinuxSandboxAdapter.for_executable(codex_executable)
+        return LinuxSandboxAdapter.for_executable(agent_executable)
     raise SandboxHostError("unsupported sandbox platform")

@@ -31,11 +31,10 @@ const installChecks = {
   provider_free_help: true,
   provider_free_doctor_fails_closed: true,
   no_agent_dependencies: true,
-  python_314_bootstrap: true,
+  python_315_bootstrap: true,
   cache_reused: true,
   uninstall_preserved_cache: true,
-  aizim_run: true,
-  controller_loop: true,
+  research_task_roundtrip: true,
   bundled_agent_upgrade_preserved_state_credentials: true,
   missing_platform_exit_78: true,
   integrity_failure_exit_74: true,
@@ -169,7 +168,7 @@ function installEvidenceDocument() {
     schema_version: 1,
     commit_sha: commit,
     target: "linux-x64",
-    node_version: "v26.5.0",
+    node_version: "v26.13.0",
     packages: [
       {
         name: "@aiz.im/aizim-linux-x64",
@@ -226,9 +225,9 @@ test("requires every install observation before composing native evidence", asyn
       /install checks/,
     ],
     [
-      "missing controller loop smoke",
+      "missing research task roundtrip smoke",
       (document) => {
-        delete document.checks.controller_loop;
+        delete document.checks.research_task_roundtrip;
       },
       /install checks/,
     ],
@@ -283,7 +282,7 @@ test("composes native evidence only from matching build, test, pack, and install
         package_check: true,
       },
     },
-    liveNodeVersion: "v26.5.0",
+    liveNodeVersion: "v26.13.0",
   });
 
   assert.deepEqual(document.runner, targetRecords["linux-x64"]);
@@ -291,171 +290,104 @@ test("composes native evidence only from matching build, test, pack, and install
   assert.equal(document.checks.npm_test, true);
 });
 
-test("CI isolates external provider contracts from provider-free package lanes", async () => {
+test("CI qualifies distribution, Lean, and deterministic omp contracts", async () => {
   const workflow = await readFile(
-    new URL("../../.github/workflows/ci.yml", import.meta.url),
-    "utf8",
+    new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8",
   );
   const leanWorkflow = await readFile(
-    new URL("../../.github/workflows/lean-integration.yml", import.meta.url),
-    "utf8",
+    new URL("../../.github/workflows/lean-integration.yml", import.meta.url), "utf8",
   );
-  const providerWorkflow = await readFile(
-    new URL("../../.github/workflows/provider-contract.yml", import.meta.url),
-    "utf8",
+  const ompWorkflow = await readFile(
+    new URL("../../.github/workflows/omp-contract.yml", import.meta.url), "utf8",
   );
   const registryWorkflow = await readFile(
-    new URL("../../.github/workflows/npm-registry-smoke.yml", import.meta.url),
-    "utf8",
+    new URL("../../.github/workflows/npm-registry-smoke.yml", import.meta.url), "utf8",
   );
   const releaseWorkflow = await readFile(
-    new URL("../../.github/workflows/npm-release.yml", import.meta.url),
-    "utf8",
+    new URL("../../.github/workflows/npm-release.yml", import.meta.url), "utf8",
   );
   for (const value of [
-    "darwin-arm64",
-    "linux-arm64",
-    "linux-x64",
-    "macos-15",
-    "ubuntu-24.04-arm",
-    "ubuntu-24.04",
+    "darwin-arm64", "linux-arm64", "linux-x64",
+    "macos-15", "ubuntu-24.04-arm", "ubuntu-24.04",
     "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-    "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
-    "leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9",
-    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
-    "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
-    "fail-fast: false",
-    "timeout-minutes: 45",
-    "kernel.unprivileged_userns_clone=1",
-    "kernel.apparmor_restrict_unprivileged_userns=0",
-    'npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.0.1',
+    "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+    "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+    "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+    "fail-fast: false", "timeout-minutes: 45",
+    'npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.2.2',
     'echo "$RUNNER_TEMP/npm-12/bin" >> "$GITHUB_PATH"',
     "sudo apt-get install --yes ripgrep",
+    'not lean_integration and not linux_sandbox and not macos_sandbox',
   ]) {
     assert.ok(workflow.includes(value), `missing CI contract: ${value}`);
   }
-  assert.doesNotMatch(
-    workflow,
-    /npm publish|NODE_AUTH_TOKEN|NPM_TOKEN|id-token:\s*write/u,
-  );
-  assert.doesNotMatch(workflow, /tests\/npm\/codex-resolution\.test\.mjs/u);
   const nativeJob = workflowJob(workflow, "native");
   assert.match(nativeJob, /sudo apt-get install --yes ripgrep/u);
   assert.match(nativeJob, /brew install ripgrep/u);
   assert.match(nativeJob, /rg --version/u);
+  const minimumNodeJob = workflowJob(workflow, "minimum-node");
   for (const value of [
-    "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-    "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
-    "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9",
-    "leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9",
-    'version: "0.11.31"',
-    "npm@12.0.1",
-    "@openai/codex@0.154.0",
-    'cp -R tests/fixtures/attack_probe_project "$RUNNER_TEMP/attack-probe-project"',
-    'uv run aizim init "$RUNNER_TEMP/attack-probe-project"',
-    '--project "$RUNNER_TEMP/attack-probe-project"',
+    'node-version-file: .node-version',
+    'node-version: "22.22.2"',
+    'npm install --global --prefix "$RUNNER_TEMP/npm-12-minimum" npm@12.2.2',
+    'test "$(node --version)" = "v22.22.2"',
+    '--minimum-node-version v22.22.2',
+  ]) {
+    assert.ok(minimumNodeJob.includes(value), `missing minimum Node CI contract: ${value}`);
+  }
+  for (const value of [
+    "leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee",
+    "astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2",
+    'version: "0.13.7"',
+    "tests/integration/test_research_lean.py",
+    "tests/integration/test_compiled_research_index.py",
+    "tests/unit/test_lean_mcp_contract.py",
+    "-m lean_integration",
   ]) {
     assert.ok(leanWorkflow.includes(value), `missing Lean CI contract: ${value}`);
   }
-  assert.doesNotMatch(leanWorkflow, /@anthropic-ai\/claude-code/u);
-  assert.equal(
-    leanWorkflow.match(/@openai\/codex@0\.154\.0/gu)?.length,
-    1,
-  );
-
+  const ompJob = workflowJob(ompWorkflow, "omp-contract");
   for (const value of [
-    "provider-contract-codex:",
-    "provider-contract-claude:",
-    "AIZIM_PROVIDER_CONTRACT: \"1\"",
-    "darwin-arm64",
-    "linux-arm64",
-    "linux-x64",
-    "macos-15",
-    "ubuntu-24.04-arm",
-    "ubuntu-24.04",
-    "kernel.unprivileged_userns_clone=1",
-    "kernel.apparmor_restrict_unprivileged_userns=0",
-    "uv sync --frozen",
-    "tests/integration/test_provider_contract.py",
-    "tests/security/test_controller_provider_isolation.py",
-    "tests/unit/test_provider_executables.py",
-    "tests/security",
-    "${{ matrix.sandbox_marker }}",
+    "darwin-arm64", "linux-arm64", "linux-x64",
+    "macos-15", "ubuntu-24.04-arm", "ubuntu-24.04",
+    'version: "0.13.7"', "uv sync --frozen",
+    "tests/unit/test_omp_rpc.py",
+    "tests/unit/test_omp_backend.py",
+    "tests/integration/test_omp_workspace.py",
+    "tests/unit/test_linux_sandbox_profile.py",
+    "tests/unit/test_linux_profile_contract.py",
+    "tests/unit/test_macos_profile_contract.py",
+    "tests/unit/test_sandbox_profile.py",
+    "tests/unit/test_probe_execution.py",
   ]) {
-    assert.ok(
-      providerWorkflow.includes(value),
-      `missing provider CI contract: ${value}`,
-    );
+    assert.ok(ompJob.includes(value), `missing omp CI contract: ${value}`);
   }
   for (const target of [
-    "- target: darwin-arm64",
-    "- target: linux-arm64",
-    "- target: linux-x64",
-    "runner: macos-15",
-    "runner: ubuntu-24.04-arm",
-    "runner: ubuntu-24.04",
+    "- target: darwin-arm64", "- target: linux-arm64", "- target: linux-x64",
+    "runner: macos-15", "runner: ubuntu-24.04-arm", "runner: ubuntu-24.04",
   ]) {
     assert.equal(
-      providerWorkflow
-        .split("\n")
-        .filter((line) => line.trim() === target).length,
-      2,
-      `provider workflow must qualify ${target} in both lanes`,
+      ompJob.split("\n").filter((line) => line.trim() === target).length,
+      1,
+      `omp workflow must qualify ${target}`,
     );
   }
-  const codexJob = workflowJob(providerWorkflow, "provider-contract-codex");
-  const claudeJob = workflowJob(providerWorkflow, "provider-contract-claude");
-  assert.match(codexJob, /@openai\/codex@0\.154\.0/u);
-  assert.doesNotMatch(codexJob, /@anthropic-ai\/claude-code/u);
-  assert.match(claudeJob, /@openai\/codex@0\.154\.0/u);
-  assert.match(claudeJob, /@anthropic-ai\/claude-code@2\.1\.218/u);
-  assert.match(
-    claudeJob,
-    /--allow-scripts=@anthropic-ai\/claude-code/u,
-  );
-  assert.match(codexJob, /AIZIM_PROVIDER_CONTRACT_PROVIDER: codex/u);
-  assert.match(claudeJob, /AIZIM_PROVIDER_CONTRACT_PROVIDER: claude/u);
-  assert.equal(
-    providerWorkflow.match(/sandbox_marker: macos_sandbox/gu)?.length,
-    2,
-  );
-  assert.equal(
-    providerWorkflow.match(/sandbox_marker: linux_sandbox/gu)?.length,
-    4,
-  );
-  assert.doesNotMatch(
-    `${workflow}\n${registryWorkflow}\n${releaseWorkflow}`,
-    /@openai\/codex|@anthropic-ai\/claude-code|AIZIM_PROVIDER_CONTRACT/u,
-  );
-  assert.doesNotMatch(
-    providerWorkflow,
-    /OPENAI_API_KEY|ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN|secrets\./u,
-  );
-  assert.doesNotMatch(
-    `${workflow}\n${leanWorkflow}\n${providerWorkflow}\n${registryWorkflow}\n${releaseWorkflow}`,
-    /0\.11\.29|0\.144\.6|NODE_AUTH_TOKEN|NPM_TOKEN|id-token:\s*write/u,
-  );
-  const combinedWorkflows = `${workflow}\n${leanWorkflow}`;
-  assert.equal(
-    combinedWorkflows.match(/actions\/setup-node@/gu)?.length,
-    combinedWorkflows.match(/package-manager-cache:\s*false/gu)?.length,
-  );
-  assert.equal(
-    combinedWorkflows.match(
-      /echo "TMPDIR=\$RUNNER_TEMP\/aizim-private-tmp" >> "\$GITHUB_ENV"/gu,
-    )?.length,
-    4,
-  );
-  assert.equal(
-    combinedWorkflows.match(/name: Create private temporary root/gu)?.length,
-    4,
-  );
-  for (
-    const line of `${workflow}\n${leanWorkflow}\n${providerWorkflow}\n${registryWorkflow}\n${releaseWorkflow}`.match(
-      /^\s*uses:\s*.+$/gmu,
-    ) ?? []
-  ) {
-    assert.match(line, /@[0-9a-f]{40}(?:\s+#\s+v\d+\.\d+\.\d+)?$/u);
+  const workflows = [workflow, leanWorkflow, ompWorkflow, registryWorkflow, releaseWorkflow];
+  for (const document of workflows) {
+    assert.doesNotMatch(document, /npm publish|NODE_AUTH_TOKEN|NPM_TOKEN|id-token:\s*write/u);
+    assert.doesNotMatch(document, /@openai\/codex|@anthropic-ai\/claude-code|AIZIM_PROVIDER_CONTRACT/u);
+    assert.match(document, /name: Create private temporary root/u);
+    for (const line of document.match(/^\s*uses:\s*.+$/gmu) ?? []) {
+      assert.match(line, /@[0-9a-f]{40}(?:\s+#\s+v\d+\.\d+\.\d+)?$/u);
+    }
+    assert.equal(
+      document.match(/actions\/setup-node@/gu)?.length ?? 0,
+      document.match(/package-manager-cache:\s*false/gu)?.length ?? 0,
+    );
+  }
+  assert.doesNotMatch(ompWorkflow, /OPENAI_API_KEY|ANTHROPIC_API_KEY|secrets\./u);
+  for (const document of [nativeJob, workflowJob(workflow, "minimum-node"), registryWorkflow, releaseWorkflow]) {
+    assert.doesNotMatch(document, /leanprover\/lean-action/u);
   }
 });
 

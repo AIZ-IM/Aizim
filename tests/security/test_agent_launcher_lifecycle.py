@@ -12,9 +12,8 @@ import pytest
 from aizim.agents import launcher
 from aizim.agents.launcher import (
     AgentLaunchError,
-    CodexLaunchSpec,
     HostCommandSpec,
-    launch_codex,
+    launch_host_command,
     run_host_command,
 )
 
@@ -77,59 +76,58 @@ def test_host_runner_reaps_fd_detached_descendant_before_return(
             time.sleep(0.01)
 
 
-async def test_cancel_during_term_grace_still_kills_and_reaps_child(
+async def test_cancel_during_cleanup_still_kills_and_reaps_child(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    pid_file, term_file = tmp_path / "pid", tmp_path / "term"
-    executable = tmp_path / "codex"
+    pid_file = tmp_path / "pid"
+    executable = tmp_path / "host-command.py"
     executable.write_text(
-        "#!/usr/bin/python3\n"
-        "import os, pathlib, signal, time\n"
-        f"pid = pathlib.Path({str(pid_file)!r})\n"
-        f"term = pathlib.Path({str(term_file)!r})\n"
-        "signal.signal(signal.SIGTERM, lambda *_: term.write_text('term'))\n"
-        "pid.write_text(str(os.getpid()))\n"
+        "import os, pathlib, time\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
         "while True: time.sleep(1)\n"
     )
-    executable.chmod(0o700)
-    schema = tmp_path / "schema.json"
-    schema.write_text("{}")
-    spec = CodexLaunchSpec(
-        (str(executable),),
+    spec = HostCommandSpec(
+        ("/usr/bin/python3", str(executable)),
         tmp_path,
         {"PATH": "/usr/bin:/bin"},
-        {"PATH": "/usr/bin"},
-        b"fixture",
-        1.0,
-        tmp_path / "result.json",
-        schema,
     )
-    monkeypatch.setattr(launcher, "_TERMINATE_GRACE_SECONDS", 0.5)
-    run = asyncio.create_task(launch_codex(spec))
-    await asyncio.wait_for(_wait_for_file(pid_file), 1)
-    await asyncio.wait_for(_wait_for_file(term_file), 1)
-    pid = int(pid_file.read_text())
+    cleanup_started = asyncio.Event()
+    continue_cleanup = asyncio.Event()
+    drain_process_group = launcher._drain_process_group
+
+    async def pause_cleanup(process: asyncio.subprocess.Process) -> None:
+        cleanup_started.set()
+        await continue_cleanup.wait()
+        await drain_process_group(process)
+
+    monkeypatch.setattr(launcher, "_drain_process_group", pause_cleanup)
+    run = asyncio.create_task(launch_host_command(spec))
     try:
-        run.cancel("cancel-during-term-grace")
-        with pytest.raises(AgentLaunchError, match="CODEX_TIMEOUT"):
+        await asyncio.wait_for(_wait_for_file(pid_file), 1)
+        run.cancel("initial-cancellation")
+        await asyncio.wait_for(cleanup_started.wait(), 1)
+        run.cancel("cancel-during-cleanup")
+        continue_cleanup.set()
+        with pytest.raises(asyncio.CancelledError, match="initial-cancellation"):
             await run
         with pytest.raises(ProcessLookupError):
-            os.kill(pid, 0)
+            os.kill(int(pid_file.read_text()), 0)
     finally:
+        continue_cleanup.set()
         if not run.done():
             run.cancel()
-        with suppress(ProcessLookupError):
-            os.killpg(pid, signal.SIGKILL)
+        if pid_file.exists():
+            with suppress(ProcessLookupError):
+                os.killpg(int(pid_file.read_text()), signal.SIGKILL)
         await asyncio.gather(run, return_exceptions=True)
 
 
-async def test_timeout_kills_descendant_after_direct_child_exits_on_term(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+async def test_timeout_kills_descendant_after_direct_child_exits(
+    tmp_path: Path,
 ) -> None:
     parent_file, descendant_file = tmp_path / "parent", tmp_path / "descendant"
-    executable = tmp_path / "codex"
+    executable = tmp_path / "host-command.py"
     executable.write_text(
-        "#!/usr/bin/python3\n"
         "import os, pathlib, signal, time\n"
         f"parent = pathlib.Path({str(parent_file)!r})\n"
         f"descendant = pathlib.Path({str(descendant_file)!r})\n"
@@ -137,34 +135,24 @@ async def test_timeout_kills_descendant_after_direct_child_exits_on_term(
         "if child == 0:\n"
         "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
         "    descendant.write_text(str(os.getpid()))\n"
-        "    for descriptor in (0, 1, 2):\n"
-        "        os.close(descriptor)\n"
         "    while True: time.sleep(1)\n"
         "while not descendant.exists(): time.sleep(0.01)\n"
-        "signal.signal(signal.SIGTERM, lambda *_: os._exit(0))\n"
         "parent.write_text(str(os.getpid()))\n"
-        "while True: time.sleep(1)\n"
+        "os._exit(0)\n"
     )
-    executable.chmod(0o700)
-    schema = tmp_path / "schema.json"
-    schema.write_text("{}")
-    spec = CodexLaunchSpec(
-        (str(executable),),
+    spec = HostCommandSpec(
+        ("/usr/bin/python3", str(executable)),
         tmp_path,
         {"PATH": "/usr/bin:/bin"},
-        {"PATH": "/usr/bin"},
-        b"fixture",
-        1.0,
-        tmp_path / "result.json",
-        schema,
+        timeout_seconds=1.0,
     )
-    monkeypatch.setattr(launcher, "_TERMINATE_GRACE_SECONDS", 0.1)
-    run = asyncio.create_task(launch_codex(spec))
+    run = asyncio.create_task(launch_host_command(spec))
     try:
         await asyncio.wait_for(_wait_for_file(parent_file), 0.8)
         await asyncio.wait_for(_wait_for_file(descendant_file), 0.8)
-        with pytest.raises(AgentLaunchError, match="CODEX_TIMEOUT"):
+        with pytest.raises(AgentLaunchError, match="HOST_COMMAND_FAILED") as captured:
             await run
+        assert isinstance(captured.value.__cause__, TimeoutError)
         await _wait_for_process_exit(int(parent_file.read_text()))
         await _wait_for_process_exit(int(descendant_file.read_text()))
     finally:

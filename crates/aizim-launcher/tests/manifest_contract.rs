@@ -113,7 +113,7 @@ fn fixture() -> TestResult<Fixture> {
     let distribution_json = json!({
         "schema_version": 3,
         "aizim_version": "0.1.0",
-        "python_version": "3.14.6",
+        "python_version": "3.15.2",
         "wheel": {
             "path": "vendor/aizim-0.1.0-py3-none-any.whl",
             "size": 4,
@@ -137,7 +137,7 @@ fn fixture() -> TestResult<Fixture> {
         "rust_target": rust_target,
         "libc": libc,
         "launcher_version": "0.1.0",
-        "uv_version": "0.11.31",
+        "uv_version": "0.13.7",
         "uv": {
             "path": "vendor/uv",
             "size": 4,

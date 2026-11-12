@@ -1,0 +1,67 @@
+{
+  "version": "research-ladder-v1",
+  "lean_toolchain": "leanprover/lean4:v4.35.0",
+  "project_files": {
+    "lean-toolchain": "leanprover/lean4:v4.35.0\n",
+    "lakefile.toml": "name = \"benchmark_lab\"\nversion = \"0.1.0\"\ndefaultTargets = [\"BenchmarkLab\"]\n\n[[lean_lib]]\nname = \"BenchmarkLab\"\n",
+    "BenchmarkLab.lean": "import Std\n\nnamespace BenchmarkLab\n\ndef bump (n : Nat) : Nat := n + 1\n\ndef twice (n : Nat) : Nat := bump (bump n)\n\nend BenchmarkLab\n"
+  },
+  "targets": [
+    {
+      "task_id": "nat_add_zero",
+      "title": "Right addition identity",
+      "statement": "(n : Nat) : n + 0 = n",
+      "imports": ["Std"],
+      "depends_on": [],
+      "proof": "exact Nat.add_zero n"
+    },
+    {
+      "task_id": "nat_zero_add",
+      "title": "Left addition identity",
+      "statement": "(n : Nat) : 0 + n = n",
+      "imports": ["Std"],
+      "depends_on": [],
+      "proof": "exact Nat.zero_add n"
+    },
+    {
+      "task_id": "nat_add_assoc",
+      "title": "Addition associativity",
+      "statement": "(a b c : Nat) : (a + b) + c = a + (b + c)",
+      "imports": ["Std"],
+      "depends_on": [],
+      "proof": "exact Nat.add_assoc a b c"
+    },
+    {
+      "task_id": "identity_reuse",
+      "title": "Reuse a published identity twice",
+      "statement": "(n : Nat) : (n + 0) + 0 = n",
+      "imports": ["Std"],
+      "depends_on": ["nat_add_zero"],
+      "proof": "exact ({nat_add_zero} (n + 0)).trans ({nat_add_zero} n)"
+    },
+    {
+      "task_id": "project_bump",
+      "title": "Project increment definition",
+      "statement": "(n : Nat) : BenchmarkLab.bump n = n + 1",
+      "imports": ["BenchmarkLab"],
+      "depends_on": [],
+      "proof": "rfl"
+    },
+    {
+      "task_id": "project_twice",
+      "title": "Project composition using a published lemma",
+      "statement": "(n : Nat) : BenchmarkLab.twice n = n + 2",
+      "imports": ["BenchmarkLab"],
+      "depends_on": ["project_bump"],
+      "proof": "change BenchmarkLab.bump (BenchmarkLab.bump n) = n + 2; rw [{project_bump} (BenchmarkLab.bump n), {project_bump} n]"
+    },
+    {
+      "task_id": "project_identity_reuse",
+      "title": "Combine project and identity publications",
+      "statement": "(n : Nat) : BenchmarkLab.twice (n + 0) = n + 2",
+      "imports": ["BenchmarkLab"],
+      "depends_on": ["project_twice", "nat_add_zero"],
+      "proof": "rw [{nat_add_zero} n]; exact {project_twice} n"
+    }
+  ]
+}

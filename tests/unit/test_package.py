@@ -25,6 +25,6 @@ def test_module_entrypoint_reports_version() -> None:
 
 def test_formal_bridge_dependencies_are_direct_pins() -> None:
     requirements = set(importlib.metadata.requires("aizim") or ())
-    assert "lean-lsp-mcp==0.28.1" in requirements
-    assert "leanclient==0.12.1" in requirements
-    assert 'mcp[cli]==1.28.1' in requirements
+    assert "lean-lsp-mcp==0.33.0" in requirements
+    assert "leanclient==0.13.2" in requirements
+    assert "mcp[cli]==2.2.0" in requirements

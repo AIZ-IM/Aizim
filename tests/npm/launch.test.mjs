@@ -53,7 +53,7 @@ test("launches with internal flags, one separator, and inherited stdio", async (
   const processLike = new FakeProcess();
   const child = new FakeChild();
   const calls = [];
-  const userArgs = ["run", "--", "$(touch nope)", "--flag=value"];
+  const userArgs = ["research", "task", "list", "--", "$(touch nope)", "--flag=value"];
   const spawnImpl = (...args) => {
     calls.push(args);
     queueMicrotask(() => child.emit("exit", 0, null));

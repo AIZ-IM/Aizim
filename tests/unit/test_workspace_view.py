@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import stat
+import tempfile
 from pathlib import Path, PurePosixPath
 from tempfile import gettempdir
 
@@ -35,7 +36,7 @@ def project(tmp_path: Path) -> Path:
     (root / "Unleased.lean").write_bytes(b"theorem private : True := trivial\n")
     (root / "Nested" / "Prereq.lean").write_bytes(b"theorem prereq : True := trivial\n")
     (root / "lakefile.toml").write_text('name = "fixture"\n')
-    (root / "lean-toolchain").write_text("leanprover/lean4:v4.32.1\n")
+    (root / "lean-toolchain").write_text("leanprover/lean4:v4.35.0\n")
     (root / ".env").write_text("TOKEN=private\n")
     (root / "credentials.json").write_text('{"token":"private"}\n')
     (root / ".git" / "config").write_text("private")
@@ -65,7 +66,9 @@ def test_materialized_view_contains_only_fresh_private_copies(tmp_path: Path) ->
         assert copied.read_bytes() == allowed
         assert copied.stat().st_ino != (root / "Allowed.lean").stat().st_ino
         assert not copied.is_symlink()
-        assert view.view_root.parent == Path(gettempdir()).resolve()
+        assert view.view_root.parent.parent == Path(gettempdir()).resolve()
+        assert view.view_root.parent == view.scratch_root.parent
+        assert stat.S_IMODE(view.view_root.parent.stat().st_mode) == 0o700
         assert not (view.view_root / "Unleased.lean").exists()
         assert not (view.view_root / ".git").exists()
         assert not (view.view_root / ".aizim").exists()
@@ -88,6 +91,30 @@ def test_materialized_view_contains_only_fresh_private_copies(tmp_path: Path) ->
         view.close()
     assert not view.view_root.exists()
     assert not view.scratch_root.exists()
+    assert not view.view_root.parent.exists()
+
+
+def test_shared_temporary_directory_gets_private_workspace_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = project(tmp_path)
+    shared = tmp_path / "shared-tmp"
+    shared.mkdir()
+    shared.chmod(0o1777)
+    monkeypatch.setattr(tempfile, "tempdir", str(shared))
+    body = (root / "Allowed.lean").read_bytes()
+    view = WorkspaceViewBuilder().materialize(root, (source("Allowed.lean", body),))
+    private = view.view_root.parent
+    try:
+        assert private.parent == shared
+        assert private.stat().st_uid == os.getuid()
+        assert stat.S_IMODE(private.stat().st_mode) == 0o700
+        assert view.scratch_root.parent == private
+        assert (view.view_root / "Allowed.lean").read_bytes() == body
+    finally:
+        view.close()
+    assert not private.exists()
+    assert not tuple(shared.iterdir())
 
 
 @pytest.mark.parametrize(
@@ -159,10 +186,26 @@ def test_view_aborts_when_source_is_replaced_after_copy(tmp_path: Path) -> None:
         path.symlink_to(root / "Unleased.lean")
 
     temporary_root = Path(gettempdir()).resolve()
-    before = set(temporary_root.glob("aizim-view-*"))
+    before = set(temporary_root.glob("aizim-workspace-*"))
     with pytest.raises(ViewBuildError):
         WorkspaceViewBuilder(after_copy=replace).materialize(root, (source("Allowed.lean", body),))
-    assert set(temporary_root.glob("aizim-view-*")) == before
+    assert set(temporary_root.glob("aizim-workspace-*")) == before
+
+
+def test_view_cleans_private_parent_when_copy_hook_raises(tmp_path: Path) -> None:
+    root = project(tmp_path)
+    body = (root / "Allowed.lean").read_bytes()
+    temporary_root = Path(gettempdir()).resolve()
+    before = set(temporary_root.glob("aizim-workspace-*"))
+
+    def interrupt(_relative: PurePosixPath) -> None:
+        raise RuntimeError("copy interrupted")
+
+    with pytest.raises(RuntimeError, match="copy interrupted"):
+        WorkspaceViewBuilder(after_copy=interrupt).materialize(
+            root, (source("Allowed.lean", body),)
+        )
+    assert set(temporary_root.glob("aizim-workspace-*")) == before
 
 
 @pytest.mark.parametrize(

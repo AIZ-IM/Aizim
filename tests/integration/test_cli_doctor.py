@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from aizim.config import LEAN_LSP_MCP_VERSION
+
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal_lean"
 CHECK_IDS = (
     "python",
@@ -18,12 +20,10 @@ CHECK_IDS = (
     "lean_project",
     "disk_floor",
     "runtime_mode",
-    "controller_configuration",
-    "controller_provider",
-    "controller_executable",
-    "controller_auth",
-    "worker_codex",
-    "sandbox_exec",
+    "omp",
+    "magpie",
+    "omp_rpc",
+    "security_probe",
     "lean_lsp_mcp",
     "leanclient",
     "state_service",
@@ -56,6 +56,9 @@ def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
     fake_uv = fake_bin / "uv"
     fake_uv.write_text("#!/bin/sh\nprintf 'uv %s\\n' \"$AIZIM_TEST_TOKEN\"\n")
     fake_uv.chmod(0o755)
+    fake_omp = fake_bin / "omp"
+    fake_omp.write_text("#!/bin/sh\nexit 1\n")
+    fake_omp.chmod(0o755)
     environment = dict(os.environ)
     secret_values = ("api-key-value", "token-value", "credential-value")
     environment.update(
@@ -71,12 +74,7 @@ def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
     assert result.returncode == 3
     assert document["ready"] is False
     assert tuple(check["id"] for check in document["checks"]) == CHECK_IDS
-    assert {check["status"] for check in document["checks"]} <= {"PASS", "FAIL", "SKIP"}
-    checks = {check["id"]: check for check in document["checks"]}
-    assert checks["controller_configuration"]["status"] == "FAIL"
-    assert checks["controller_provider"]["status"] == "SKIP"
-    assert checks["controller_executable"]["status"] == "SKIP"
-    assert checks["controller_auth"]["status"] == "SKIP"
+    assert {check["status"] for check in document["checks"]} <= {"PASS", "FAIL"}
     assert all(secret not in result.stdout + result.stderr for secret in secret_values)
 
 
@@ -84,14 +82,17 @@ def test_doctor_json_has_stable_checks_and_never_echoes_secret_environment(
 def test_doctor_human_output_has_stable_roles_and_ends_not_ready(tmp_path: Path) -> None:
     root = initialized_project(tmp_path)
 
-    result = run_cli("doctor", "--project", str(root))
+    empty_path = tmp_path / "empty-bin"
+    empty_path.mkdir()
+    environment = dict(os.environ, PATH=str(empty_path))
+    result = run_cli("doctor", "--project", str(root), environ=environment)
 
     assert result.returncode == 3
     assert result.stdout.splitlines()[-1] == "NOT READY"
     assert tuple(line.split(maxsplit=2)[1] for line in result.stdout.splitlines()[:-1]) == CHECK_IDS
     assert all(line == line.rstrip() for line in result.stdout.splitlines())
     assert all(
-        line.split(maxsplit=1)[0] in {"PASS", "FAIL", "SKIP", "NOT"}
+        line.split(maxsplit=1)[0] in {"PASS", "FAIL", "NOT"}
         for line in result.stdout.splitlines()
     )
 
@@ -101,7 +102,7 @@ def test_doctor_wrong_foundation_pin_is_not_ready_without_leaking_config(
 ) -> None:
     root = initialized_project(tmp_path)
     config = root / ".aizim" / "config.toml"
-    config.write_text(config.read_text().replace("0.28.1", "0.28.0"))
+    config.write_text(config.read_text().replace(LEAN_LSP_MCP_VERSION, "0.28.0"))
 
     result = run_cli("doctor", "--project", str(root), "--json")
     document = json.loads(result.stdout)
@@ -132,3 +133,6 @@ def test_doctor_readiness_failure_uses_exit_three(tmp_path: Path) -> None:
 
     assert result.returncode == 3
     assert document["ready"] is False
+    checks = {check["id"]: check for check in document["checks"]}
+    assert checks["omp"]["status"] == "FAIL"
+    assert checks["magpie"]["status"] == "FAIL"

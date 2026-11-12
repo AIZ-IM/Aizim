@@ -31,7 +31,10 @@ PROCESS_OWNERS = {
     "agents/launcher.py",
     "agents/linux_sandbox.py",
     "agents/macos_sandbox.py",
+    "agents/omp_backend.py",
     "agents/probe_execution.py",
+    "omp/executable.py",
+    "research/compiled_index.py",
     "lean/mcp_client.py",
 }
 TRUSTED_OPERATIONS = {

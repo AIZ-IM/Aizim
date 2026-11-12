@@ -92,6 +92,7 @@ async def test_two_workers_get_distinct_path_free_leases_and_documents(
         assert first.lease_id != second.lease_id
         assert first.document_id != second.document_id
         assert first.virtual_document_namespace != second.virtual_document_namespace
+        assert first.expires_at == _clock.now + timedelta(minutes=5)
         assert first.physical_file is None is second.physical_file
         first_file = tmp_path / ".aizim/run/run-1/lean-project" / _path("run-1", "worker-1")
         second_file = tmp_path / ".aizim/run/run-1/lean-project" / _path("run-1", "worker-2")
@@ -266,5 +267,50 @@ async def test_release_preserves_snapshot_and_revokes_edits(tmp_path: Path) -> N
                 digest,
                 b"forbidden\n",
             )
+    finally:
+        service.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("timeout_seconds", [900, 14400])
+async def test_explicit_lease_lifetime_remains_bounded(
+    tmp_path: Path, timeout_seconds: int,
+) -> None:
+    service, broker, clock, epoch = _open(tmp_path)
+    try:
+        lifetime = timedelta(seconds=timeout_seconds)
+        lease = await broker.create_document(
+            "run-1", "worker-1", _path("run-1", "worker-1"), b"source\n", epoch,
+            lease_lifetime=lifetime,
+        )
+        assert lease.expires_at == clock.now + lifetime
+        clock.now += lifetime - timedelta(microseconds=1)
+        snapshot = await broker.read_document(
+            "run-1", "worker-1", lease.lease_id, lease.document_id,
+        )
+        assert snapshot.content == b"source\n"
+        clock.now += timedelta(microseconds=1)
+        with pytest.raises(DocumentBrokerError, match="LEASE_EXPIRED"):
+            await broker.read_document("run-1", "worker-1", lease.lease_id, lease.document_id)
+        await broker.release_lease("run-1", "worker-1", lease.lease_id)
+        assert service.active_document_leases() == ()
+    finally:
+        service.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lifetime", [timedelta(0), timedelta(seconds=-1)])
+async def test_invalid_lease_lifetime_grants_no_document(
+    tmp_path: Path, lifetime: timedelta,
+) -> None:
+    service, broker, _clock, epoch = _open(tmp_path)
+    try:
+        with pytest.raises(DocumentBrokerError, match="INVALID_LEASE_LIFETIME"):
+            await broker.create_document(
+                "run-1", "worker-1", _path("run-1", "worker-1"), b"source\n", epoch,
+                lease_lifetime=lifetime,
+            )
+        assert service.active_document_leases() == ()
+        assert not (tmp_path / ".aizim/run/run-1/lean-project").exists()
     finally:
         service.close()

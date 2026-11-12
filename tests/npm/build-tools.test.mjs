@@ -94,7 +94,7 @@ test("deletes a mismatched uv archive without extracting it", async () => {
     assert.deepEqual(commands, []);
     assert.deepEqual(requests, [
       [
-        "https://github.com/astral-sh/uv/releases/download/0.11.31/uv-test.tar.gz",
+        "https://github.com/astral-sh/uv/releases/download/0.13.7/uv-test.tar.gz",
         { redirect: "follow" },
       ],
     ]);

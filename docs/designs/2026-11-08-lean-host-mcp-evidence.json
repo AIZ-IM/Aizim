@@ -1,0 +1,4175 @@
+{
+  "recorded_at": "2026-11-08T20:17:19.805226+00:00",
+  "scope": "temporary Init-only Lake project; no production integration",
+  "temporary_project": "/tmp/aizim-lean-host-study-39z5iqq5",
+  "environment": {
+    "CARGO_HOME": "/root/.cache/aizim-lean-host-mcp/cargo",
+    "RUSTUP_HOME": "/root/.cache/aizim-lean-host-mcp/rustup",
+    "XDG_DATA_HOME": "/root/.cache/aizim-lean-host-mcp/data",
+    "LEAN_RS_NUM_THREADS": "2",
+    "LEAN_HOST_MCP_MAX_PROJECTS": "1"
+  },
+  "versions": {
+    "lean": {
+      "command": [
+        "/root/.elan/toolchains/leanprover--lean4---v4.35.0/bin/lean",
+        "--version"
+      ],
+      "returncode": 0,
+      "stdout": "Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)\n",
+      "stderr": "",
+      "elapsed_seconds": 0.024
+    },
+    "rust": {
+      "command": [
+        "/root/.cache/aizim-lean-host-mcp/cargo/bin/rustc",
+        "--version"
+      ],
+      "returncode": 0,
+      "stdout": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\n",
+      "stderr": "",
+      "elapsed_seconds": 0.01
+    },
+    "host": {
+      "command": [
+        "/root/.cache/aizim-lean-host-mcp/host/bin/lean-host-mcp",
+        "--version"
+      ],
+      "returncode": 0,
+      "stdout": "lean-host-mcp 0.14.2\n",
+      "stderr": "",
+      "elapsed_seconds": 0.001
+    },
+    "workers": {
+      "command": [
+        "/root/.cache/aizim-lean-host-mcp/host/bin/lean-host-mcp",
+        "install-worker",
+        "--list"
+      ],
+      "returncode": 0,
+      "stdout": "toolchain                     support         build      runtime    protocol         size  built                     sha256\nv4.35.0                       supported       fresh      runs       compatible    4.83 MiB  2026-11-08T20:14:09Z      dd6becc9\n",
+      "stderr": "",
+      "elapsed_seconds": 0.004
+    }
+  },
+  "fixtures": {
+    "Probe/Base.lean": "namespace Probe\ndef base : Nat := 1\nend Probe\n",
+    "Probe.lean": "import Probe.Base\nnamespace Probe\ntheorem good (n : Nat) : n + 0 = n := by\n  simp\ntheorem sorryProof : True := by sorry\naxiom assumed : False\ntheorem axiomProof : False := assumed\ntheorem usesBase : base = base := by rfl\nend Probe\n",
+    "Bad.lean": "import Probe.Base\nnamespace Probe\ntheorem bad : False := by exact True.intro\nend Probe\n"
+  },
+  "build_before": {
+    "command": [
+      "/root/.elan/toolchains/leanprover--lean4---v4.35.0/bin/lake",
+      "build"
+    ],
+    "returncode": 0,
+    "stdout": "✔ [2/4] Built Probe.Base (144ms)\n⚠ [3/4] Built Probe (152ms)\nwarning: Probe.lean:5:8: declaration uses `sorry`\nBuild completed successfully (4 jobs).\n",
+    "stderr": "info: host_probe: no previous manifest, creating one from scratch\ninfo: toolchain not updated; already up-to-date\n",
+    "elapsed_seconds": 0.328
+  },
+  "calls": [
+    {
+      "backend": "host",
+      "case": "project_status",
+      "tool": "lean_status",
+      "arguments": {
+        "kind": "project",
+        "include": [
+          "toolchain",
+          "worker",
+          "artifacts"
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"artifacts\":[{\"artifact\":\"worker\",\"detail\":\"lean_status did not open a worker to inspect runtime generation\",\"scope\":\"toolchain\",\"status\":\"not_applicable\"},{\"artifact\":\"olean\",\"detail\":\"build tree exists; lean_status does not compare source mtimes\",\"next_action\":\"run lean_lookup(kind=\\\"references\\\" or kind=\\\"declarations\\\") for semantic freshness, or `lake build` to refresh artifacts\",\"path\":\"/tmp/aizim-lean-host-study-39z5iqq5/.lake/build/lib/lean\",\"scope\":\"project\",\"status\":\"unknown\"},{\"artifact\":\"ilean\",\"detail\":\"build tree exists; lean_status does not compare source mtimes\",\"next_action\":\"run lean_lookup(kind=\\\"references\\\" or kind=\\\"declarations\\\") for semantic freshness, or `lake build` to refresh artifacts\",\"path\":\"/tmp/aizim-lean-host-study-39z5iqq5/.lake/build/lib/lean\",\"scope\":\"project\",\"status\":\"unknown\"}],\"broker\":{\"idle_timeout_secs\":600,\"lean_max_memory_kib\":25165824,\"max_projects\":1,\"request_timeout_millis\":120000},\"include\":[\"toolchain\",\"worker\",\"artifacts\"],\"kind\":\"project\",\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"output\":{\"response_carrier\":\"text\",\"telemetry_verbosity\":\"quiet\"},\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"worker\":{\"detail\":\"lean_status does not open a worker\",\"opened\":false,\"status\":\"not_applicable\"},\"worker_opened\":false},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"worker\",\"detail\":\"lean_status did not open a worker to inspect runtime generation\",\"scope\":\"toolchain\",\"status\":\"not_applicable\"},{\"artifact\":\"olean\",\"detail\":\"build tree exists; lean_status does not compare source mtimes\",\"next_action\":\"run lean_lookup(kind=\\\"references\\\" or kind=\\\"declarations\\\") for semantic freshness, or `lake build` to refresh artifacts\",\"path\":\"/tmp/aizim-lean-host-study-39z5iqq5/.lake/build/lib/lean\",\"scope\":\"project\",\"status\":\"unknown\"},{\"artifact\":\"ilean\",\"detail\":\"build tree exists; lean_status does not compare source mtimes\",\"next_action\":\"run lean_lookup(kind=\\\"references\\\" or kind=\\\"declarations\\\") for semantic freshness, or `lake build` to refresh artifacts\",\"path\":\"/tmp/aizim-lean-host-study-39z5iqq5/.lake/build/lib/lean\",\"scope\":\"project\",\"status\":\"unknown\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"metadata-only\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.001,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "valid_sorry_axioms",
+      "tool": "lean_verify",
+      "arguments": {
+        "targets": [
+          {
+            "kind": "explicit",
+            "file": "Probe.lean",
+            "declarations": [
+              "Probe.good",
+              "Probe.sorryProof",
+              "Probe.assumed",
+              "Probe.axiomProof"
+            ]
+          }
+        ],
+        "allow_sorry": false,
+        "report_axioms": true
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"results\":[{\"declaration\":\"Probe.good\",\"facts\":{\"axioms\":[\"propext\"],\"axioms_available\":true,\"contains_admit\":false,\"contains_sorry\":false,\"contains_sorry_ax\":false,\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"original_range\":{\"end_column\":18,\"end_line\":4,\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"start_column\":8,\"start_line\":4},\"position\":{\"column\":8,\"end_column\":18,\"end_line\":4,\"line\":4},\"severity\":\"warning\"}]},\"facts_trustworthy\":true,\"unresolved_goals\":[]},\"file\":\"Probe.lean\",\"id\":\"group_1:Probe.good\",\"verification_status\":\"verified\"},{\"declaration\":\"Probe.sorryProof\",\"facts\":{\"axioms\":[\"sorryAx\"],\"axioms_available\":true,\"contains_admit\":false,\"contains_sorry\":true,\"contains_sorry_ax\":false,\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"original_range\":{\"end_column\":18,\"end_line\":4,\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"start_column\":8,\"start_line\":4},\"position\":{\"column\":8,\"end_column\":18,\"end_line\":4,\"line\":4},\"severity\":\"warning\"}]},\"facts_trustworthy\":true,\"unresolved_goals\":[]},\"file\":\"Probe.lean\",\"id\":\"group_1:Probe.sorryProof\",\"verification_status\":\"has_sorry\"},{\"declaration\":\"Probe.assumed\",\"facts\":{\"axioms\":[],\"axioms_available\":false,\"contains_admit\":false,\"contains_sorry\":false,\"contains_sorry_ax\":false,\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"original_range\":{\"end_column\":18,\"end_line\":4,\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"start_column\":8,\"start_line\":4},\"position\":{\"column\":8,\"end_column\":18,\"end_line\":4,\"line\":4},\"severity\":\"warning\"}]},\"facts_trustworthy\":true,\"unresolved_goals\":[]},\"file\":\"Probe.lean\",\"id\":\"group_1:Probe.assumed\",\"verification_status\":\"not_found\"},{\"declaration\":\"Probe.axiomProof\",\"facts\":{\"axioms\":[\"Probe.assumed\"],\"axioms_available\":true,\"contains_admit\":false,\"contains_sorry\":false,\"contains_sorry_ax\":false,\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"original_range\":{\"end_column\":18,\"end_line\":4,\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"start_column\":8,\"start_line\":4},\"position\":{\"column\":8,\"end_column\":18,\"end_line\":4,\"line\":4},\"severity\":\"warning\"}]},\"facts_trustworthy\":true,\"unresolved_goals\":[]},\"file\":\"Probe.lean\",\"id\":\"group_1:Probe.axiomProof\",\"verification_status\":\"verified\"}],\"summary\":{\"failed\":2,\"needs_build\":0,\"requested\":4,\"verified\":2}},\"errors\":[{\"code\":\"warning\",\"message\":\"report_axioms: the axiom dependency set could not be computed (target unresolved or budget exhausted); the empty `axioms` list means \\\"not computed\\\", not \\\"no axioms\\\"\",\"next_action\":\"source files were not modified by verification\",\"severity\":\"warning\"}],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"content_sha256\":\"f0b0c9d082d16c59550e874c313ca611d9447051db8ce177c917b70eac8a778e\",\"detail\":\"source snapshot was read from disk for this call\",\"path\":\"Probe.lean\",\"scope\":\"file\",\"status\":\"edit_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.206,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "sorry_allowed",
+      "tool": "lean_verify",
+      "arguments": {
+        "targets": [
+          {
+            "kind": "explicit",
+            "file": "Probe.lean",
+            "declarations": [
+              "Probe.sorryProof"
+            ]
+          }
+        ],
+        "allow_sorry": true,
+        "report_axioms": true
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"results\":[{\"declaration\":\"Probe.sorryProof\",\"facts\":{\"axioms\":[\"sorryAx\"],\"axioms_available\":true,\"contains_admit\":false,\"contains_sorry\":true,\"contains_sorry_ax\":false,\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"original_range\":{\"end_column\":18,\"end_line\":4,\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"start_column\":8,\"start_line\":4},\"position\":{\"column\":8,\"end_column\":18,\"end_line\":4,\"line\":4},\"severity\":\"warning\"}]},\"facts_trustworthy\":true,\"unresolved_goals\":[]},\"file\":\"Probe.lean\",\"id\":\"group_1:Probe.sorryProof\",\"verification_status\":\"verified\"}],\"summary\":{\"failed\":0,\"needs_build\":0,\"requested\":1,\"verified\":1}},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"content_sha256\":\"f0b0c9d082d16c59550e874c313ca611d9447051db8ce177c917b70eac8a778e\",\"detail\":\"source snapshot was read from disk for this call\",\"path\":\"Probe.lean\",\"scope\":\"file\",\"status\":\"edit_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.004,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "invalid_declaration",
+      "tool": "lean_verify",
+      "arguments": {
+        "targets": [
+          {
+            "kind": "explicit",
+            "file": "Bad.lean",
+            "declarations": [
+              "Probe.bad"
+            ]
+          }
+        ],
+        "allow_sorry": false,
+        "report_axioms": true
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"results\":[{\"declaration\":\"Probe.bad\",\"facts\":{\"axioms\":[\"sorryAx\"],\"axioms_available\":true,\"contains_admit\":false,\"contains_sorry\":false,\"contains_sorry_ax\":false,\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Bad.lean\",\"message\":\"Type mismatch\\n  True.intro\\nhas type\\n  True\\nbut is expected to have type\\n  False\",\"original_range\":{\"end_column\":42,\"end_line\":2,\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Bad.lean\",\"start_column\":26,\"start_line\":2},\"position\":{\"column\":26,\"end_column\":42,\"end_line\":2,\"line\":2},\"severity\":\"error\"}]},\"facts_trustworthy\":true,\"unresolved_goals\":[{\"value\":\"⊢ False\"}]},\"file\":\"Bad.lean\",\"id\":\"group_1:Probe.bad\",\"verification_status\":\"has_unresolved_goals\"}],\"summary\":{\"failed\":1,\"needs_build\":0,\"requested\":1,\"verified\":0}},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"content_sha256\":\"ca6aadd75789beb5ce25f04a3a08b414114b97278e07560c2374326beeb21217\",\"detail\":\"source snapshot was read from disk for this call\",\"path\":\"Bad.lean\",\"scope\":\"file\",\"status\":\"edit_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.002,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "missing_declaration",
+      "tool": "lean_verify",
+      "arguments": {
+        "targets": [
+          {
+            "kind": "explicit",
+            "file": "Probe.lean",
+            "declarations": [
+              "Probe.absent"
+            ]
+          }
+        ],
+        "allow_sorry": false,
+        "report_axioms": true
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"results\":[{\"declaration\":\"Probe.absent\",\"facts\":{\"axioms\":[],\"axioms_available\":false,\"contains_admit\":false,\"contains_sorry\":false,\"contains_sorry_ax\":false,\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"original_range\":{\"end_column\":18,\"end_line\":4,\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"start_column\":8,\"start_line\":4},\"position\":{\"column\":8,\"end_column\":18,\"end_line\":4,\"line\":4},\"severity\":\"warning\"}]},\"facts_trustworthy\":true,\"unresolved_goals\":[]},\"file\":\"Probe.lean\",\"id\":\"group_1:Probe.absent\",\"verification_status\":\"not_found\"}],\"summary\":{\"failed\":1,\"needs_build\":0,\"requested\":1,\"verified\":0}},\"errors\":[{\"code\":\"warning\",\"message\":\"report_axioms: the axiom dependency set could not be computed (target unresolved or budget exhausted); the empty `axioms` list means \\\"not computed\\\", not \\\"no axioms\\\"\",\"next_action\":\"source files were not modified by verification\",\"severity\":\"warning\"}],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"content_sha256\":\"f0b0c9d082d16c59550e874c313ca611d9447051db8ce177c917b70eac8a778e\",\"detail\":\"source snapshot was read from disk for this call\",\"path\":\"Probe.lean\",\"scope\":\"file\",\"status\":\"edit_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.004,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "proof_candidates",
+      "tool": "lean_trial",
+      "arguments": {
+        "kind": "proof_step",
+        "file": "Probe.lean",
+        "declaration": "Probe.good",
+        "snippets": [
+          "simp",
+          "exact True.intro",
+          "sorry"
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"imports\":[\"Probe.Base\"],\"result\":{\"candidate_limit\":16,\"candidates\":[{\"declaration\":{\"body_span\":{\"end_column\":7,\"end_line\":4,\"start_column\":39,\"start_line\":3},\"declaration_kind\":\"theorem\",\"declaration_name\":\"Probe.good\",\"declaration_span\":{\"end_column\":7,\"end_line\":4,\"start_column\":1,\"start_line\":3},\"name_span\":{\"end_column\":13,\"end_line\":3,\"start_column\":9,\"start_line\":3},\"namespace_name\":\"Probe\",\"short_name\":\"good\"},\"diagnostics\":{\"diagnostics\":[]},\"downstream_diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"synthetic_buffer\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"position\":{\"column\":8,\"end_column\":18,\"end_line\":5,\"line\":5},\"severity\":\"warning\",\"synthetic_range\":{\"column\":8,\"end_column\":18,\"end_line\":5,\"line\":5}}]},\"goals\":[],\"id\":\"candidate_1\",\"post_closure_diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"synthetic_buffer\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"No goals to be solved\",\"position\":{\"column\":2,\"end_column\":6,\"end_line\":4,\"line\":4},\"severity\":\"error\",\"synthetic_range\":{\"column\":2,\"end_column\":6,\"end_line\":4,\"line\":4}}]},\"proof_position\":{\"index\":0,\"tactic\":{\"value\":\"simp\"}},\"snippet\":{\"value\":\"simp\"},\"status\":\"closed\"},{\"declaration\":{\"body_span\":{\"end_column\":7,\"end_line\":4,\"start_column\":39,\"start_line\":3},\"declaration_kind\":\"theorem\",\"declaration_name\":\"Probe.good\",\"declaration_span\":{\"end_column\":7,\"end_line\":4,\"start_column\":1,\"start_line\":3},\"name_span\":{\"end_column\":13,\"end_line\":3,\"start_column\":9,\"start_line\":3},\"namespace_name\":\"Probe\",\"short_name\":\"good\"},\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"synthetic_buffer\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"Type mismatch\\n  True.intro\\nhas type\\n  True\\nbut is expected to have type\\n  n + 0 = n\",\"position\":{\"column\":2,\"end_column\":18,\"end_line\":3,\"line\":3},\"severity\":\"error\",\"synthetic_range\":{\"column\":2,\"end_column\":18,\"end_line\":3,\"line\":3}}]},\"downstream_diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"synthetic_buffer\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"position\":{\"column\":8,\"end_column\":18,\"end_line\":5,\"line\":5},\"severity\":\"warning\",\"synthetic_range\":{\"column\":8,\"end_column\":18,\"end_line\":5,\"line\":5}}]},\"goals\":[{\"value\":\"n : Nat\\n⊢ n + 0 = n\"}],\"id\":\"candidate_2\",\"proof_position\":{\"index\":0,\"tactic\":{\"value\":\"simp\"}},\"snippet\":{\"value\":\"exact True.intro\"},\"status\":\"failed\"},{\"declaration\":{\"body_span\":{\"end_column\":7,\"end_line\":4,\"start_column\":39,\"start_line\":3},\"declaration_kind\":\"theorem\",\"declaration_name\":\"Probe.good\",\"declaration_span\":{\"end_column\":7,\"end_line\":4,\"start_column\":1,\"start_line\":3},\"name_span\":{\"end_column\":13,\"end_line\":3,\"start_column\":9,\"start_line\":3},\"namespace_name\":\"Probe\",\"short_name\":\"good\"},\"diagnostics\":{\"diagnostics\":[]},\"downstream_diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"synthetic_buffer\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"position\":{\"column\":8,\"end_column\":18,\"end_line\":5,\"line\":5},\"severity\":\"warning\",\"synthetic_range\":{\"column\":8,\"end_column\":18,\"end_line\":5,\"line\":5}}]},\"goals\":[],\"id\":\"candidate_3\",\"post_closure_diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"synthetic_buffer\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"No goals to be solved\",\"position\":{\"column\":2,\"end_column\":6,\"end_line\":4,\"line\":4},\"severity\":\"error\",\"synthetic_range\":{\"column\":2,\"end_column\":6,\"end_line\":4,\"line\":4}}]},\"proof_position\":{\"index\":0,\"tactic\":{\"value\":\"simp\"}},\"snippet\":{\"value\":\"sorry\"},\"status\":\"closed\"}],\"entry_goals\":[{\"value\":\"n : Nat\\n⊢ n + 0 = n\"}],\"locals\":[{\"binder_info\":\"Lean.BinderInfo.default\",\"name\":\"n\",\"type_str\":{\"value\":\"Nat\"}}],\"summary\":{\"budget_exceeded\":0,\"candidate_limit\":16,\"closed\":2,\"failed\":1,\"not_attempted\":0,\"output_truncated\":0,\"progressed\":0,\"requested_candidates\":3,\"returned_candidates\":3,\"timeout\":0,\"unsupported\":0}},\"status\":\"ok\"},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"content_sha256\":\"f0b0c9d082d16c59550e874c313ca611d9447051db8ce177c917b70eac8a778e\",\"detail\":\"source snapshot was read from disk for this call\",\"path\":\"Probe.lean\",\"scope\":\"file\",\"status\":\"edit_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.012,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "valid_command",
+      "tool": "lean_trial",
+      "arguments": {
+        "kind": "command",
+        "imports": [
+          "Probe.Base"
+        ],
+        "commands": "#eval Probe.base"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"diagnostics\":{\"diagnostics\":[],\"summary\":{\"errors\":0,\"info\":1,\"warnings\":0}},\"imports\":[\"Probe.Base\"],\"output\":{\"value\":\"1\"}},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"detail\":\"command trial used explicit imports and no source file snapshot\",\"scope\":\"project\",\"status\":\"not_applicable\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.002,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "invalid_command",
+      "tool": "lean_trial",
+      "arguments": {
+        "kind": "command",
+        "imports": [
+          "Init"
+        ],
+        "commands": "theorem invalid : False := by exact True.intro"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"message\":\"Type mismatch\\n  True.intro\\nhas type\\n  True\\nbut is expected to have type\\n  False\",\"original_range\":{\"end_column\":46,\"end_line\":1,\"file\":\"<lean_trial command>\",\"start_column\":30,\"start_line\":1},\"position\":{\"column\":30,\"end_column\":46,\"end_line\":1,\"line\":1},\"severity\":\"error\"}],\"summary\":{\"errors\":1,\"info\":0,\"warnings\":0}},\"imports\":[\"Init\"],\"output\":{\"value\":\"\"}},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"detail\":\"command trial used explicit imports and no source file snapshot\",\"scope\":\"project\",\"status\":\"not_applicable\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.291,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "references_before_edit",
+      "tool": "lean_lookup",
+      "arguments": {
+        "kind": "references",
+        "name": "Probe.base",
+        "scope": "project"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"files_scanned\":2,\"files_skipped\":0,\"references\":[{\"column\":20,\"end_column\":24,\"end_line\":8,\"file\":\"Probe.lean\",\"kind\":\"ref\",\"line\":8},{\"column\":27,\"end_column\":31,\"end_line\":8,\"file\":\"Probe.lean\",\"kind\":\"ref\",\"line\":8},{\"column\":5,\"end_column\":9,\"end_line\":2,\"file\":\"Probe/Base.lean\",\"kind\":\"def\",\"line\":2}],\"semantic_based\":true,\"status\":\"ok\"},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"ilean\",\"detail\":\"project reference index is current for contributing modules\",\"scope\":\"project\",\"status\":\"build_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"metadata-only\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "invalid_request",
+      "tool": "lean_status",
+      "arguments": {
+        "kind": "invalid"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 12,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":null,\"errors\":[{\"code\":\"invalid_kind\",\"details\":{\"examples\":{\"file_diagnostics\":{\"file\":\"LeanRsFixture/ProofActions.lean\",\"kind\":\"file_diagnostics\"},\"project\":{\"include\":[\"toolchain\",\"worker\",\"artifacts\"],\"kind\":\"project\"}}},\"message\":\"lean_status does not support kind `invalid`; allowed: project, file_diagnostics\",\"next_action\":\"Choose one of the allowed modes; see `details.examples`.\",\"retryable\":false,\"severity\":\"error\"}],\"trust\":{\"lean_toolchain\":\"\",\"project_root\":\"\",\"session_id\":\"request-invalid\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "missing_file",
+      "tool": "lean_status",
+      "arguments": {
+        "kind": "file_diagnostics",
+        "file": "Missing.lean"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 13,
+        "error": {
+          "code": -32603,
+          "message": "io: No such file or directory (os error 2)"
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "unusable_project",
+      "tool": "lean_status",
+      "arguments": {
+        "kind": "project",
+        "project": "/tmp/aizim-lean-host-study-39z5iqq5/absent-project"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 14,
+        "error": {
+          "code": -32603,
+          "message": "lake project not usable: canonicalise /tmp/aizim-lean-host-study-39z5iqq5/absent-project: No such file or directory (os error 2)"
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "unadvertised_runtime_tool",
+      "tool": "lean_runtime",
+      "arguments": {
+        "action": "status"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 15,
+        "error": {
+          "code": -32602,
+          "message": "tool not found"
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "source_fresh_after_edit",
+      "tool": "lean_verify",
+      "arguments": {
+        "targets": [
+          {
+            "kind": "explicit",
+            "file": "Probe.lean",
+            "declarations": [
+              "fresh"
+            ]
+          }
+        ],
+        "allow_sorry": false,
+        "report_axioms": true
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 16,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"results\":[{\"declaration\":\"fresh\",\"facts\":{\"axioms\":[],\"axioms_available\":true,\"contains_admit\":false,\"contains_sorry\":false,\"contains_sorry_ax\":false,\"diagnostics\":{\"diagnostics\":[{\"coordinate_space\":\"original_source\",\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"message\":\"declaration uses `sorry`\",\"original_range\":{\"end_column\":18,\"end_line\":4,\"file\":\"/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean\",\"start_column\":8,\"start_line\":4},\"position\":{\"column\":8,\"end_column\":18,\"end_line\":4,\"line\":4},\"severity\":\"warning\"}]},\"facts_trustworthy\":true,\"unresolved_goals\":[]},\"file\":\"Probe.lean\",\"id\":\"group_1:fresh\",\"verification_status\":\"verified\"}],\"summary\":{\"failed\":0,\"needs_build\":0,\"requested\":1,\"verified\":1}},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"content_sha256\":\"ee4a205cb34d8d3192ad655c96f2303fc24bb869b988daf2b0e2f3fa940eef49\",\"detail\":\"source snapshot was read from disk for this call\",\"path\":\"Probe.lean\",\"scope\":\"file\",\"status\":\"edit_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.006,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "references_after_edit",
+      "tool": "lean_lookup",
+      "arguments": {
+        "kind": "references",
+        "name": "Probe.base",
+        "scope": "project"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"files_scanned\":2,\"files_skipped\":0,\"references\":[{\"column\":20,\"end_column\":24,\"end_line\":8,\"file\":\"Probe.lean\",\"kind\":\"ref\",\"line\":8},{\"column\":27,\"end_column\":31,\"end_line\":8,\"file\":\"Probe.lean\",\"kind\":\"ref\",\"line\":8},{\"column\":5,\"end_column\":9,\"end_line\":2,\"file\":\"Probe/Base.lean\",\"kind\":\"def\",\"line\":2}],\"semantic_based\":true,\"status\":\"ok\"},\"errors\":[{\"code\":\"warning\",\"message\":\"reference index is build-fresh, not edit-fresh: 2 contributing module(s) have source newer than their .ilean (Probe.lean, Probe/Base.lean); results reflect the last `lake build`.\",\"next_action\":\"re-run `lake build` to refresh the reference index for edited modules\",\"severity\":\"warning\"}],\"trust\":{\"artifacts\":[{\"artifact\":\"ilean\",\"detail\":\"2 contributing module(s) have source newer than their .ilean (Probe.lean, Probe/Base.lean)\",\"next_action\":\"lake build # refresh stale .ilean files, then retry\",\"scope\":\"project\",\"status\":\"stale_build\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"metadata-only\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "import_after_edit_before_build",
+      "tool": "lean_trial",
+      "arguments": {
+        "kind": "command",
+        "imports": [
+          "Probe.Base"
+        ],
+        "commands": "#eval Probe.base"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 18,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"diagnostics\":{\"diagnostics\":[],\"summary\":{\"errors\":0,\"info\":1,\"warnings\":0}},\"imports\":[\"Probe.Base\"],\"output\":{\"value\":\"1\"}},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"detail\":\"command trial used explicit imports and no source file snapshot\",\"scope\":\"project\",\"status\":\"not_applicable\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "source_overlay_after_edit",
+      "tool": "lean_trial",
+      "arguments": {
+        "kind": "command",
+        "file": "Probe/Base.lean",
+        "commands": "#eval Probe.base"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 19,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"diagnostics\":{\"diagnostics\":[],\"summary\":{\"errors\":0,\"info\":1,\"warnings\":0}},\"imports\":[],\"output\":{\"value\":\"2\"}},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"content_sha256\":\"89ba615b119e02741c49163bf9f5a7d128d046ec903b810efaa67c1e4443a174\",\"detail\":\"source snapshot was read from disk for this call\",\"path\":\"Probe/Base.lean\",\"scope\":\"file\",\"status\":\"edit_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.003,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "import_after_build",
+      "tool": "lean_trial",
+      "arguments": {
+        "kind": "command",
+        "imports": [
+          "Probe.Base"
+        ],
+        "commands": "#eval Probe.base"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 20,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"diagnostics\":{\"diagnostics\":[],\"summary\":{\"errors\":0,\"info\":1,\"warnings\":0}},\"imports\":[\"Probe.Base\"],\"output\":{\"value\":\"2\"}},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"source\",\"detail\":\"command trial used explicit imports and no source file snapshot\",\"scope\":\"project\",\"status\":\"not_applicable\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"7610ca6b-1900-4799-bb40-5fc80eb86e46\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.207,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "references_after_build",
+      "tool": "lean_lookup",
+      "arguments": {
+        "kind": "references",
+        "name": "Probe.base",
+        "scope": "project"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 21,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"data\":{\"files_scanned\":2,\"files_skipped\":0,\"references\":[{\"column\":20,\"end_column\":24,\"end_line\":8,\"file\":\"Probe.lean\",\"kind\":\"ref\",\"line\":8},{\"column\":27,\"end_column\":31,\"end_line\":8,\"file\":\"Probe.lean\",\"kind\":\"ref\",\"line\":8},{\"column\":5,\"end_column\":9,\"end_line\":2,\"file\":\"Probe/Base.lean\",\"kind\":\"def\",\"line\":2}],\"semantic_based\":true,\"status\":\"ok\"},\"errors\":[],\"trust\":{\"artifacts\":[{\"artifact\":\"ilean\",\"detail\":\"project reference index is current for contributing modules\",\"scope\":\"project\",\"status\":\"build_fresh\"}],\"lean_toolchain\":\"leanprover/lean4:v4.35.0\",\"project_root\":\"/tmp/aizim-lean-host-study-39z5iqq5\",\"session_id\":\"metadata-only\"}}"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "elapsed_seconds": 0.0,
+      "changed_project_files": []
+    },
+    {
+      "backend": "host",
+      "case": "missing_worker",
+      "tool": "lean_trial",
+      "arguments": {
+        "kind": "command",
+        "imports": [
+          "Init"
+        ],
+        "commands": "#check True"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "error": {
+          "code": -32603,
+          "message": "lake project not usable: no worker binary for toolchain v4.35.0; run: lean-host-mcp install-worker --toolchain v4.35.0"
+        }
+      },
+      "elapsed_seconds": 0.001,
+      "changed_project_files": []
+    },
+    {
+      "backend": "lsp",
+      "case": "valid_and_sorry_diagnostics",
+      "tool": "lean_diagnostic_messages",
+      "arguments": {
+        "file_path": "/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "content": [
+            {
+              "text": "{\n  \"partial\": false,\n  \"success\": true,\n  \"timed_out\": false,\n  \"items\": [\n    {\n      \"severity\": \"warning\",\n      \"message\": \"declaration uses `sorry`\",\n      \"line\": 5,\n      \"column\": 9,\n      \"category\": \"sorry\"\n    }\n  ]\n}",
+              "type": "text"
+            }
+          ],
+          "isError": false,
+          "structuredContent": {
+            "result": {
+              "partial": false,
+              "success": true,
+              "timed_out": false,
+              "items": [
+                {
+                  "severity": "warning",
+                  "message": "declaration uses `sorry`",
+                  "line": 5,
+                  "column": 9,
+                  "category": "sorry"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "elapsed_seconds": 0.339,
+      "changed_project_files": []
+    },
+    {
+      "backend": "lsp",
+      "case": "invalid_diagnostics",
+      "tool": "lean_diagnostic_messages",
+      "arguments": {
+        "file_path": "/tmp/aizim-lean-host-study-39z5iqq5/Bad.lean"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+          "content": [
+            {
+              "text": "{\n  \"partial\": false,\n  \"success\": false,\n  \"timed_out\": false,\n  \"items\": [\n    {\n      \"severity\": \"error\",\n      \"message\": \"Type mismatch\\n  True.intro\\nhas type\\n  True\\nbut is expected to have type\\n  False\",\n      \"line\": 3,\n      \"column\": 27,\n      \"category\": \"diagnostic\"\n    }\n  ]\n}",
+              "type": "text"
+            }
+          ],
+          "isError": false,
+          "structuredContent": {
+            "result": {
+              "partial": false,
+              "success": false,
+              "timed_out": false,
+              "items": [
+                {
+                  "severity": "error",
+                  "message": "Type mismatch\n  True.intro\nhas type\n  True\nbut is expected to have type\n  False",
+                  "line": 3,
+                  "column": 27,
+                  "category": "diagnostic"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "elapsed_seconds": 0.256,
+      "changed_project_files": []
+    },
+    {
+      "backend": "lsp",
+      "case": "Probe.good",
+      "tool": "lean_verify",
+      "arguments": {
+        "file_path": "/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean",
+        "theorem_name": "Probe.good"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "result": {
+          "content": [
+            {
+              "text": "{\n  \"axioms\": [\n    \"propext\"\n  ],\n  \"trust\": \"standard\",\n  \"non_standard_axioms\": [],\n  \"warnings\": []\n}",
+              "type": "text"
+            }
+          ],
+          "isError": false,
+          "structuredContent": {
+            "axioms": [
+              "propext"
+            ],
+            "trust": "standard",
+            "non_standard_axioms": [],
+            "warnings": []
+          }
+        }
+      },
+      "elapsed_seconds": 0.813,
+      "changed_project_files": []
+    },
+    {
+      "backend": "lsp",
+      "case": "Probe.sorryProof",
+      "tool": "lean_verify",
+      "arguments": {
+        "file_path": "/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean",
+        "theorem_name": "Probe.sorryProof"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "result": {
+          "content": [
+            {
+              "text": "{\n  \"axioms\": [\n    \"sorryAx\"\n  ],\n  \"trust\": \"incomplete\",\n  \"non_standard_axioms\": [\n    \"sorryAx\"\n  ],\n  \"warnings\": []\n}",
+              "type": "text"
+            }
+          ],
+          "isError": false,
+          "structuredContent": {
+            "axioms": [
+              "sorryAx"
+            ],
+            "trust": "incomplete",
+            "non_standard_axioms": [
+              "sorryAx"
+            ],
+            "warnings": []
+          }
+        }
+      },
+      "elapsed_seconds": 0.015,
+      "changed_project_files": []
+    },
+    {
+      "backend": "lsp",
+      "case": "Probe.assumed",
+      "tool": "lean_verify",
+      "arguments": {
+        "file_path": "/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean",
+        "theorem_name": "Probe.assumed"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "result": {
+          "content": [
+            {
+              "text": "{\n  \"axioms\": [\n    \"Probe.assumed\"\n  ],\n  \"trust\": \"custom\",\n  \"non_standard_axioms\": [\n    \"Probe.assumed\"\n  ],\n  \"warnings\": []\n}",
+              "type": "text"
+            }
+          ],
+          "isError": false,
+          "structuredContent": {
+            "axioms": [
+              "Probe.assumed"
+            ],
+            "trust": "custom",
+            "non_standard_axioms": [
+              "Probe.assumed"
+            ],
+            "warnings": []
+          }
+        }
+      },
+      "elapsed_seconds": 0.006,
+      "changed_project_files": []
+    },
+    {
+      "backend": "lsp",
+      "case": "Probe.axiomProof",
+      "tool": "lean_verify",
+      "arguments": {
+        "file_path": "/tmp/aizim-lean-host-study-39z5iqq5/Probe.lean",
+        "theorem_name": "Probe.axiomProof"
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "result": {
+          "content": [
+            {
+              "text": "{\n  \"axioms\": [\n    \"Probe.assumed\"\n  ],\n  \"trust\": \"custom\",\n  \"non_standard_axioms\": [\n    \"Probe.assumed\"\n  ],\n  \"warnings\": []\n}",
+              "type": "text"
+            }
+          ],
+          "isError": false,
+          "structuredContent": {
+            "axioms": [
+              "Probe.assumed"
+            ],
+            "trust": "custom",
+            "non_standard_axioms": [
+              "Probe.assumed"
+            ],
+            "warnings": []
+          }
+        }
+      },
+      "elapsed_seconds": 0.007,
+      "changed_project_files": []
+    }
+  ],
+  "host_initialize": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "protocolVersion": "2025-06-18",
+      "capabilities": {
+        "tools": {}
+      },
+      "serverInfo": {
+        "name": "lean-host-mcp",
+        "version": "0.14.2",
+        "websiteUrl": "https://github.com/jcreinhold/lean-host-mcp"
+      },
+      "instructions": "MCP server hosting Lean 4 in-process via lean-rs. Tools expose five semantic Lean job families: context, trial, verification, lookup, and status. Context, trial, lookup, and status select a mode with `kind`; verification takes explicit target groups."
+    }
+  },
+  "host_tools": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "result": {
+      "tools": [
+        {
+          "name": "lean_context",
+          "description": "Lean proof or term context. Use kind=\"proof_position\" for proof state at a declaration position.",
+          "inputSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": true,
+            "properties": {
+              "declaration": {
+                "description": "Fully-qualified or file-local declaration name.",
+                "type": "string"
+              },
+              "file": {
+                "description": "Path to a .lean file, relative to the project root unless absolute.",
+                "type": "string"
+              },
+              "include_boundaries": {
+                "default": false,
+                "description": "Opt in to the proof-boundary list (proof_boundaries). Default false: boundaries are navigation metadata; request them once per declaration to pick a position selector, then drive steps with self-contained lean_trial calls.",
+                "type": "boolean"
+              },
+              "include_expected_type": {
+                "default": false,
+                "description": "Opt in to the goal's expected type (expected_type). Default false.",
+                "type": "boolean"
+              },
+              "kind": {
+                "description": "Mode within this semantic tool family.",
+                "enum": [
+                  "proof_position"
+                ]
+              },
+              "project": {
+                "description": "Optional project-root override.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "proof_position": {
+                "additionalProperties": false,
+                "description": "Where in the declaration proof to inspect or edit. Omit for the pristine entry goal.",
+                "examples": [
+                  {
+                    "kind": "default"
+                  },
+                  {
+                    "index": 0,
+                    "kind": "index"
+                  },
+                  {
+                    "kind": "after_text",
+                    "occurrence": 0,
+                    "text": "intro h"
+                  }
+                ],
+                "properties": {
+                  "index": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "description": "`default` uses the entry goal; `index` requires `index`; `after_text` requires `text` and accepts optional `occurrence`. For matched text, inspect returned `goals_before`/`goals_after`; not every substring is a proof-state boundary.",
+                    "enum": [
+                      "default",
+                      "index",
+                      "after_text"
+                    ]
+                  },
+                  "occurrence": {
+                    "default": 0,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "name": "lean_lookup",
+          "description": "Semantic lookup. Kinds: declaration, declarations, proof_search, references.",
+          "inputSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": true,
+            "properties": {
+              "declaration": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fields": {
+                "description": "Optional field selection. Use an object of booleans or a string list naming fields to include.",
+                "examples": [
+                  [
+                    "statement",
+                    "docstring"
+                  ],
+                  {
+                    "attributes": false,
+                    "docstring": true,
+                    "flags": false,
+                    "source": false,
+                    "statement": true
+                  }
+                ],
+                "items": {
+                  "enum": [
+                    "source",
+                    "statement",
+                    "type",
+                    "docstring",
+                    "docs",
+                    "attributes",
+                    "flags"
+                  ]
+                },
+                "properties": {
+                  "attributes": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "docstring": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "flags": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "source": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "statement": {
+                    "default": true,
+                    "type": "boolean"
+                  }
+                },
+                "type": [
+                  "object",
+                  "array",
+                  "null"
+                ]
+              },
+              "file": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "files": {
+                "description": "Optional file restriction for project scope.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "goal": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "imports": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "description": "Mode within this semantic tool family.",
+                "enum": [
+                  "declaration",
+                  "declarations",
+                  "proof_search",
+                  "references"
+                ]
+              },
+              "limit": {
+                "default": 200,
+                "maximum": 1000,
+                "minimum": 1,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "mode": {
+                "enum": [
+                  "next_step",
+                  "exact",
+                  "apply",
+                  "rewrite",
+                  "simp"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "project": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "proof_position": {
+                "additionalProperties": false,
+                "description": "Where in the declaration proof to inspect or edit. Omit for the pristine entry goal.",
+                "examples": [
+                  {
+                    "kind": "default"
+                  },
+                  {
+                    "index": 0,
+                    "kind": "index"
+                  },
+                  {
+                    "kind": "after_text",
+                    "occurrence": 0,
+                    "text": "intro h"
+                  }
+                ],
+                "properties": {
+                  "index": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "description": "`default` uses the entry goal; `index` requires `index`; `after_text` requires `text` and accepts optional `occurrence`. For matched text, inspect returned `goals_before`/`goals_after`; not every substring is a proof-state boundary.",
+                    "enum": [
+                      "default",
+                      "index",
+                      "after_text"
+                    ]
+                  },
+                  "occurrence": {
+                    "default": 0,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              "raw_statement": {
+                "type": "boolean"
+              },
+              "scope": {
+                "enum": [
+                  "file",
+                  "project"
+                ]
+              },
+              "target": {
+                "additionalProperties": false,
+                "description": "Declaration inventory target. Use `kind: \"file\"` with `path`, or `kind: \"module\"` with `module`.",
+                "examples": [
+                  {
+                    "kind": "file",
+                    "path": "LeanRsFixture/ProofAgent.lean"
+                  },
+                  {
+                    "kind": "module",
+                    "module": "LeanRsFixture.ProofAgent"
+                  }
+                ],
+                "properties": {
+                  "kind": {
+                    "description": "`file` reads declarations from a Lean source file; `module` reads a Lean module using source when available and a fresh .ilean supplement/fallback when needed.",
+                    "enum": [
+                      "file",
+                      "module"
+                    ]
+                  },
+                  "module": {
+                    "description": "Dotted Lean module name. Required when kind is `module`.",
+                    "type": "string"
+                  },
+                  "path": {
+                    "description": "Path to a .lean file, relative to the project root unless absolute. Required when kind is `file`.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              "type_text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "name": "lean_status",
+          "description": "Project/toolchain status and source diagnostics. Kinds: project, file_diagnostics.",
+          "inputSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": true,
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "include": {
+                "description": "Sections to include. Omit for all sections.",
+                "items": {
+                  "enum": [
+                    "toolchain",
+                    "worker",
+                    "artifacts"
+                  ]
+                },
+                "type": "array"
+              },
+              "kind": {
+                "default": "project",
+                "description": "Mode within this semantic tool family.",
+                "enum": [
+                  "project",
+                  "file_diagnostics"
+                ]
+              },
+              "project": {
+                "description": "Optional project-root override.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "name": "lean_trial",
+          "description": "Non-mutating Lean experiments. Kinds: proof_step, command.",
+          "inputSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": true,
+            "properties": {
+              "commands": {
+                "type": "string"
+              },
+              "declaration": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "imports": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "description": "Mode within this semantic tool family.",
+                "enum": [
+                  "proof_step",
+                  "command"
+                ]
+              },
+              "project": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "proof_position": {
+                "additionalProperties": false,
+                "description": "Where in the declaration proof to inspect or edit. Omit for the pristine entry goal.",
+                "examples": [
+                  {
+                    "kind": "default"
+                  },
+                  {
+                    "index": 0,
+                    "kind": "index"
+                  },
+                  {
+                    "kind": "after_text",
+                    "occurrence": 0,
+                    "text": "intro h"
+                  }
+                ],
+                "properties": {
+                  "index": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "description": "`default` uses the entry goal; `index` requires `index`; `after_text` requires `text` and accepts optional `occurrence`. For matched text, inspect returned `goals_before`/`goals_after`; not every substring is a proof-state boundary.",
+                    "enum": [
+                      "default",
+                      "index",
+                      "after_text"
+                    ]
+                  },
+                  "occurrence": {
+                    "default": 0,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              "retry_tainted_non_positive": {
+                "default": false,
+                "description": "Opt-in: retry once server-side when the worker was recycled mid-call and the batch is non-positive (no candidate closed or progressed).",
+                "type": "boolean"
+              },
+              "snippet": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "snippets": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "name": "lean_verify",
+          "description": "Verify Lean declarations from explicit, file_all, or module_all target groups.",
+          "inputSchema": {
+            "$defs": {
+              "LeanVerifyDetail": {
+                "enum": [
+                  "compact",
+                  "full"
+                ],
+                "type": "string"
+              },
+              "LeanVerifyTargetGroup": {
+                "oneOf": [
+                  {
+                    "properties": {
+                      "declarations": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "file": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "explicit",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "file",
+                      "declarations"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "file": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "file_all",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "file"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "module_all",
+                        "type": "string"
+                      },
+                      "module": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "module"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "properties": {
+              "allow_sorry": {
+                "default": false,
+                "description": "Treat `sorry`/`admit` as success instead of failure.",
+                "type": "boolean"
+              },
+              "detail": {
+                "$ref": "#/$defs/LeanVerifyDetail",
+                "description": "Verification row verbosity. `compact` omits repeated target/candidate\nspan blocks; `full` preserves them."
+              },
+              "project": {
+                "default": null,
+                "description": "Project-root override; defaults to the server's configured Lake project.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "report_axioms": {
+                "default": false,
+                "description": "Include the axioms each proof depends on (slower).",
+                "type": "boolean"
+              },
+              "retry_tainted_non_positive": {
+                "default": false,
+                "description": "Opt-in: when the worker was recycled mid-call and a target-group batch\ncomes back non-positive (any row that would be relabeled\n`worker_recycled`), re-issue that batch once server-side. `verified`\nrows are never retried (verification is monotone). Default `false`:\nthe server relabels, warns, and delegates the retry decision to the\nclient. At most one retry per batch; retries are surfaced through\n`runtime.retry_count`.",
+                "type": "boolean"
+              },
+              "targets": {
+                "description": "Explicit, file-wide, or module-wide declaration groups to verify.",
+                "items": {
+                  "$ref": "#/$defs/LeanVerifyTargetGroup"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "targets"
+            ],
+            "type": "object"
+          }
+        }
+      ]
+    }
+  },
+  "source_edits": {
+    "Probe/Base.lean": "base changed from 1 to 2",
+    "Probe.lean": "appended theorem fresh"
+  },
+  "edited_source_sha256": {
+    "Probe.lean": "ee4a205cb34d8d3192ad655c96f2303fc24bb869b988daf2b0e2f3fa940eef49",
+    "Probe/Base.lean": "89ba615b119e02741c49163bf9f5a7d128d046ec903b810efaa67c1e4443a174"
+  },
+  "build_after": {
+    "command": [
+      "/root/.elan/toolchains/leanprover--lean4---v4.35.0/bin/lake",
+      "build"
+    ],
+    "returncode": 0,
+    "stdout": "✔ [2/4] Built Probe.Base (133ms)\n⚠ [3/4] Built Probe (136ms)\nwarning: Probe.lean:5:8: declaration uses `sorry`\nBuild completed successfully (4 jobs).\n",
+    "stderr": "",
+    "elapsed_seconds": 0.325
+  },
+  "host_notifications": [],
+  "lsp_initialize": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "capabilities": {
+        "experimental": {},
+        "prompts": {
+          "listChanged": false
+        },
+        "resources": {
+          "listChanged": false,
+          "subscribe": false
+        },
+        "tools": {
+          "listChanged": false
+        }
+      },
+      "instructions": "## General Rules\n- All line and column numbers are 1-indexed. Columns count characters (codepoints).\n- This MCP does NOT edit files. Use other tools for editing.\n\n## Key Tools\n- **lean_goal**: Proof state at position. Omit `column` for before/after. `status` field: 'goals', 'complete' (proof done here), or 'no_goal_at_position' (not inside a proof).\n- **lean_diagnostic_messages**: Compiler errors/warnings. \"no goals to be solved\" = remove tactics. Each item carries `category`: 'linter' is style noise (unused variables and the like) that does not block compilation, 'sorry' marks an unproved declaration (not noise), 'suggestion' holds a `Try this:` replacement. A `hint` field appears on recognised failure modes.\n- **lean_term_goal**: Expected type at a position.\n- **lean_hover_info**: Type signature + docs. Column at START of identifier.\n- **lean_completions**: IDE autocomplete on incomplete code.\n- **lean_local_search**: Fast local declaration search. Use BEFORE trying a lemma name. `sources_searched` says whether source text and the symbol index were searched. Only `index: consulted` makes an empty result proof of absence; `warming` means the symbol index is still loading, `unavailable` means no language server is running, `error` means the lookup failed.\n- **lean_file_outline**: Fast token-efficient file skeleton with available type signatures.\n- **lean_multi_attempt**: Test tactics without editing at a proof position. Use `column` for an exact source position; omit it for fast line-based attempts: `[\"simp\", \"ring\", \"omega\"]`\n- **lean_code_actions**: Quick fixes and `TryThis` suggestions (simp?, exact?) with resolved edits.\n- **lean_declaration_file**: Declaration source slice with context and declaration line numbers; generated declarations include their source name when it can be determined. `full_file=true` returns the whole file (large).\n- **lean_references**: All usages of a symbol (capped by `max_results`, `total` reports the full count).\n- **lean_run_code**: Run standalone snippet. Must include imports.\n- **lean_verify**: Axiom check + source scan. Use fully qualified name (e.g. `Ns.thm`).\n- **lean_minimal_hypotheses**: Which explicit hypotheses of a theorem are actually needed.\n- **lean_build**: Run `lake build` + restart LSP. Only if needed (new imports). Use `fetch_cache=true` only for missing dependency caches. SLOW!\n- **lean_profile_proof**: Profile a theorem for performance. Shows tactic hotspots. SLOW!\n\n## Search Tools (rate limited)\n- **lean_leansearch** (90/30s): Natural language -> mathlib\n- **lean_loogle** (3/30s): Type pattern -> mathlib\n- **lean_leanfinder** (10/30s): Semantic/conceptual search\n- **lean_hammer_premise** (6/30s): Goal -> premises for simp/aesop\n\n## Search Decision Tree\n1. \"Does X exist locally?\" -> lean_local_search\n2. \"I need a lemma that says X\" -> lean_leansearch\n3. \"Find lemma with type pattern\" -> lean_loogle\n4. \"What's the Lean name for concept X?\" -> lean_leanfinder\n5. \"What closes this goal?\" / \"What to feed simp?\" -> lean_hammer_premise\n\nAfter finding a name: lean_local_search to verify, lean_hover_info for signature.\n\n## Return Formats\nList-returning tools return an object with an `items` array. Empty = `{\"items\": []}`.\n\n## Slow Files\nOn large files, pass `timeout_s` to lean_diagnostic_messages / lean_goal. A\nresponse with `partial: true` + `still_elaborating_lines` (or goal `status:\n'still_elaborating'`) means Lean is still working - poll again; it is NOT an\nerror or a dead server.\n\n## Error Handling\nCheck `isError` in responses: `true` means failure (timeout/LSP error/rate limit), while an empty `items` with `isError: false` means no results found -- except lean_local_search, where that only holds when its `index` field says `consulted`; otherwise the index was not consulted and the name may still exist.\n",
+      "protocolVersion": "2025-06-18",
+      "serverInfo": {
+        "name": "Lean LSP",
+        "version": "0.33.0"
+      }
+    }
+  },
+  "lsp_tools": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "result": {
+      "tools": [
+        {
+          "annotations": {
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true,
+            "readOnlyHint": false,
+            "title": "Build Project"
+          },
+          "description": "Build the Lean project and restart LSP. Use only if needed (e.g. new imports).",
+          "inputSchema": {
+            "properties": {
+              "lean_project_path": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Path to Lean project",
+                "title": "Lean Project Path"
+              },
+              "clean": {
+                "default": false,
+                "description": "Run lake clean first (slow)",
+                "title": "Clean",
+                "type": "boolean"
+              },
+              "fetch_cache": {
+                "default": false,
+                "description": "Run lake exe cache get before building (slow)",
+                "title": "Fetch Cache",
+                "type": "boolean"
+              },
+              "output_lines": {
+                "default": 20,
+                "description": "Return last N lines of build log (0=none)",
+                "title": "Output Lines",
+                "type": "integer"
+              }
+            },
+            "type": "object",
+            "title": "lsp_buildArguments"
+          },
+          "name": "lean_build",
+          "outputSchema": {
+            "properties": {
+              "success": {
+                "description": "Whether build succeeded",
+                "title": "Success",
+                "type": "boolean"
+              },
+              "output": {
+                "description": "Build output",
+                "title": "Output",
+                "type": "string"
+              },
+              "errors": {
+                "description": "Build errors if any",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Errors",
+                "type": "array"
+              }
+            },
+            "required": [
+              "success",
+              "output"
+            ],
+            "type": "object",
+            "title": "BuildResult"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Code Actions"
+          },
+          "description": "Get LSP code actions for a line. Returns resolved edits for TryThis suggestions (simp?, exact?, apply?) and other quick fixes.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "file_path",
+              "line"
+            ],
+            "type": "object",
+            "title": "code_actionsArguments"
+          },
+          "name": "lean_code_actions",
+          "outputSchema": {
+            "properties": {
+              "actions": {
+                "description": "List of available code actions",
+                "items": {
+                  "$ref": "#/$defs/CodeAction"
+                },
+                "title": "Actions",
+                "type": "array"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "CodeAction": {
+                "properties": {
+                  "title": {
+                    "description": "Code action title (e.g. 'Try this: simp only [...])",
+                    "title": "Title",
+                    "type": "string"
+                  },
+                  "is_preferred": {
+                    "description": "Whether this is the preferred action",
+                    "title": "Is Preferred",
+                    "type": "boolean"
+                  },
+                  "edits": {
+                    "description": "Text edits to apply",
+                    "items": {
+                      "$ref": "#/$defs/CodeActionEdit"
+                    },
+                    "title": "Edits",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "title",
+                  "is_preferred"
+                ],
+                "title": "CodeAction",
+                "type": "object"
+              },
+              "CodeActionEdit": {
+                "properties": {
+                  "new_text": {
+                    "description": "Replacement text",
+                    "title": "New Text",
+                    "type": "string"
+                  },
+                  "start_line": {
+                    "description": "Start line (1-indexed)",
+                    "title": "Start Line",
+                    "type": "integer"
+                  },
+                  "start_column": {
+                    "description": "Start column (1-indexed)",
+                    "title": "Start Column",
+                    "type": "integer"
+                  },
+                  "end_line": {
+                    "description": "End line (1-indexed)",
+                    "title": "End Line",
+                    "type": "integer"
+                  },
+                  "end_column": {
+                    "description": "End column (1-indexed)",
+                    "title": "End Column",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "new_text",
+                  "start_line",
+                  "start_column",
+                  "end_line",
+                  "end_column"
+                ],
+                "title": "CodeActionEdit",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for code actions at a position.",
+            "title": "CodeActionsResult"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Completions"
+          },
+          "description": "Get IDE autocompletions. Use on INCOMPLETE code (after `.` or partial name).",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "column": {
+                "description": "Column number (1-indexed characters)",
+                "minimum": 1,
+                "title": "Column",
+                "type": "integer"
+              },
+              "max_completions": {
+                "default": 32,
+                "description": "Max completions",
+                "minimum": 1,
+                "title": "Max Completions",
+                "type": "integer"
+              },
+              "resolve_details": {
+                "default": 8,
+                "description": "Fetch type signatures for the top N results",
+                "minimum": 0,
+                "title": "Resolve Details",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "file_path",
+              "line",
+              "column"
+            ],
+            "type": "object",
+            "title": "completionsArguments"
+          },
+          "name": "lean_completions",
+          "outputSchema": {
+            "properties": {
+              "prefix": {
+                "description": "Source prefix completed at the requested position",
+                "title": "Prefix",
+                "type": "string"
+              },
+              "items": {
+                "description": "List of completion items",
+                "items": {
+                  "$ref": "#/$defs/CompletionItem"
+                },
+                "title": "Items",
+                "type": "array"
+              }
+            },
+            "required": [
+              "prefix"
+            ],
+            "type": "object",
+            "$defs": {
+              "CompletionItem": {
+                "properties": {
+                  "label": {
+                    "description": "Completion text to insert",
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Completion kind (function, variable, etc.)",
+                    "title": "Kind"
+                  },
+                  "detail": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Additional detail",
+                    "title": "Detail"
+                  }
+                },
+                "required": [
+                  "label"
+                ],
+                "title": "CompletionItem",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for completions list.",
+            "title": "CompletionsResult"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Declaration Source"
+          },
+          "description": "Get declaration source with the source-line range and surrounding context.\n\nGenerated declarations include their source declaration when it is clear.\nSet full_file=True for the whole file (can be very large).",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "symbol": {
+                "description": "Case-sensitive Lean name in the file or project environment",
+                "title": "Symbol",
+                "type": "string"
+              },
+              "context_lines": {
+                "default": 20,
+                "description": "Lines of context around the declaration",
+                "minimum": 0,
+                "title": "Context Lines",
+                "type": "integer"
+              },
+              "full_file": {
+                "default": false,
+                "description": "Return the entire declaration file (large!)",
+                "title": "Full File",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "file_path",
+              "symbol"
+            ],
+            "type": "object",
+            "title": "declaration_fileArguments"
+          },
+          "name": "lean_declaration_file",
+          "outputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Path to declaration file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "content": {
+                "description": "Declaration source (sliced unless full_file=True)",
+                "title": "Content",
+                "type": "string"
+              },
+              "start_line": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "First line of the returned slice (1-indexed)",
+                "title": "Start Line"
+              },
+              "end_line": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Last line of the returned slice (1-indexed)",
+                "title": "End Line"
+              },
+              "declaration_start_line": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Declaration start line (1-indexed)",
+                "title": "Declaration Start Line"
+              },
+              "declaration_end_line": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Declaration end line (1-indexed), when known",
+                "title": "Declaration End Line"
+              },
+              "source_declaration": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Source declaration for a generated declaration such as one created by @[to_additive], when it can be determined reliably",
+                "title": "Source Declaration"
+              },
+              "total_lines": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Total lines in the declaration file",
+                "title": "Total Lines"
+              }
+            },
+            "required": [
+              "file_path",
+              "content"
+            ],
+            "type": "object",
+            "title": "DeclarationInfo"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Diagnostics"
+          },
+          "description": "Get compiler diagnostics (errors, warnings, infos) for a Lean file.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "start_line": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Filter from line",
+                "title": "Start Line"
+              },
+              "end_line": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Filter to line",
+                "title": "End Line"
+              },
+              "declaration_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Filter to declaration (slow)",
+                "title": "Declaration Name"
+              },
+              "interactive": {
+                "default": false,
+                "description": "Returns verbose nested TaggedText with embedded widgets. Only use when plain text is insufficient. For 'Try This' suggestions, prefer lean_code_actions.",
+                "title": "Interactive",
+                "type": "boolean"
+              },
+              "timeout_s": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Max seconds to wait for elaboration. On timeout returns partial=true with still_elaborating_lines - poll again. Omit to wait for full elaboration.",
+                "title": "Timeout S"
+              },
+              "severity": {
+                "default": null,
+                "description": "Filter by severity level. Returns all levels when omitted.",
+                "enum": [
+                  "error",
+                  "warning",
+                  "info",
+                  "hint"
+                ],
+                "title": "Severity",
+                "type": "string"
+              }
+            },
+            "required": [
+              "file_path"
+            ],
+            "type": "object",
+            "title": "diagnostic_messagesArguments"
+          },
+          "name": "lean_diagnostic_messages",
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/DiagnosticsResult"
+                  },
+                  {
+                    "$ref": "#/$defs/InteractiveDiagnosticsResult"
+                  }
+                ],
+                "title": "Result"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "$defs": {
+              "DiagnosticCategory": {
+                "enum": [
+                  "diagnostic",
+                  "linter",
+                  "sorry",
+                  "suggestion"
+                ],
+                "title": "DiagnosticCategory",
+                "type": "string"
+              },
+              "DiagnosticMessage": {
+                "properties": {
+                  "severity": {
+                    "description": "error, warning, info, or hint",
+                    "title": "Severity",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Diagnostic message text",
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Line (1-indexed)",
+                    "title": "Line",
+                    "type": "integer"
+                  },
+                  "column": {
+                    "description": "Column (1-indexed)",
+                    "title": "Column",
+                    "type": "integer"
+                  },
+                  "lean_tags": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Lean-specific tags: 'unsolvedGoals' (proof incomplete here) or 'goalsAccomplished' (proof finished). Machine-readable proof status - prefer over string-matching the message.",
+                    "title": "Lean Tags"
+                  },
+                  "category": {
+                    "$ref": "#/$defs/DiagnosticCategory",
+                    "default": "diagnostic",
+                    "description": "'linter' is style noise (unused variables and the like) that does not block compilation; 'sorry' marks an unproved declaration and is never noise; 'suggestion' carries a `Try this:` replacement; 'diagnostic' is everything else."
+                  },
+                  "hint": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Guidance for a recognised failure mode, when one applies",
+                    "title": "Hint"
+                  }
+                },
+                "required": [
+                  "severity",
+                  "message",
+                  "line",
+                  "column"
+                ],
+                "title": "DiagnosticMessage",
+                "type": "object"
+              },
+              "DiagnosticsResult": {
+                "description": "Wrapper for diagnostic messages list with build status.",
+                "properties": {
+                  "partial": {
+                    "default": false,
+                    "description": "True when elaboration was still running at timeout: items may be incomplete and still_elaborating_lines shows the pending region. Poll again instead of treating this as failure.",
+                    "title": "Partial",
+                    "type": "boolean"
+                  },
+                  "still_elaborating_lines": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "items": {
+                            "type": "integer"
+                          },
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Line ranges [start, end] (1-indexed) still being elaborated",
+                    "title": "Still Elaborating Lines"
+                  },
+                  "success": {
+                    "default": true,
+                    "description": "True if the queried file/range has no errors",
+                    "title": "Success",
+                    "type": "boolean"
+                  },
+                  "timed_out": {
+                    "default": false,
+                    "description": "True if elaboration timed out (results are partial, not a real build failure)",
+                    "title": "Timed Out",
+                    "type": "boolean"
+                  },
+                  "items": {
+                    "description": "List of diagnostic messages",
+                    "items": {
+                      "$ref": "#/$defs/DiagnosticMessage"
+                    },
+                    "title": "Items",
+                    "type": "array"
+                  },
+                  "failed_dependencies": {
+                    "description": "File paths of dependencies that failed to build",
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Failed Dependencies",
+                    "type": "array"
+                  }
+                },
+                "title": "DiagnosticsResult",
+                "type": "object"
+              },
+              "InteractiveDiagnosticsResult": {
+                "description": "Wrapper for interactive diagnostics with embedded widgets.",
+                "properties": {
+                  "diagnostics": {
+                    "description": "Interactive diagnostic objects with TaggedText messages",
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "title": "Diagnostics",
+                    "type": "array"
+                  }
+                },
+                "title": "InteractiveDiagnosticsResult",
+                "type": "object"
+              }
+            },
+            "title": "diagnostic_messagesOutput"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "File Outline"
+          },
+          "description": "Get imports and declarations with type signatures. Token-efficient.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "max_declarations": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Max declarations to return",
+                "title": "Max Declarations"
+              }
+            },
+            "required": [
+              "file_path"
+            ],
+            "type": "object",
+            "title": "file_outlineArguments"
+          },
+          "name": "lean_file_outline",
+          "outputSchema": {
+            "properties": {
+              "imports": {
+                "description": "Import statements",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Imports",
+                "type": "array"
+              },
+              "declarations": {
+                "description": "Top-level declarations",
+                "items": {
+                  "$ref": "#/$defs/OutlineEntry"
+                },
+                "title": "Declarations",
+                "type": "array"
+              },
+              "total_declarations": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Total count (set when truncated)",
+                "title": "Total Declarations"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "OutlineEntry": {
+                "properties": {
+                  "name": {
+                    "description": "Declaration name",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "Declaration kind (Thm, Def, Class, Struct, Ns, Ex)",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "start_line": {
+                    "description": "Start line (1-indexed)",
+                    "title": "Start Line",
+                    "type": "integer"
+                  },
+                  "end_line": {
+                    "description": "End line (1-indexed)",
+                    "title": "End Line",
+                    "type": "integer"
+                  },
+                  "type_signature": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Type signature if available",
+                    "title": "Type Signature"
+                  },
+                  "children": {
+                    "description": "Nested declarations",
+                    "items": {
+                      "$ref": "#/$defs/OutlineEntry"
+                    },
+                    "title": "Children",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "name",
+                  "kind",
+                  "start_line",
+                  "end_line"
+                ],
+                "title": "OutlineEntry",
+                "type": "object"
+              }
+            },
+            "title": "FileOutline"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Widget Source"
+          },
+          "description": "Get JavaScript source of a widget by hash. Useful for understanding custom widget rendering logic. Returns full JS module - may be large.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "javascript_hash": {
+                "description": "javascriptHash from a widget instance",
+                "title": "Javascript Hash",
+                "type": "string"
+              }
+            },
+            "required": [
+              "file_path",
+              "javascript_hash"
+            ],
+            "type": "object",
+            "title": "get_widget_sourceArguments"
+          },
+          "name": "lean_get_widget_source",
+          "outputSchema": {
+            "properties": {
+              "source": {
+                "additionalProperties": true,
+                "description": "Widget source data including JavaScript module",
+                "title": "Source",
+                "type": "object"
+              }
+            },
+            "required": [
+              "source"
+            ],
+            "type": "object",
+            "description": "Widget JavaScript source for a given hash.",
+            "title": "WidgetSourceResult"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Get Widgets"
+          },
+          "description": "Get panel widgets at a position (proof visualizations, #html, custom widgets). Returns raw widget data - may be large.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "column": {
+                "description": "Column number (1-indexed)",
+                "minimum": 1,
+                "title": "Column",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "file_path",
+              "line",
+              "column"
+            ],
+            "type": "object",
+            "title": "get_widgetsArguments"
+          },
+          "name": "lean_get_widgets",
+          "outputSchema": {
+            "properties": {
+              "widgets": {
+                "description": "Widget instances (id, name, range, props)",
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "title": "Widgets",
+                "type": "array"
+              }
+            },
+            "type": "object",
+            "description": "Wrapper for widget instances at a position.",
+            "title": "WidgetsResult"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Proof Goals"
+          },
+          "description": "Get proof goals at a position. MOST IMPORTANT tool - use often!\n\nOmit column to see goals_before (line start) and goals_after (line end),\nshowing how the tactic transforms the state. status='complete' means the\nproof is finished at this point; status='no_goal_at_position' means the\nposition carries no proof state (e.g. outside a proof).\n",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "column": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Column (1-indexed). Omit for before/after",
+                "title": "Column"
+              },
+              "format": {
+                "default": "text",
+                "description": "Output format: 'text' (default) or 'structured'",
+                "enum": [
+                  "text",
+                  "structured"
+                ],
+                "title": "Format",
+                "type": "string"
+              },
+              "timeout_s": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Max seconds to wait for elaboration. On timeout returns status='still_elaborating' - poll again.",
+                "title": "Timeout S"
+              }
+            },
+            "required": [
+              "file_path",
+              "line"
+            ],
+            "type": "object",
+            "title": "goalArguments"
+          },
+          "name": "lean_goal",
+          "outputSchema": {
+            "properties": {
+              "line_context": {
+                "description": "Source line where goals were queried",
+                "title": "Line Context",
+                "type": "string"
+              },
+              "goals": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "$ref": "#/$defs/StructuredGoal"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Goal list at specified column position",
+                "title": "Goals"
+              },
+              "goals_before": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "$ref": "#/$defs/StructuredGoal"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Goals at line start (when column omitted)",
+                "title": "Goals Before"
+              },
+              "goals_after": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "$ref": "#/$defs/StructuredGoal"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Goals at line end (when column omitted)",
+                "title": "Goals After"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Goal status: 'goals' (open goals), 'complete' (no goals left - proof finished here), 'no_goal_at_position' (position carries no proof state), or 'still_elaborating' (timeout_s hit - poll again)",
+                "title": "Status"
+              }
+            },
+            "required": [
+              "line_context"
+            ],
+            "type": "object",
+            "$defs": {
+              "GoalContextEntry": {
+                "properties": {
+                  "name": {
+                    "description": "Local hypothesis or variable name",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "type": {
+                    "description": "Lean type",
+                    "title": "Type",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "type"
+                ],
+                "title": "GoalContextEntry",
+                "type": "object"
+              },
+              "StructuredGoal": {
+                "properties": {
+                  "context": {
+                    "description": "Local context entries",
+                    "items": {
+                      "$ref": "#/$defs/GoalContextEntry"
+                    },
+                    "title": "Context",
+                    "type": "array"
+                  },
+                  "goal": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Target goal",
+                    "title": "Goal"
+                  },
+                  "status": {
+                    "description": "Goal status: open, complete, or unknown",
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "pretty": {
+                    "description": "Original pretty-printed goal",
+                    "title": "Pretty",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "pretty"
+                ],
+                "title": "StructuredGoal",
+                "type": "object"
+              }
+            },
+            "title": "GoalState"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": true,
+            "readOnlyHint": true,
+            "title": "Hammer Premises"
+          },
+          "description": "Limit: 6req/30s. Get premise suggestions for automation tactics at a goal position.\n\nReturns lemma names to try with `simp only [...]`, `aesop`, or as hints.\n",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "column": {
+                "description": "Column number (1-indexed)",
+                "minimum": 1,
+                "title": "Column",
+                "type": "integer"
+              },
+              "num_results": {
+                "default": 32,
+                "description": "Max results",
+                "minimum": 1,
+                "title": "Num Results",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "file_path",
+              "line",
+              "column"
+            ],
+            "type": "object",
+            "title": "hammer_premiseArguments"
+          },
+          "name": "lean_hammer_premise",
+          "outputSchema": {
+            "properties": {
+              "items": {
+                "description": "List of premise results",
+                "items": {
+                  "$ref": "#/$defs/PremiseResult"
+                },
+                "title": "Items",
+                "type": "array"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "PremiseResult": {
+                "properties": {
+                  "name": {
+                    "description": "Premise name for simp/omega/aesop",
+                    "title": "Name",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "PremiseResult",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for premise results list.",
+            "title": "PremiseResults"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Hover Info"
+          },
+          "description": "Get type signature and docs for a symbol. Essential for understanding APIs.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "column": {
+                "description": "Column at START of identifier (1-indexed characters)",
+                "minimum": 1,
+                "title": "Column",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "file_path",
+              "line",
+              "column"
+            ],
+            "type": "object",
+            "title": "hoverArguments"
+          },
+          "name": "lean_hover_info",
+          "outputSchema": {
+            "properties": {
+              "symbol": {
+                "description": "The symbol being hovered",
+                "title": "Symbol",
+                "type": "string"
+              },
+              "info": {
+                "description": "Type signature and documentation",
+                "title": "Info",
+                "type": "string"
+              },
+              "diagnostics": {
+                "description": "Diagnostics at this position",
+                "items": {
+                  "$ref": "#/$defs/DiagnosticMessage"
+                },
+                "title": "Diagnostics",
+                "type": "array"
+              }
+            },
+            "required": [
+              "symbol",
+              "info"
+            ],
+            "type": "object",
+            "$defs": {
+              "DiagnosticCategory": {
+                "enum": [
+                  "diagnostic",
+                  "linter",
+                  "sorry",
+                  "suggestion"
+                ],
+                "title": "DiagnosticCategory",
+                "type": "string"
+              },
+              "DiagnosticMessage": {
+                "properties": {
+                  "severity": {
+                    "description": "error, warning, info, or hint",
+                    "title": "Severity",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Diagnostic message text",
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Line (1-indexed)",
+                    "title": "Line",
+                    "type": "integer"
+                  },
+                  "column": {
+                    "description": "Column (1-indexed)",
+                    "title": "Column",
+                    "type": "integer"
+                  },
+                  "lean_tags": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Lean-specific tags: 'unsolvedGoals' (proof incomplete here) or 'goalsAccomplished' (proof finished). Machine-readable proof status - prefer over string-matching the message.",
+                    "title": "Lean Tags"
+                  },
+                  "category": {
+                    "$ref": "#/$defs/DiagnosticCategory",
+                    "default": "diagnostic",
+                    "description": "'linter' is style noise (unused variables and the like) that does not block compilation; 'sorry' marks an unproved declaration and is never noise; 'suggestion' carries a `Try this:` replacement; 'diagnostic' is everything else."
+                  },
+                  "hint": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Guidance for a recognised failure mode, when one applies",
+                    "title": "Hint"
+                  }
+                },
+                "required": [
+                  "severity",
+                  "message",
+                  "line",
+                  "column"
+                ],
+                "title": "DiagnosticMessage",
+                "type": "object"
+              }
+            },
+            "title": "HoverInfo"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": true,
+            "readOnlyHint": true,
+            "title": "Lean Finder"
+          },
+          "description": "Limit: 10req/30s. Semantic search by mathematical meaning via Lean Finder.\n\nExamples: \"commutativity of addition on natural numbers\",\n\"I have h : n < m and need n + 1 < m + 1\", proof state text.\n\nThe `version` argument selects which mathlib snapshot to query\n(v4.19.0, v4.24.0, or v4.28.0). Default: v4.28.0.\n",
+          "inputSchema": {
+            "properties": {
+              "query": {
+                "description": "Mathematical concept or proof state",
+                "title": "Query",
+                "type": "string"
+              },
+              "num_results": {
+                "default": 5,
+                "description": "Max results",
+                "minimum": 1,
+                "title": "Num Results",
+                "type": "integer"
+              },
+              "version": {
+                "default": "v4.28.0",
+                "description": "Mathlib version index to search",
+                "enum": [
+                  "v4.19.0",
+                  "v4.24.0",
+                  "v4.28.0"
+                ],
+                "title": "Version",
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object",
+            "title": "leanfinderArguments"
+          },
+          "name": "lean_leanfinder",
+          "outputSchema": {
+            "properties": {
+              "items": {
+                "description": "List of Lean Finder results",
+                "items": {
+                  "$ref": "#/$defs/LeanFinderResult"
+                },
+                "title": "Items",
+                "type": "array"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "LeanFinderResult": {
+                "properties": {
+                  "formal_name": {
+                    "description": "Fully qualified Lean declaration name",
+                    "title": "Formal Name",
+                    "type": "string"
+                  },
+                  "informal_name": {
+                    "description": "Short natural-language name for the statement",
+                    "title": "Informal Name",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "Declaration kind (theorem, def, instance, etc.)",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "type": {
+                    "description": "Lean type signature / formal statement",
+                    "title": "Type",
+                    "type": "string"
+                  },
+                  "informal_description": {
+                    "description": "Natural-language description of the statement",
+                    "title": "Informal Description",
+                    "type": "string"
+                  },
+                  "path": {
+                    "description": "Mathlib module path, dot-separated (e.g. Mathlib.Data.Nat.Basic)",
+                    "title": "Path",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "formal_name",
+                  "informal_name",
+                  "kind",
+                  "type",
+                  "informal_description",
+                  "path"
+                ],
+                "title": "LeanFinderResult",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for Lean Finder results list.",
+            "title": "LeanFinderResults"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": true,
+            "readOnlyHint": true,
+            "title": "LeanSearch"
+          },
+          "description": "Limit: 90req/30s. Search Mathlib via leansearch.net using natural language.\n\nExamples: \"sum of two even numbers is even\", \"Cauchy-Schwarz inequality\",\n\"{f : A → B} (hf : Injective f) : ∃ g, LeftInverse g f\"\n",
+          "inputSchema": {
+            "properties": {
+              "query": {
+                "description": "Natural language or Lean term query",
+                "title": "Query",
+                "type": "string"
+              },
+              "num_results": {
+                "default": 5,
+                "description": "Max results",
+                "minimum": 1,
+                "title": "Num Results",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object",
+            "title": "leansearchArguments"
+          },
+          "name": "lean_leansearch",
+          "outputSchema": {
+            "properties": {
+              "items": {
+                "description": "List of LeanSearch results",
+                "items": {
+                  "$ref": "#/$defs/LeanSearchResult"
+                },
+                "title": "Items",
+                "type": "array"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "LeanSearchResult": {
+                "properties": {
+                  "name": {
+                    "description": "Full qualified name",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "module_name": {
+                    "description": "Module where declared",
+                    "title": "Module Name",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Declaration kind",
+                    "title": "Kind"
+                  },
+                  "type": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Type signature",
+                    "title": "Type"
+                  }
+                },
+                "required": [
+                  "name",
+                  "module_name"
+                ],
+                "title": "LeanSearchResult",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for LeanSearch results list.",
+            "title": "LeanSearchResults"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Local Search"
+          },
+          "description": "Fast local search to verify declarations exist. Use BEFORE trying a lemma name.",
+          "inputSchema": {
+            "properties": {
+              "query": {
+                "description": "Declaration name or prefix",
+                "title": "Query",
+                "type": "string"
+              },
+              "limit": {
+                "default": 10,
+                "description": "Max matches",
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "project_root": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Project root (inferred if omitted)",
+                "title": "Project Root"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object",
+            "title": "local_searchArguments"
+          },
+          "name": "lean_local_search",
+          "outputSchema": {
+            "properties": {
+              "items": {
+                "description": "List of local search results",
+                "items": {
+                  "$ref": "#/$defs/LocalSearchResult"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "sources_searched": {
+                "default": [
+                  "source_text"
+                ],
+                "description": "Search sources that returned results or were searched successfully. Source text is always searched; the symbol index is listed when workspace/symbol returned, including while its index is warming.",
+                "items": {
+                  "enum": [
+                    "source_text",
+                    "symbol_index"
+                  ],
+                  "type": "string"
+                },
+                "title": "Sources Searched",
+                "type": "array"
+              },
+              "index": {
+                "$ref": "#/$defs/IndexStatus",
+                "default": "unavailable",
+                "description": "Whether the language server's symbol index contributed. Only 'consulted' makes an empty result mean the declaration does not exist. Declarations generated by attributes such as @[to_additive] exist only in the index, never in source text."
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "IndexStatus": {
+                "description": "Whether a local search could consult the language server's symbol index.\n\nOnly ``consulted`` makes an empty result mean the declaration is absent.",
+                "enum": [
+                  "consulted",
+                  "warming",
+                  "unavailable",
+                  "error"
+                ],
+                "title": "IndexStatus",
+                "type": "string"
+              },
+              "LocalSearchResult": {
+                "properties": {
+                  "name": {
+                    "description": "Declaration name",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "description": "Declaration kind (theorem, def, class, etc.)",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "file": {
+                    "description": "Relative file path",
+                    "title": "File",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "kind",
+                  "file"
+                ],
+                "title": "LocalSearchResult",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for local search results list.",
+            "title": "LocalSearchResults"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": true,
+            "readOnlyHint": true,
+            "title": "Loogle"
+          },
+          "description": "Search Mathlib by type signature via loogle.lean-lang.org.\n\nExamples: `Real.sin`, `\"comm\"`, `(?a → ?b) → List ?a → List ?b`,\n`_ * (_ ^ _)`, `|- _ < _ → _ + 1 < _ + 1`\n",
+          "inputSchema": {
+            "properties": {
+              "query": {
+                "description": "Type pattern, constant, or name substring",
+                "title": "Query",
+                "type": "string"
+              },
+              "num_results": {
+                "default": 8,
+                "description": "Max results",
+                "minimum": 1,
+                "title": "Num Results",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object",
+            "title": "loogleArguments"
+          },
+          "name": "lean_loogle",
+          "outputSchema": {
+            "properties": {
+              "items": {
+                "description": "List of Loogle results",
+                "items": {
+                  "$ref": "#/$defs/LoogleResult"
+                },
+                "title": "Items",
+                "type": "array"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "LoogleResult": {
+                "properties": {
+                  "name": {
+                    "description": "Declaration name",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "type": {
+                    "description": "Type signature",
+                    "title": "Type",
+                    "type": "string"
+                  },
+                  "module": {
+                    "description": "Module where declared",
+                    "title": "Module",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "type",
+                  "module"
+                ],
+                "title": "LoogleResult",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for Loogle results list.",
+            "title": "LoogleResults"
+          }
+        },
+        {
+          "annotations": {
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true,
+            "readOnlyHint": false,
+            "title": "Minimal Hypotheses"
+          },
+          "description": "For each explicit `(h : T)` hypothesis of a theorem, drop it and re-elaborate\na scratch copy of the file. Reports which hypotheses are load-bearing and which\nare actually unused. Skips implicit `{x : α}` and instance `[inst : C]` binders\n(those are usually inferable / always load-bearing). Does not rewrite the proof\nbody — a body that names `h` will fail to elaborate without the binder, which\nis the truthful answer (load-bearing).\n\nVariants are checked in parallel on scratch documents; the file is never edited.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "theorem_name": {
+                "description": "Theorem name. Either bare (e.g. `add_comm`) or fully qualified (e.g. `Namespace.add_comm`); only the trailing segment is used for source matching.",
+                "title": "Theorem Name",
+                "type": "string"
+              },
+              "inactivity_timeout": {
+                "default": 60.0,
+                "description": "Per-hypothesis elaboration timeout (seconds)",
+                "maximum": 300.0,
+                "minimum": 5.0,
+                "title": "Inactivity Timeout",
+                "type": "number"
+              }
+            },
+            "required": [
+              "file_path",
+              "theorem_name"
+            ],
+            "type": "object",
+            "title": "minimal_hypothesesArguments"
+          },
+          "name": "lean_minimal_hypotheses",
+          "outputSchema": {
+            "properties": {
+              "theorem_name": {
+                "description": "Theorem analyzed",
+                "title": "Theorem Name",
+                "type": "string"
+              },
+              "file": {
+                "description": "Relative file path",
+                "title": "File",
+                "type": "string"
+              },
+              "verdicts": {
+                "description": "One verdict per explicit (h : T) binder, in source order",
+                "items": {
+                  "$ref": "#/$defs/HypothesisVerdict"
+                },
+                "title": "Verdicts",
+                "type": "array"
+              },
+              "skipped_implicit": {
+                "default": 0,
+                "description": "Count of implicit {x : α} / instance [inst] binders not probed",
+                "title": "Skipped Implicit",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "theorem_name",
+              "file"
+            ],
+            "type": "object",
+            "$defs": {
+              "DiagnosticCategory": {
+                "enum": [
+                  "diagnostic",
+                  "linter",
+                  "sorry",
+                  "suggestion"
+                ],
+                "title": "DiagnosticCategory",
+                "type": "string"
+              },
+              "DiagnosticMessage": {
+                "properties": {
+                  "severity": {
+                    "description": "error, warning, info, or hint",
+                    "title": "Severity",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Diagnostic message text",
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Line (1-indexed)",
+                    "title": "Line",
+                    "type": "integer"
+                  },
+                  "column": {
+                    "description": "Column (1-indexed)",
+                    "title": "Column",
+                    "type": "integer"
+                  },
+                  "lean_tags": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Lean-specific tags: 'unsolvedGoals' (proof incomplete here) or 'goalsAccomplished' (proof finished). Machine-readable proof status - prefer over string-matching the message.",
+                    "title": "Lean Tags"
+                  },
+                  "category": {
+                    "$ref": "#/$defs/DiagnosticCategory",
+                    "default": "diagnostic",
+                    "description": "'linter' is style noise (unused variables and the like) that does not block compilation; 'sorry' marks an unproved declaration and is never noise; 'suggestion' carries a `Try this:` replacement; 'diagnostic' is everything else."
+                  },
+                  "hint": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Guidance for a recognised failure mode, when one applies",
+                    "title": "Hint"
+                  }
+                },
+                "required": [
+                  "severity",
+                  "message",
+                  "line",
+                  "column"
+                ],
+                "title": "DiagnosticMessage",
+                "type": "object"
+              },
+              "HypothesisStatus": {
+                "enum": [
+                  "load-bearing",
+                  "removable",
+                  "error"
+                ],
+                "title": "HypothesisStatus",
+                "type": "string"
+              },
+              "HypothesisVerdict": {
+                "properties": {
+                  "binder": {
+                    "description": "Lean source of the binder, e.g. '(h : P)'",
+                    "title": "Binder",
+                    "type": "string"
+                  },
+                  "status": {
+                    "$ref": "#/$defs/HypothesisStatus",
+                    "description": "load-bearing: removing this binder caused new errors. removable: the file still elaborated cleanly without it. error: probing this binder failed (e.g. LSP timeout)."
+                  },
+                  "breaks": {
+                    "description": "New errors caused by removing this binder (empty when removable). Each entry has line/column/message — useful for finding where in the proof body the dropped hypothesis was used.",
+                    "items": {
+                      "$ref": "#/$defs/DiagnosticMessage"
+                    },
+                    "title": "Breaks",
+                    "type": "array"
+                  },
+                  "detail": {
+                    "default": "",
+                    "description": "Free-text status detail (e.g. timeout reason)",
+                    "title": "Detail",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "binder",
+                  "status"
+                ],
+                "title": "HypothesisVerdict",
+                "type": "object"
+              }
+            },
+            "title": "MinimalHypothesesResult"
+          }
+        },
+        {
+          "annotations": {
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true,
+            "readOnlyHint": false,
+            "title": "Multi-Attempt"
+          },
+          "description": "Try multiple tactics without modifying file. Returns goal state for each.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "snippets": {
+                "description": "Tactics to try (3+ recommended)",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Snippets",
+                "type": "array"
+              },
+              "column": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Column (1-indexed). Omit to target the tactic line",
+                "title": "Column"
+              }
+            },
+            "required": [
+              "file_path",
+              "line",
+              "snippets"
+            ],
+            "type": "object",
+            "title": "multi_attemptArguments"
+          },
+          "name": "lean_multi_attempt",
+          "outputSchema": {
+            "properties": {
+              "items": {
+                "description": "List of attempt results",
+                "items": {
+                  "$ref": "#/$defs/AttemptResult"
+                },
+                "title": "Items",
+                "type": "array"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "AttemptResult": {
+                "properties": {
+                  "snippet": {
+                    "description": "Code snippet that was tried",
+                    "title": "Snippet",
+                    "type": "string"
+                  },
+                  "goals": {
+                    "description": "Goal list after applying snippet",
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Goals",
+                    "type": "array"
+                  },
+                  "diagnostics": {
+                    "description": "Diagnostics for this attempt",
+                    "items": {
+                      "$ref": "#/$defs/DiagnosticMessage"
+                    },
+                    "title": "Diagnostics",
+                    "type": "array"
+                  },
+                  "timed_out": {
+                    "default": false,
+                    "description": "True if elaboration timed out (results are partial)",
+                    "title": "Timed Out",
+                    "type": "boolean"
+                  },
+                  "proof_status": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "REPL proof status when available (e.g. 'Completed', 'Incomplete: contains sorry')",
+                    "title": "Proof Status"
+                  }
+                },
+                "required": [
+                  "snippet"
+                ],
+                "title": "AttemptResult",
+                "type": "object"
+              },
+              "DiagnosticCategory": {
+                "enum": [
+                  "diagnostic",
+                  "linter",
+                  "sorry",
+                  "suggestion"
+                ],
+                "title": "DiagnosticCategory",
+                "type": "string"
+              },
+              "DiagnosticMessage": {
+                "properties": {
+                  "severity": {
+                    "description": "error, warning, info, or hint",
+                    "title": "Severity",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Diagnostic message text",
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Line (1-indexed)",
+                    "title": "Line",
+                    "type": "integer"
+                  },
+                  "column": {
+                    "description": "Column (1-indexed)",
+                    "title": "Column",
+                    "type": "integer"
+                  },
+                  "lean_tags": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Lean-specific tags: 'unsolvedGoals' (proof incomplete here) or 'goalsAccomplished' (proof finished). Machine-readable proof status - prefer over string-matching the message.",
+                    "title": "Lean Tags"
+                  },
+                  "category": {
+                    "$ref": "#/$defs/DiagnosticCategory",
+                    "default": "diagnostic",
+                    "description": "'linter' is style noise (unused variables and the like) that does not block compilation; 'sorry' marks an unproved declaration and is never noise; 'suggestion' carries a `Try this:` replacement; 'diagnostic' is everything else."
+                  },
+                  "hint": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Guidance for a recognised failure mode, when one applies",
+                    "title": "Hint"
+                  }
+                },
+                "required": [
+                  "severity",
+                  "message",
+                  "line",
+                  "column"
+                ],
+                "title": "DiagnosticMessage",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for multi-attempt results list.",
+            "title": "MultiAttemptResult"
+          }
+        },
+        {
+          "annotations": {
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true,
+            "readOnlyHint": false,
+            "title": "Profile Proof"
+          },
+          "description": "Run `lean --profile` on a theorem. Returns per-line timing and categories. SLOW - avoid on theorems that already hit heartbeat limits.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line where theorem starts (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "top_n": {
+                "default": 5,
+                "description": "Number of slowest lines to return",
+                "minimum": 1,
+                "title": "Top N",
+                "type": "integer"
+              },
+              "timeout": {
+                "default": 60.0,
+                "description": "Max seconds to wait",
+                "minimum": 1,
+                "title": "Timeout",
+                "type": "number"
+              }
+            },
+            "required": [
+              "file_path",
+              "line"
+            ],
+            "type": "object",
+            "title": "profile_proofArguments"
+          },
+          "name": "lean_profile_proof",
+          "outputSchema": {
+            "properties": {
+              "ms": {
+                "description": "Total elaboration time in ms",
+                "title": "Ms",
+                "type": "number"
+              },
+              "lines": {
+                "description": "Time per source line (>1% of total)",
+                "items": {
+                  "$ref": "#/$defs/LineProfile"
+                },
+                "title": "Lines",
+                "type": "array"
+              },
+              "categories": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "description": "Cumulative time by category in ms",
+                "title": "Categories",
+                "type": "object"
+              }
+            },
+            "required": [
+              "ms"
+            ],
+            "type": "object",
+            "$defs": {
+              "LineProfile": {
+                "description": "Timing for a single source line.",
+                "properties": {
+                  "line": {
+                    "description": "Source line number (1-indexed)",
+                    "title": "Line",
+                    "type": "integer"
+                  },
+                  "ms": {
+                    "description": "Time in milliseconds",
+                    "title": "Ms",
+                    "type": "number"
+                  },
+                  "text": {
+                    "description": "Source line content (truncated)",
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "line",
+                  "ms",
+                  "text"
+                ],
+                "title": "LineProfile",
+                "type": "object"
+              }
+            },
+            "description": "Profiling result for a theorem.",
+            "title": "ProofProfileResult"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Find References"
+          },
+          "description": "Find all references to a symbol (including the declaration). Position cursor at the symbol.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "column": {
+                "description": "Column at START of identifier (1-indexed)",
+                "minimum": 1,
+                "title": "Column",
+                "type": "integer"
+              },
+              "max_results": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": 50,
+                "description": "Max locations to return (default 50)",
+                "title": "Max Results"
+              }
+            },
+            "required": [
+              "file_path",
+              "line",
+              "column"
+            ],
+            "type": "object",
+            "title": "referencesArguments"
+          },
+          "name": "lean_references",
+          "outputSchema": {
+            "properties": {
+              "items": {
+                "description": "List of reference locations",
+                "items": {
+                  "$ref": "#/$defs/ReferenceLocation"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "total": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Total matches (> len(items) when truncated by max_results)",
+                "title": "Total"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "ReferenceLocation": {
+                "description": "A single reference location.",
+                "properties": {
+                  "file_path": {
+                    "description": "Absolute file path",
+                    "title": "File Path",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Line (1-indexed)",
+                    "title": "Line",
+                    "type": "integer"
+                  },
+                  "column": {
+                    "description": "Column (1-indexed)",
+                    "title": "Column",
+                    "type": "integer"
+                  },
+                  "end_line": {
+                    "description": "End line (1-indexed)",
+                    "title": "End Line",
+                    "type": "integer"
+                  },
+                  "end_column": {
+                    "description": "End column (1-indexed)",
+                    "title": "End Column",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "file_path",
+                  "line",
+                  "column",
+                  "end_line",
+                  "end_column"
+                ],
+                "title": "ReferenceLocation",
+                "type": "object"
+              }
+            },
+            "description": "Wrapper for find references results.",
+            "title": "ReferencesResult"
+          }
+        },
+        {
+          "annotations": {
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true,
+            "readOnlyHint": false,
+            "title": "Run Code"
+          },
+          "description": "Run a code snippet and return diagnostics. Must include all imports.",
+          "inputSchema": {
+            "properties": {
+              "code": {
+                "description": "Self-contained Lean code with imports",
+                "title": "Code",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object",
+            "title": "run_codeArguments"
+          },
+          "name": "lean_run_code",
+          "outputSchema": {
+            "properties": {
+              "success": {
+                "description": "Whether code compiled successfully",
+                "title": "Success",
+                "type": "boolean"
+              },
+              "timed_out": {
+                "default": false,
+                "description": "True if elaboration timed out (results are partial)",
+                "title": "Timed Out",
+                "type": "boolean"
+              },
+              "diagnostics": {
+                "description": "Compiler diagnostics",
+                "items": {
+                  "$ref": "#/$defs/DiagnosticMessage"
+                },
+                "title": "Diagnostics",
+                "type": "array"
+              }
+            },
+            "required": [
+              "success"
+            ],
+            "type": "object",
+            "$defs": {
+              "DiagnosticCategory": {
+                "enum": [
+                  "diagnostic",
+                  "linter",
+                  "sorry",
+                  "suggestion"
+                ],
+                "title": "DiagnosticCategory",
+                "type": "string"
+              },
+              "DiagnosticMessage": {
+                "properties": {
+                  "severity": {
+                    "description": "error, warning, info, or hint",
+                    "title": "Severity",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Diagnostic message text",
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "line": {
+                    "description": "Line (1-indexed)",
+                    "title": "Line",
+                    "type": "integer"
+                  },
+                  "column": {
+                    "description": "Column (1-indexed)",
+                    "title": "Column",
+                    "type": "integer"
+                  },
+                  "lean_tags": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Lean-specific tags: 'unsolvedGoals' (proof incomplete here) or 'goalsAccomplished' (proof finished). Machine-readable proof status - prefer over string-matching the message.",
+                    "title": "Lean Tags"
+                  },
+                  "category": {
+                    "$ref": "#/$defs/DiagnosticCategory",
+                    "default": "diagnostic",
+                    "description": "'linter' is style noise (unused variables and the like) that does not block compilation; 'sorry' marks an unproved declaration and is never noise; 'suggestion' carries a `Try this:` replacement; 'diagnostic' is everything else."
+                  },
+                  "hint": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Guidance for a recognised failure mode, when one applies",
+                    "title": "Hint"
+                  }
+                },
+                "required": [
+                  "severity",
+                  "message",
+                  "line",
+                  "column"
+                ],
+                "title": "DiagnosticMessage",
+                "type": "object"
+              }
+            },
+            "title": "RunResult"
+          }
+        },
+        {
+          "annotations": {
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+            "title": "Term Goal"
+          },
+          "description": "Get the expected type at a position.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute or project-root-relative path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "line": {
+                "description": "Line number (1-indexed)",
+                "minimum": 1,
+                "title": "Line",
+                "type": "integer"
+              },
+              "column": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Column (defaults to end of line)",
+                "title": "Column"
+              }
+            },
+            "required": [
+              "file_path",
+              "line"
+            ],
+            "type": "object",
+            "title": "term_goalArguments"
+          },
+          "name": "lean_term_goal",
+          "outputSchema": {
+            "properties": {
+              "line_context": {
+                "description": "Source line where term goal was queried",
+                "title": "Line Context",
+                "type": "string"
+              },
+              "expected_type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Expected type at this position",
+                "title": "Expected Type"
+              }
+            },
+            "required": [
+              "line_context"
+            ],
+            "type": "object",
+            "title": "TermGoalState"
+          }
+        },
+        {
+          "annotations": {
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": true,
+            "readOnlyHint": false,
+            "title": "Verify Theorem"
+          },
+          "description": "Check theorem axioms + optional source scan. Only scans the given file, not imports.",
+          "inputSchema": {
+            "properties": {
+              "file_path": {
+                "description": "Absolute path to Lean file",
+                "title": "File Path",
+                "type": "string"
+              },
+              "theorem_name": {
+                "description": "Fully qualified name (e.g. `Namespace.theorem`)",
+                "title": "Theorem Name",
+                "type": "string"
+              },
+              "scan_source": {
+                "default": true,
+                "description": "Scan source file for suspicious patterns",
+                "title": "Scan Source",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "file_path",
+              "theorem_name"
+            ],
+            "type": "object",
+            "title": "verify_theoremArguments"
+          },
+          "name": "lean_verify",
+          "outputSchema": {
+            "properties": {
+              "axioms": {
+                "description": "Axioms used. Standard 3: propext, Classical.choice, Quot.sound",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Axioms",
+                "type": "array"
+              },
+              "trust": {
+                "$ref": "#/$defs/AxiomTrust",
+                "default": "standard",
+                "description": "Worst case in `axioms`. 'standard' is the ordinary Mathlib basis; 'incomplete' means sorryAx, so it is not a proof; 'native' means native_decide, trusting the compiler rather than the kernel; 'custom' means other axioms are in play."
+              },
+              "non_standard_axioms": {
+                "description": "Axioms outside the standard 3 — the reason for `trust`",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Non Standard Axioms",
+                "type": "array"
+              },
+              "warnings": {
+                "description": "Suspicious source patterns (if enabled)",
+                "items": {
+                  "$ref": "#/$defs/SourceWarning"
+                },
+                "title": "Warnings",
+                "type": "array"
+              }
+            },
+            "type": "object",
+            "$defs": {
+              "AxiomTrust": {
+                "enum": [
+                  "standard",
+                  "incomplete",
+                  "native",
+                  "custom"
+                ],
+                "title": "AxiomTrust",
+                "type": "string"
+              },
+              "SourceWarning": {
+                "properties": {
+                  "line": {
+                    "description": "Line number (1-indexed)",
+                    "title": "Line",
+                    "type": "integer"
+                  },
+                  "pattern": {
+                    "description": "Matched pattern text",
+                    "title": "Pattern",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "line",
+                  "pattern"
+                ],
+                "title": "SourceWarning",
+                "type": "object"
+              }
+            },
+            "title": "VerifyResult"
+          }
+        }
+      ]
+    }
+  },
+  "lsp_notifications": [],
+  "read_only_observation": {
+    "method": "SHA-256 of all project files except .log/.lock before and after each tool call",
+    "changes": []
+  }
+}

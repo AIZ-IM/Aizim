@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from aizim.knowledge.lean_verifier import _complete_type, _promotion_evidence
 from aizim.knowledge.promotion_types import accepted
-from aizim.lean.models import DiagnosticsResult
+from aizim.lean.models import DiagnosticsResult, LeanRuntimeError
 from aizim.lean.promotion_runtime import PromotionCheck
 from aizim.lean.verification import BuildResult, VerificationResult, parse_verification
 
@@ -32,7 +34,17 @@ def test_trusted_source_scan_warnings_fail_promotion_evidence() -> None:
 
 def test_verification_parser_preserves_structured_source_warnings() -> None:
     result = parse_verification(
-        {"axioms": [], "warnings": [{"line": 7, "pattern": "unsafe"}]}, "c" * 64
+        {"axioms": [], "warnings": [{"line": 7, "pattern": "unsafe"}],
+         "trust": "standard", "non_standard_axioms": []}, "c" * 64
     )
 
     assert result.warnings == ("line 7: unsafe",)
+
+
+@pytest.mark.parametrize(
+    "trust,axioms", [("unknown", []), ("standard", [False]), ("custom", [])]
+)
+def test_verification_parser_rejects_malformed_trust_fields(trust: str, axioms: list) -> None:
+    with pytest.raises(LeanRuntimeError, match="INVALID_LEAN_RESPONSE"):
+        parse_verification({"axioms": [], "warnings": [], "trust": trust,
+                            "non_standard_axioms": axioms}, "c" * 64)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK - existing host lifecycle
+import asyncio  # ANYIO_OK: existing host lifecycle
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
@@ -14,6 +14,7 @@ from aizim.config.model import ResourcePolicy
 from aizim.domain import AgentRole, EpochPair, sha256_bytes
 from aizim.domain.serialization import JsonValue
 from aizim.gateway import (
+    AuthorizedCall,
     CapabilityGrant,
     CapabilityIssuer,
     GatewaySessionBroker,
@@ -27,7 +28,7 @@ from aizim.lean.project import smoke_base_epoch
 from aizim.orchestration.knowledge_stream import KnowledgeStream
 from aizim.orchestration.resources import ResourceGovernor
 from aizim.orchestration.worker_authority import WorkerDirective
-from aizim.orchestration.worker_gateway import WorkerGatewayActions
+from aizim.orchestration.worker_gateway import WorkerGatewayActions, WorkerGatewayError
 from aizim.orchestration.worker_host import WorkerExecutionHost, _HostFactories
 from aizim.state import AppendEventCommand, StateService, StateServiceConfig
 
@@ -128,6 +129,9 @@ async def test_host_runs_one_worker_and_closes_every_owned_resource(tmp_path: Pa
         required = "ScheduleProposed WorkerStarted AgentRunCompleted WorkerStopped LeaseReleased"
         assert requests and requests[0].gateway_broker_socket.name == "gateway.sock"
         assert set(required.split()).issubset(events)
+        minted = [record.envelope for record in state.query_events("run-1")
+                  if record.envelope.event_type == "CapabilityMinted"]
+        assert len(minted) == 1 and minted[0].payload["call_budget"] == 3
         assert state.active_document_leases() == ()
         assert not (tmp_path / ".aizim/run/gateway.sock").exists()
     finally:
@@ -264,10 +268,59 @@ def test_controller_worker_tools_are_ordered_implemented_role_tools(
         for role in AgentRole:
             expected = tuple(tool for tool in advertised_tools(role) if tool in allowed)
             assert controller_worker_tools(role) == expected
-        assert GatewayTool.PROJECT_READ not in controller_worker_tools(AgentRole.PROOF_EXPLORER)
+        assert GatewayTool.PROJECT_READ in controller_worker_tools(AgentRole.PROOF_EXPLORER)
         registry = (GatewayTool.KNOWLEDGE_READ,)
         monkeypatch.setattr(WorkerGatewayActions, "_TARGET_TOOLS", registry, raising=False)
         assert tuple(actions.targets()) == registry
         assert controller_worker_tools(AgentRole.PROOF_EXPLORER) == registry
     finally:
         state.close()
+
+
+def _authorized(path: str) -> AuthorizedCall:
+    return AuthorizedCall(
+        request_id="request-1", run_id="run-1", worker_id="worker-1",
+        role=AgentRole.PROOF_EXPLORER, lease_id="lease-1",
+        operation=GatewayTool.PROJECT_READ, payload={"path": path},
+    )
+
+
+@pytest.mark.asyncio
+async def test_project_read_serves_project_sources(tmp_path: Path) -> None:
+    state = _state(tmp_path, "project-read")
+    broker = DocumentBroker(tmp_path, state, smoke_root=SMOKE_ROOT)
+    runtime = SharedLeanRuntime(state, broker, "run-1")
+    knowledge, artifacts = KnowledgeStream(state), ArtifactStore(tmp_path)
+    actions = WorkerGatewayActions(
+        state, broker, runtime, knowledge, artifacts, "e" * 64, lambda: None
+    )
+    try:
+        assert GatewayTool.PROJECT_READ in actions.targets()
+        expected = (SMOKE_ROOT / "AizimSmoke" / "Base.lean").read_text()
+        assert await actions.project_read(_authorized("AizimSmoke/Base.lean")) == {
+            "path": "AizimSmoke/Base.lean", "content": expected,
+        }
+        other_worker = (
+            tmp_path / ".aizim/run/run-1/lean-project/AizimSmoke/Workers/run-1/worker-2.lean"
+        )
+        other_worker.parent.mkdir(parents=True, exist_ok=True)
+        other_worker.write_text("-- private worker document\n")
+        with pytest.raises(WorkerGatewayError, match="INVALID_PROJECT_PATH"):
+            await actions.project_read(_authorized("AizimSmoke/Workers/run-1/worker-2.lean"))
+        for bad in ("../outside.lean", "/etc/hostname", ".aizim/state.sqlite3"):
+            with pytest.raises(WorkerGatewayError, match="INVALID_PROJECT_PATH"):
+                await actions.project_read(_authorized(bad))
+    finally:
+        state.close()
+
+
+def test_project_read_rejects_non_source_and_symlink(tmp_path: Path) -> None:
+    from aizim.orchestration.worker_gateway import _read_project_source
+
+    (tmp_path / "lakefile.toml").write_text('name = "test"\n')
+    (tmp_path / "lean-toolchain").write_text("leanprover/lean4:v4.35.0\n")
+    (tmp_path / "private.txt").write_text("private")
+    (tmp_path / "Link.lean").symlink_to(tmp_path / "private.txt")
+    for name in ("private.txt", "Link.lean", "missing.lean"):
+        with pytest.raises(WorkerGatewayError, match="INVALID_PROJECT_PATH"):
+            _read_project_source(tmp_path, name)

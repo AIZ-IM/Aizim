@@ -1,49 +1,33 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-import aizim.runtime.provider_executables as providers
-from aizim.agents.linux_sandbox import (
-    LinuxSandboxAdapter,
-    LinuxSandboxDependencies,
-)
+from aizim.agents.linux_sandbox import LinuxSandboxAdapter, LinuxSandboxDependencies
 from aizim.agents.macos_sandbox import SandboxHostError
 from aizim.agents.platform_sandbox import sandbox_adapter
 from aizim.agents.sandbox import SandboxRequest
+from aizim.omp.runtime import OMP_VERSION
 
 
 def executable(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("#!/bin/sh\nexit 0\n")
+    path.touch()
     path.chmod(0o755)
     return path.resolve()
 
 
-def host_tree(tmp_path: Path) -> tuple[Path, Path]:
-    triple = tmp_path / "vendor" / "x86_64-unknown-linux-musl"
-    codex = executable(triple / "bin" / "codex")
-    bwrap = executable(triple / "codex-resources" / "bwrap")
-    return codex, bwrap
-
-
-def dependencies(
-    codex: Path,
-    bwrap: Path,
-    *,
-    platform: str = "linux",
-    version: str = "codex-cli 0.154.0",
-    usable: bool = True,
-) -> LinuxSandboxDependencies:
+def dependencies(agent: Path, bwrap: Path) -> LinuxSandboxDependencies:
     return LinuxSandboxDependencies(
-        platform=platform,
-        codex_executable=codex,
-        codex_version=lambda: version,
-        bundled_bwrap=lambda: bwrap,
-        bwrap_usable=lambda _path: usable,
+        platform="linux",
+        agent_executable=agent,
+        agent_version=lambda: f"omp/{OMP_VERSION}",
+        system_bwrap=lambda: bwrap,
+        bwrap_usable=lambda _path: True,
     )
 
 
@@ -57,86 +41,93 @@ def request(tmp_path: Path) -> SandboxRequest:
     for path in (project, view, scratch, runtime):
         path.mkdir(mode=0o700)
     return SandboxRequest(
-        project.resolve(),
-        view.resolve(),
-        scratch.resolve(),
-        ("/usr/bin/true",),
-        {},
-        (runtime.resolve(),),
+        project.resolve(), view.resolve(), scratch.resolve(),
+        ("/usr/bin/true",), {}, (runtime.resolve(),),
     )
 
 
-def test_linux_adapter_compiles_only_after_all_host_checks(tmp_path: Path) -> None:
-    codex, bwrap = host_tree(tmp_path)
-    adapter = LinuxSandboxAdapter(dependencies(codex, bwrap))
+def test_linux_adapter_launches_system_bwrap_directly(tmp_path: Path) -> None:
+    agent = executable(tmp_path / "agent" / "omp")
+    bwrap = executable(tmp_path / "system" / "bwrap")
+    adapter = LinuxSandboxAdapter(dependencies(agent, bwrap))
+    sandbox_request = request(tmp_path)
 
-    spec = adapter.compile(request(tmp_path))
+    spec = adapter.compile(sandbox_request)
 
-    assert adapter.platform_id == "linux"
-    assert adapter.codex_executable == codex
+    assert adapter.platform_id == spec.platform_id == "linux"
     assert adapter.sandbox_executable == bwrap
-    assert spec.platform_id == "linux"
+    assert spec.argv[0] == str(bwrap)
+    assert str(agent) not in spec.argv
+    assert spec.argv[-2:] == ("--", "/usr/bin/true")
 
 
 @pytest.mark.parametrize(
     "mutator",
     [
         lambda value: replace(value, platform="darwin"),
-        lambda value: replace(value, codex_version=lambda: "codex-cli 0.144.0"),
-        lambda value: replace(value, bundled_bwrap=lambda: Path("/other/bwrap")),
+        lambda value: replace(value, agent_version=lambda: "omp/unsupported"),
+        lambda value: replace(value, system_bwrap=lambda: Path("bwrap")),
+        lambda value: replace(value, system_bwrap=lambda: Path("/missing/bwrap")),
         lambda value: replace(value, bwrap_usable=lambda _path: False),
+        lambda value: replace(value, agent_executable=Path("omp")),
     ],
 )
 def test_linux_adapter_fails_closed_on_invalid_host_dependencies(
     tmp_path: Path,
     mutator: Callable[[LinuxSandboxDependencies], LinuxSandboxDependencies],
 ) -> None:
-    codex, bwrap = host_tree(tmp_path)
-    adapter = LinuxSandboxAdapter(mutator(dependencies(codex, bwrap)))
+    agent = executable(tmp_path / "omp")
+    bwrap = executable(tmp_path / "bwrap")
+    adapter = LinuxSandboxAdapter(mutator(dependencies(agent, bwrap)))
 
     with pytest.raises(SandboxHostError):
         adapter.compile(request(tmp_path))
 
 
-def test_linux_adapter_rejects_non_executable_codex_and_bwrap(tmp_path: Path) -> None:
-    codex, bwrap = host_tree(tmp_path)
-    sandbox_request = request(tmp_path)
-
-    for path in (codex, bwrap):
-        path.chmod(0o644)
-        with pytest.raises(SandboxHostError):
-            LinuxSandboxAdapter(dependencies(codex, bwrap)).compile(sandbox_request)
-        path.chmod(0o755)
-
-
-def test_platform_selector_returns_linux_adapter_for_packaged_codex(
-    tmp_path: Path,
+@pytest.mark.parametrize("kind", ("agent", "bwrap"))
+@pytest.mark.parametrize("invalid", ("nonexecutable", "symlink", "directory"))
+def test_linux_adapter_requires_real_executable_files(
+    tmp_path: Path, kind: str, invalid: str,
 ) -> None:
-    codex, _bwrap = host_tree(tmp_path)
+    agent = executable(tmp_path / "omp")
+    bwrap = executable(tmp_path / "bwrap")
+    target = agent if kind == "agent" else bwrap
+    if invalid == "nonexecutable":
+        target.chmod(0o644)
+    elif invalid == "symlink":
+        alias = tmp_path / "executable-link"
+        alias.symlink_to(target)
+        if kind == "agent":
+            agent = alias
+        else:
+            bwrap = alias
+    else:
+        directory = tmp_path / "executable-directory"
+        directory.mkdir()
+        if kind == "agent":
+            agent = directory
+        else:
+            bwrap = directory
 
-    adapter = sandbox_adapter(codex, "linux")
-
-    assert isinstance(adapter, LinuxSandboxAdapter)
-    assert adapter.codex_executable == codex
+    with pytest.raises(SandboxHostError):
+        LinuxSandboxAdapter(dependencies(agent, bwrap)).compile(request(tmp_path))
 
 
-def test_linux_adapter_locates_bwrap_next_to_external_codex_js(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+def test_platform_selector_resolves_system_bwrap_independently_of_agent_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    package = tmp_path / "node_modules/@openai/codex"
-    codex = executable(package / "bin/codex.js")
-    (package / "package.json").write_text('{"name":"@openai/codex"}\n')
-    bwrap = executable(
-        package / "node_modules/@openai/codex-test/vendor/test-triple" / "codex-resources/bwrap"
-    )
-    monkeypatch.setattr(
-        providers,
-        "_host_codex_layout",
-        lambda: ("test", "test-triple"),
-    )
+    agent = executable(tmp_path / "standalone" / "omp")
+    bwrap = executable(tmp_path / "system" / "bwrap")
+    lookups: list[tuple[str, str]] = []
 
-    adapter = sandbox_adapter(codex, "linux")
+    def which(name: str, *, path: str) -> str:
+        lookups.append((name, path))
+        return str(bwrap)
+
+    monkeypatch.setattr("aizim.agents.linux_sandbox.shutil.which", which)
+
+    adapter = sandbox_adapter(agent, "linux")
 
     assert isinstance(adapter, LinuxSandboxAdapter)
     assert adapter.sandbox_executable == bwrap
+    assert lookups == [("bwrap", os.defpath)]

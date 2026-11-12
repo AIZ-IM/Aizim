@@ -32,7 +32,7 @@ def request(tmp_path: Path) -> SandboxRequest:
 def launch_spec(sandbox_request: SandboxRequest) -> SandboxLaunchSpec:
     return SandboxLaunchSpec(
         platform_id="darwin",
-        argv=("/opt/aizim/codex", *sandbox_request.command),
+        argv=("/opt/aizim/omp", *sandbox_request.command),
         cwd=sandbox_request.view_root,
         parent_env={},
         shell_env={},
@@ -62,7 +62,7 @@ def test_shared_request_defaults_runtime_roots_and_validates_a_closed_spec(
         ("scratch_root", Path("/wrong")),
         ("profile_id", ""),
         ("policy_hash", "short"),
-        ("argv", ("/opt/aizim/codex", "/usr/bin/false")),
+        ("argv", ("/opt/aizim/omp", "/usr/bin/false")),
     ],
 )
 def test_shared_validator_rejects_every_generic_mismatch(
@@ -77,22 +77,22 @@ def test_shared_validator_rejects_every_generic_mismatch(
         validate_launch_spec(sandbox_request, spec)
 
 
-def test_platform_selector_uses_the_supplied_native_codex(tmp_path: Path) -> None:
-    codex = tmp_path / "codex"
-    codex.write_text("#!/bin/sh\n")
-    codex.chmod(0o755)
+def test_platform_selector_uses_the_supplied_omp(tmp_path: Path) -> None:
+    agent = tmp_path / "omp"
+    agent.write_text("#!/bin/sh\n")
+    agent.chmod(0o755)
 
-    adapter = sandbox_adapter(codex.resolve(), "darwin")
+    adapter = sandbox_adapter(agent.resolve(), "darwin")
 
     assert isinstance(adapter, MacOSSandboxAdapter)
-    assert adapter.codex_executable == codex.resolve()
+    assert adapter.agent_executable == agent.resolve()
     assert adapter.platform_id == "darwin"
 
 
 def test_platform_selector_rejects_unsupported_hosts(tmp_path: Path) -> None:
-    codex = tmp_path / "codex"
-    codex.write_text("#!/bin/sh\n")
-    codex.chmod(0o755)
+    agent = tmp_path / "omp"
+    agent.write_text("#!/bin/sh\n")
+    agent.chmod(0o755)
 
     with pytest.raises(SandboxHostError, match="unsupported sandbox platform"):
-        sandbox_adapter(codex.resolve(), "win32")
+        sandbox_adapter(agent.resolve(), "win32")

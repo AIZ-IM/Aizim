@@ -77,7 +77,7 @@ def apply_event_mutation(connection: MutationConnection, mutation: EventMutation
 def insert_capability(connection: MutationConnection, record: CapabilityRecord) -> None:
     connection.execute(
         "INSERT INTO capability_tokens(token_hash,run_id,worker_id,role,lease_id,"
-        "operations_json,expires_at,revoked_at) VALUES(?,?,?,?,?,?,?,?)",
+        "operations_json,expires_at,revoked_at,call_budget) VALUES(?,?,?,?,?,?,?,?,?)",
         capability_row(record),
     )
 

@@ -31,7 +31,9 @@ CREATE TABLE capability_tokens (
     lease_id TEXT,
     operations_json TEXT NOT NULL,
     expires_at TEXT NOT NULL,
-    revoked_at TEXT
+    revoked_at TEXT,
+    call_budget INTEGER CHECK(call_budget IS NULL OR
+        (typeof(call_budget)='integer' AND call_budget BETWEEN 1 AND 10000))
 );
 
 CREATE TABLE publication_queue (

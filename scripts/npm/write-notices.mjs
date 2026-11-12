@@ -57,7 +57,7 @@ export function generateNotices(metadata) {
         left.name.localeCompare(right.name) ||
         left.version.localeCompare(right.version),
     );
-  const lines = ["Aizim Third-Party Notices", "", "uv 0.11.31 — MIT OR Apache-2.0"];
+  const lines = ["Aizim Third-Party Notices", "", "uv 0.13.7 — MIT OR Apache-2.0"];
   for (const dependency of packages) {
     if (
       !allowedLicenses.has(dependency.license) ||

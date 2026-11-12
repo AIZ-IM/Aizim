@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,14 @@ from aizim.state import (
     apply_event,
 )
 from aizim.state.events import EventEnvelope
+
+_EXECUTE_SQL_SCRIPT = (
+    "import sqlite3\n"
+    "import sys\n"
+    "from contextlib import closing\n"
+    "with closing(sqlite3.connect(sys.argv[1], autocommit=True)) as connection:\n"
+    "    connection.execute(sys.argv[2])\n"
+)
 
 
 class SequenceValues[T]:
@@ -170,8 +179,10 @@ def test_future_event_schema_fails_startup(tmp_path: Path) -> None:
     database = tmp_path / ".aizim" / "state.sqlite3"
     subprocess.run(
         [
-            "/usr/bin/sqlite3",
-            database,
+            sys.executable,
+            "-c",
+            _EXECUTE_SQL_SCRIPT,
+            str(database),
             (
                 "INSERT INTO events(event_id,schema_version,event_type,occurred_at,actor,"
                 "run_id,causation_id,payload_json) VALUES"
@@ -199,8 +210,10 @@ def test_unknown_schema_v1_payload_field_fails_startup(tmp_path: Path) -> None:
     )
     subprocess.run(
         [
-            "/usr/bin/sqlite3",
-            database,
+            sys.executable,
+            "-c",
+            _EXECUTE_SQL_SCRIPT,
+            str(database),
             (
                 "INSERT INTO events(event_id,schema_version,event_type,occurred_at,actor,"
                 "run_id,causation_id,payload_json) VALUES"

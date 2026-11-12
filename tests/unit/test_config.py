@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from aizim.config import (
-    CODEX_CLI_VERSION,
     LEAN_LSP_MCP_VERSION,
     LEAN_TOOLCHAIN,
     LEANCLIENT_VERSION,
@@ -50,11 +49,11 @@ def run_manifest() -> RunManifest:
         run_policy=RunPolicy(),
         resources=ResourcePolicy(),
         alignment_review=AlignmentReview(),
-        lean_version="4.32.1",
-        toolchain_version="leanprover/lean4:v4.32.1",
-        dependency_versions=(("mcp", "1.28.1"),),
-        lean_lsp_mcp_version="0.28.1",
-        leanclient_version="0.12.1",
+        lean_version="4.35.0",
+        toolchain_version="leanprover/lean4:v4.35.0",
+        dependency_versions=(("mcp", "2.2.0"),),
+        lean_lsp_mcp_version="0.33.0",
+        leanclient_version="0.13.2",
         agent_harness_name="codex-cli",
         agent_harness_version="0.154.0",
         agent_harness_binary_hash="1" * 64,
@@ -75,7 +74,7 @@ def run_manifest() -> RunManifest:
 def test_missing_config_uses_design_defaults(tmp_path: Path) -> None:
     config = load_config(tmp_path, environ={})
 
-    assert config.model is None
+    assert not hasattr(config, "model")
     assert config.run.participation is ParticipationMode.AUTONOMOUS
     assert config.run.formal_participation is FormalParticipation.UNASSISTED
     assert config.run.lean_runtime is LeanRuntimeMode.SHARED
@@ -161,7 +160,7 @@ def test_alignment_review_requires_reviewer_metadata() -> None:
 def test_run_manifest_records_evaluation_boundary() -> None:
     manifest = run_manifest()
 
-    assert manifest.lean_version == "4.32.1"
+    assert manifest.lean_version == "4.35.0"
     assert manifest.model_identifier == "gpt-5"
 
 
@@ -174,11 +173,10 @@ def test_run_manifest_rejects_noncanonical_epoch_record() -> None:
         replace(run_manifest(), epoch_pair=invalid_epoch)
 
 
-def test_config_reads_toml_and_environment_model_override(tmp_path: Path) -> None:
+def test_config_reads_runtime_policy_and_ignores_legacy_environment_model(tmp_path: Path) -> None:
     write_config(
         tmp_path,
         (
-            'model = "file-model"\n\n'
             "[run]\n"
             'participation = "collaborative"\n'
             'lean_runtime = "isolated"\n'
@@ -195,13 +193,12 @@ def test_config_reads_toml_and_environment_model_override(tmp_path: Path) -> Non
             f'lean_lsp_mcp_version = "{LEAN_LSP_MCP_VERSION}"\n'
             f'leanclient_version = "{LEANCLIENT_VERSION}"\n'
             f'mcp_version = "{MCP_VERSION}"\n'
-            f'codex_cli_version = "{CODEX_CLI_VERSION}"\n'
         ),
     )
 
     config = load_config(tmp_path, environ={"AIZIM_MODEL": "environment-model"})
 
-    assert config.model == "environment-model"
+    assert not hasattr(config, "model")
     assert config.run.participation is ParticipationMode.COLLABORATIVE
     assert config.run.formal_participation is FormalParticipation.ASSISTED
     assert config.run.lean_runtime is LeanRuntimeMode.ISOLATED
@@ -216,6 +213,8 @@ def test_config_reads_toml_and_environment_model_override(tmp_path: Path) -> Non
         "[run]\nunexpected = true\n",
         "[resources]\nunexpected = true\n",
         "[foundation]\nunexpected = true\n",
+        'model = "legacy-provider-selection"\n',
+        '[foundation]\ncodex_cli_version = "0.154.0"\n',
     ],
 )
 def test_unknown_config_keys_are_fatal(tmp_path: Path, body: str) -> None:
@@ -235,10 +234,10 @@ def test_unknown_enum_value_is_fatal(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("key", "value"),
     [
-        ("lean_toolchain", "leanprover/lean4:v4.31.0"),
-        ("lean_lsp_mcp_version", "0.28.0"),
-        ("leanclient_version", "0.12.0"),
-        ("mcp_version", "1.28.0"),
+        ("lean_toolchain", "leanprover/lean4:v4.32.1"),
+        ("lean_lsp_mcp_version", "0.28.1"),
+        ("leanclient_version", "0.12.1"),
+        ("mcp_version", "1.28.1"),
         ("codex_cli_version", "0.144.5"),
         ("codex_cli_version", "0.145.0"),
     ],

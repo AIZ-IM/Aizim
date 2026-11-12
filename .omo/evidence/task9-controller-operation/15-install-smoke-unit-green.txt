@@ -1,0 +1,15 @@
+✔ private smoke roots reject shared and non-private directories (0.483042ms)
+✔ private smoke roots allow an owned mode-700 child of a shared temp root (0.069667ms)
+✔ the smoke layout isolates every consumer-owned surface (0.129ms)
+✔ installs exactly the platform and meta tarballs without scripts (0.269041ms)
+✔ consumer environment is minimal and removes injection variables (0.109ms)
+✔ doctor failures name the exact failed checks (0.095375ms)
+✔ controller smoke uses the provisioned wheel runtime and exact output (0.073792ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 57.055791

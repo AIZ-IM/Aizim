@@ -2,132 +2,61 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
 
-from .permission_profile import network_launch_policy, network_policy
+from .permission_profile import sandbox_environment
 from .sandbox import SandboxContractError, SandboxLaunchSpec, SandboxRequest
 
-_PROFILE_ID: Final = "aizim-worker"
-_BASE_PATH: Final = "/usr/local/bin:/usr/bin:/bin"
-_FIXED_LAUNCH_POLICY: Final = (
-    "sandbox",
-    "--permission-profile",
-    _PROFILE_ID,
-    "--sandbox-state-disable-network",
-    "-C",
+_PROFILE_ID = "aizim-worker"
+_SYSTEM_READ_ROOTS = (
+    "/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc/ld.so.cache", "/etc/ssl/certs",
+    "/etc/resolv.conf", "/etc/hosts", "/etc/nsswitch.conf",
 )
 
 
 def compile_linux_profile(
-    codex_executable: Path,
+    sandbox_executable: Path,
     request: SandboxRequest,
 ) -> SandboxLaunchSpec:
-    filtered = request.provider_environment.value == "filtered_parent"
-    shell_env = _shell_environment(request)
-    overrides = (
-        f"default_permissions={_toml_string(_PROFILE_ID)}",
-        'approval_policy="never"',
-        _permission_override(request),
-        _environment_override(filtered, shell_env),
-    )
+    environment = sandbox_environment(request)
+    # bwrap cannot filter destinations on a shared network namespace. The local magpie
+    # gateway needs that namespace; this profile makes no TCP confinement claim.
+    policy = [
+        str(sandbox_executable), "--die-with-parent", "--new-session",
+        "--unshare-all", "--share-net", "--cap-drop", "ALL",
+        "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+    ]
+    for root in _SYSTEM_READ_ROOTS:
+        if Path(root).exists():
+            policy.extend(("--ro-bind", root, root))
+    for root in request.runtime_read_roots:
+        policy.extend(("--ro-bind", str(root), str(root)))
+    policy.extend((
+        "--ro-bind", str(request.view_root), str(request.view_root),
+        "--bind", str(request.scratch_root), str(request.scratch_root),
+        "--chdir", str(request.view_root), "--clearenv",
+    ))
+    for key, value in environment.items():
+        policy.extend(("--setenv", key, value))
+    policy.append("--")
+    digest = hashlib.sha256(json.dumps({
+        "profile": _PROFILE_ID,
+        "filesystem": "private-root;runtime-and-view-readonly;scratch-writable",
+        "network": "host-network-no-destination-confinement",
+        "system_read_roots": _SYSTEM_READ_ROOTS,
+        "namespaces": ("--unshare-all", "--share-net", "--cap-drop", "ALL"),
+    }, separators=(",", ":")).encode()).hexdigest()
     return SandboxLaunchSpec(
-        platform_id="linux",
-        argv=(
-            str(codex_executable),
-            *(item for override in overrides for item in ("-c", override)),
-            *network_launch_policy(_FIXED_LAUNCH_POLICY, request.provider_network_domains),
-            str(request.view_root),
-            *request.command,
-        ),
-        cwd=request.view_root,
-        parent_env=MappingProxyType(dict(request.parent_env)),
-        shell_env=shell_env,
-        view_root=request.view_root,
-        scratch_root=request.scratch_root,
-        profile_id=_PROFILE_ID,
-        policy_hash=_policy_contract_hash(filtered, request.provider_network_domains),
+        platform_id="linux", argv=(*policy, *request.command), cwd=request.view_root,
+        parent_env=MappingProxyType(environment), shell_env=MappingProxyType(environment),
+        view_root=request.view_root, scratch_root=request.scratch_root,
+        profile_id=_PROFILE_ID, policy_hash=digest,
     )
 
 
 def validate_linux_profile(
-    spec: SandboxLaunchSpec,
-    request: SandboxRequest,
-    codex_executable: Path,
+    spec: SandboxLaunchSpec, request: SandboxRequest, sandbox_executable: Path,
 ) -> None:
-    expected = compile_linux_profile(codex_executable, request)
-    if spec != expected:
+    if spec != compile_linux_profile(sandbox_executable, request):
         raise SandboxContractError("invalid Linux sandbox profile")
-
-
-def _permission_override(request: SandboxRequest) -> str:
-    filesystem = (
-        (":minimal", "read"),
-        *((str(root), "read") for root in request.runtime_read_roots),
-        (str(request.view_root), "read"),
-        (str(request.scratch_root), "write"),
-        (str(request.project_root), "deny"),
-    )
-    entries = ",".join(
-        f"{_toml_string(path)}={_toml_string(permission)}" for path, permission in filesystem
-    )
-    network = network_policy(request.provider_network_domains)
-    return f"permissions.{_PROFILE_ID}={{filesystem={{{entries}}},network={network}}}"
-
-
-def _policy_contract_hash(filtered: bool = False, domains: tuple[str, ...] = ()) -> str:
-    scratch = Path("/__aizim_contract__/scratch")
-    request = SandboxRequest(
-        Path("/__aizim_contract__/project"),
-        Path("/__aizim_contract__/view"),
-        scratch,
-        (),
-        {},
-        (
-            Path("/__aizim_contract__/runtime-python"),
-            Path("/__aizim_contract__/runtime-codex"),
-        ),
-        provider_network_domains=domains,
-    )
-    environment = {
-        "PATH": _BASE_PATH,
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
-        "TMPDIR": str(scratch),
-    }
-    contract = (
-        f"default_permissions={_toml_string(_PROFILE_ID)}",
-        'approval_policy="never"',
-        _permission_override(request),
-        _environment_override(filtered, environment),
-        *network_launch_policy(_FIXED_LAUNCH_POLICY, domains),
-    )
-    body = json.dumps(contract, ensure_ascii=False, separators=(",", ":")).encode()
-    return hashlib.sha256(body).hexdigest()
-
-
-def _shell_environment(request: SandboxRequest) -> Mapping[str, str]:
-    return MappingProxyType(
-        {
-            "PATH": _BASE_PATH,
-            "LANG": "C.UTF-8",
-            "LC_ALL": "C.UTF-8",
-            "TMPDIR": str(request.scratch_root),
-        }
-    )
-
-
-def _environment_override(filtered: bool, environment: Mapping[str, str]) -> str:
-    if filtered:
-        return 'shell_environment_policy={inherit="all",ignore_default_excludes=true}'
-    values = ",".join(f"{key}={_toml_string(value)}" for key, value in environment.items())
-    return (
-        "shell_environment_policy="
-        f'{{inherit="none",ignore_default_excludes=false,set={{{values}}}}}'
-    )
-
-
-def _toml_string(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)

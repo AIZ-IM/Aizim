@@ -3,14 +3,15 @@ name = "aizim"
 version = "0.1.0"
 description = "Formal-native autonomous mathematical research with Lean 4"
 readme = "README.md"
-requires-python = ">=3.12,<3.15"
+requires-python = ">=3.12,<3.16"
 license = "MIT"
 authors = [{ name = "Frankie Wang" }]
 dependencies = [
   "jsonschema==4.26.0",
-  "lean-lsp-mcp==0.28.1",
-  "leanclient==0.12.1",
-  "mcp[cli]==1.28.1",
+  "lean-lsp-mcp==0.33.0",
+  "leanclient==0.13.2",
+  "mcp[cli]==2.2.0",
+  "PyYAML==6.0.3",
 ]
 
 [project.scripts]
@@ -19,16 +20,16 @@ aizim-gateway-sidecar = "aizim.gateway.sidecar:main"
 
 [dependency-groups]
 dev = [
-  "anyio==4.14.2",
-  "pytest==9.1.1",
-  "pytest-asyncio==1.4.0",
+  "anyio==4.16.0",
+  "pytest==9.2.0",
+  "pytest-asyncio==1.4.1.post1",
   "pytest-timeout==2.4.0",
-  "ruff==0.15.22",
-  "ty==0.0.63",
+  "ruff==0.17.4",
+  "ty==0.0.99",
 ]
 
 [build-system]
-requires = ["uv_build==0.11.31"]
+requires = ["uv_build==0.13.7"]
 build-backend = "uv_build"
 
 [tool.pytest.ini_options]
@@ -36,11 +37,10 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "--strict-markers"
 markers = [
-  "lean_integration: requires pinned Lean 4.32.1",
-  "linux_sandbox: requires Linux and supported external Codex CLI 0.154.0",
-  "macos_sandbox: requires macOS and supported external Codex CLI 0.154.0",
-  "manual_real_codex: requires external Codex credentials and model access",
-  "manual_real_controller: requires an explicit provider, project, models, and direct credentials",
+  "lean_integration: requires pinned Lean 4.35.0",
+  "linux_sandbox: requires Linux and a usable bubblewrap sandbox",
+  "macos_sandbox: requires macOS and the system sandbox",
+  "manual_real_omp: requires a configured magpie model and Lean toolchain",
 ]
 
 [tool.ruff]

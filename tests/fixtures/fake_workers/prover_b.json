@@ -25,7 +25,7 @@
           "contribution_id": {"$cursor": "contribution_id"},
           "candidate_name": {"$cursor": "candidate_name"},
           "complete_type": "(n : Nat) : n + 0 = n",
-          "imports": ["Std"],
+          "imports": ["Std", {"$delta": "module"}],
           "dependencies": [],
           "assumptions": [],
           "evidence_links": []

@@ -1,30 +1,15 @@
 from __future__ import annotations
 
-import json
 import os
-import re
 import stat
 from pathlib import Path
 
 from .sandbox import ProviderEnvironmentPolicy, SandboxContractError, SandboxRequest
 
-_PROVIDER_ENVIRONMENT_KEYS = frozenset(
-    {
-        "ANTHROPIC_API_KEY",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-        "OPENAI_API_KEY",
-        "CODEX_HOME",
-        "CLAUDE_CONFIG_DIR",
-        "SSL_CERT_FILE",
-        "SSL_CERT_DIR",
-        "HOME",
-        "PATH",
-        "LANG",
-        "LC_ALL",
-        "TMPDIR",
-    }
-)
-_BASELINE_ENVIRONMENT_KEYS = frozenset({"PATH", "LANG", "LC_ALL", "TMPDIR"})
+_ENVIRONMENT_KEYS = frozenset({
+    "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
+    "PI_CODING_AGENT_DIR", "PI_NATIVES_DIR",
+})
 
 
 def normalize_sandbox_request(
@@ -45,27 +30,19 @@ def normalize_sandbox_request(
         raise SandboxContractError("sandbox command must use an absolute executable")
     if type(request.provider_environment) is not ProviderEnvironmentPolicy:
         raise SandboxContractError("invalid provider environment policy")
-    if request.provider_environment is ProviderEnvironmentPolicy.FILTERED_PARENT:
-        _validate_provider_environment(request)
-    if type(request.provider_network_domains) is not tuple or any(
-        type(host) is not str
-        or re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*\.[a-z]{2,}", host) is None
-        for host in request.provider_network_domains
-    ):
-        raise SandboxContractError("invalid provider network domains")
-    if (
-        request.provider_network_domains
-        and request.provider_environment is not ProviderEnvironmentPolicy.FILTERED_PARENT
-    ):
-        raise SandboxContractError("provider network requires a filtered transport environment")
+    if request.provider_network_domains:
+        raise SandboxContractError("destination network restrictions are not supported")
 
     runtime_roots: list[Path] = []
     for root in request.runtime_read_roots:
-        canonical = canonical_directory(
-            root,
-            "runtime read root",
-            require_exact=True,
-        )
+        try:
+            metadata = root.lstat()
+            canonical = root.resolve(strict=True)
+        except OSError as error:
+            raise SandboxContractError("runtime read root is unavailable") from error
+        if (not root.is_absolute() or canonical != root
+            or not (stat.S_ISDIR(metadata.st_mode) or stat.S_ISREG(metadata.st_mode))):
+            raise SandboxContractError("runtime read root is not canonical")
         if any(paths_overlap(canonical, protected) for protected in (project, view, scratch)):
             raise SandboxContractError("runtime read root overlaps a protected root")
         if canonical not in runtime_roots:
@@ -82,41 +59,15 @@ def normalize_sandbox_request(
     )
 
 
-def network_policy(domains: tuple[str, ...]) -> str:
-    if not domains:
-        return "{enabled=false}"
-    entries = ",".join(f'{json.dumps(host)}="allow"' for host in domains)
-    return (
-        "{enabled=true,domains={" + entries + '},proxy_url="http://127.0.0.1:0",'
-        "enable_socks5=false,allow_upstream_proxy=false,allow_local_binding=false}"
-    )
-
-
-def network_launch_policy(fixed: tuple[str, ...], domains: tuple[str, ...]) -> tuple[str, ...]:
-    if not domains:
-        return fixed
-    return (
-        "-c",
-        "features.network_proxy=true",
-        *(item for item in fixed if item != "--sandbox-state-disable-network"),
-    )
-
-
-def _validate_provider_environment(request: SandboxRequest) -> None:
-    environment = request.parent_env
-    temporary = environment.get("TMPDIR")
-    if type(temporary) is not str or not temporary:
-        raise SandboxContractError("invalid provider temporary directory")
-    temporary_root = canonical_directory(
-        Path(temporary), "provider temporary directory", require_exact=True
-    )
-    if (
-        not environment.keys() >= _BASELINE_ENVIRONMENT_KEYS
-        or not environment.keys() <= _PROVIDER_ENVIRONMENT_KEYS
-        or not temporary_root.is_relative_to(request.scratch_root)
-        or any(type(value) is not str or not value for value in environment.values())
-    ):
-        raise SandboxContractError("invalid provider environment")
+def sandbox_environment(request: SandboxRequest) -> dict[str, str]:
+    environment = {key: value for key, value in request.parent_env.items()
+                   if key in _ENVIRONMENT_KEYS and isinstance(value, str) and value}
+    environment.setdefault("PATH", "/usr/bin:/bin")
+    environment.setdefault("LANG", "C.UTF-8")
+    environment.setdefault("LC_ALL", "C.UTF-8")
+    environment["TMPDIR"] = str(request.scratch_root)
+    environment.setdefault("HOME", str(request.scratch_root))
+    return environment
 
 
 def canonical_directory(

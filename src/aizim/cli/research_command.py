@@ -48,7 +48,8 @@ def add_research_parser(commands) -> None:
             add.add_argument("--source-ref", action="append", default=[])
             add.add_argument("--max-rounds", type=int, default=6)
             add.add_argument("--max-failures", type=int, default=3)
-            add.add_argument("--timeout-seconds", type=int, default=300)
+            add.add_argument("--call-budget", type=int, default=400)
+            add.add_argument("--timeout-seconds", type=int, default=900)
         else:
             add.add_argument("--id", default=None)
             add.add_argument("--body", required=True)
@@ -73,6 +74,11 @@ def add_research_parser(commands) -> None:
                 _common(command)
                 command.add_argument("--task-id", required=True)
                 command.add_argument("--author", default="operator")
+                if action == "resume":
+                    # Raising execution limits lets a blocked target take further rounds.
+                    command.add_argument("--max-rounds", type=int)
+                    command.add_argument("--max-failures", type=int)
+                    command.add_argument("--call-budget", type=int)
         if name == "memory":
             search = actions.add_parser("search")
             _common(search)
@@ -224,6 +230,11 @@ def _run(args: argparse.Namespace) -> int:
     body: dict[str, JsonValue]
     if action in {"pause", "resume"}:
         body = {"task_id": args.task_id, "author": args.author}
+        limits = {
+            field: getattr(args, field, None)
+            for field in ("max_rounds", "max_failures", "call_budget")
+        }
+        body |= {field: value for field, value in limits.items() if value is not None}
     elif command == "task":
         body = {
             "task_id": args.task_id,
@@ -235,6 +246,7 @@ def _run(args: argparse.Namespace) -> int:
             "source_refs": args.source_ref,
             "max_rounds": args.max_rounds,
             "max_failures": args.max_failures,
+            "call_budget": args.call_budget,
             "timeout_seconds": args.timeout_seconds,
         }
     else:

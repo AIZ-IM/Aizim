@@ -7,7 +7,6 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from contextlib import AsyncExitStack, suppress
-from datetime import timedelta
 from pathlib import Path
 from typing import Final
 
@@ -44,7 +43,7 @@ _DISABLED_TOOLS: Final = (
     "lean_state_search,lean_term_goal"
 )
 _MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
-_MCP_TOOL_TIMEOUT: Final = timedelta(seconds=180)
+_MCP_TOOL_TIMEOUT: Final = 180.0
 
 
 class LeanMcpClient:
@@ -113,7 +112,7 @@ class LeanMcpClient:
             await session.initialize()
             tools = await session.list_tools()
             names = tuple(sorted(item.name for item in tools.tools))
-            if names != EXPECTED_TOOL_NAMES or tools.nextCursor is not None:
+            if names != EXPECTED_TOOL_NAMES or tools.next_cursor is not None:
                 raise LeanRuntimeError("MCP_TOOL_SURFACE_MISMATCH")
         except LeanRuntimeError:
             await stack.aclose()
@@ -218,7 +217,7 @@ class LeanMcpClient:
             )
         except Exception:
             raise LeanRuntimeError("MCP_TRANSPORT_FAILED") from None
-        if result.isError:
+        if result.is_error:
             raise LeanRuntimeError("MCP_TOOL_FAILED")
         if len(result.content) != 1 or not isinstance(result.content[0], TextContent):
             raise LeanRuntimeError("INVALID_LEAN_RESPONSE")

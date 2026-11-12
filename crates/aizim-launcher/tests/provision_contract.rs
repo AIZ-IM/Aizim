@@ -103,7 +103,7 @@ fn fixture() -> TestResult<RequestFixture> {
         aizim_version: "0.1.0".to_owned(),
         target: "darwin-arm64".to_owned(),
         wheel_sha256: "a".repeat(64),
-        python_version: "3.14.6".to_owned(),
+        python_version: "3.15.2".to_owned(),
     };
     let layout = CacheLayout::new(
         &CacheEnvironment {
@@ -192,14 +192,14 @@ fn expected_arguments(fixture: &RequestFixture, staging: &Path) -> [Vec<String>;
                 .managed_python_root
                 .to_string_lossy()
                 .into_owned(),
-            "3.14.6".to_owned(),
+            "3.15.2".to_owned(),
         ],
         vec![
             "--no-config".to_owned(),
             "venv".to_owned(),
             "--managed-python".to_owned(),
             "--python".to_owned(),
-            "3.14.6".to_owned(),
+            "3.15.2".to_owned(),
             staging.join("venv").to_string_lossy().into_owned(),
         ],
         vec![
@@ -297,7 +297,7 @@ fn cold_bootstrap_uses_the_exact_command_sequence_and_clean_environment() -> Tes
     assert_eq!(
         output,
         format!(
-            "aizim: provisioning managed Python 3.14.6 runtime ({fingerprint})\n\
+            "aizim: provisioning managed Python 3.15.2 runtime ({fingerprint})\n\
              aizim: runtime ready ({fingerprint})\n"
         )
     );
@@ -314,8 +314,8 @@ fn warm_runtime_runs_no_commands_and_emits_no_bootstrap_status() -> TestResult {
     let mut warm_runner = FakeRunner::default();
     let mut status = Vec::new();
     ensure_runtime(&fixture.request, &mut warm_runner, &mut status)?;
-    assert!(warm_runner.specs.is_empty());
-    assert!(status.is_empty());
+    assert_eq!(warm_runner.specs.len(), 0);
+    assert_eq!(status, Vec::<u8>::new());
     Ok(())
 }
 

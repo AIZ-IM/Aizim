@@ -1,0 +1,10 @@
+{
+  "consumer_mode": "0700",
+  "version_exact": true,
+  "doctor_ready": true,
+  "codex_status": "PASS",
+  "codex_detail": "codex-cli 0.145.0",
+  "claude_status": "PASS",
+  "claude_detail": "2.1.218 (Claude Code)",
+  "no_global_fallback": true
+}

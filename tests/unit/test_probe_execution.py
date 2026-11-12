@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -9,7 +10,7 @@ import pytest
 
 from aizim.agents import probe_execution, process_io
 from aizim.agents.probe_execution import SandboxProbeError
-from aizim.agents.sandbox import SandboxLaunchSpec
+from aizim.agents.sandbox import ProbeOperation, SandboxLaunchSpec, parse_probe_attempts
 
 
 def launch_spec(tmp_path: Path, argv: tuple[str, ...]) -> SandboxLaunchSpec:
@@ -109,3 +110,29 @@ async def test_failed_probe_attaches_only_redacted_stderr(tmp_path: Path) -> Non
     assert tuple(notes) == ("probe stderr: <path>: <redacted>: Read-only file system",)
     assert secret.decode() not in repr(captured.value)
     assert "/private/project" not in repr(captured.value)
+
+
+def test_probe_parser_requires_complete_ordered_evidence() -> None:
+    allowed = {ProbeOperation.CONNECT_HOST_TCP, ProbeOperation.WRITE_ALLOWED_SCRATCH,
+               ProbeOperation.READ_ALLOWED_VIEW}
+    attempts = [
+        {"operation": operation.value,
+         "verdict": "allowed" if operation in allowed else "denied",
+         "reason_code": "OPERATION_ALLOWED" if operation in allowed else "SANDBOX_ENFORCED"}
+        for operation in ProbeOperation
+    ]
+    def encode(values: list[dict[str, str]]) -> bytes:
+        return json.dumps({"attempts": values}).encode()
+
+    parsed = parse_probe_attempts(encode(attempts))
+    assert tuple(attempt.operation for attempt in parsed) == tuple(ProbeOperation)
+    assert {attempt.operation for attempt in parsed if attempt.verdict == "allowed"} == allowed
+
+    for invalid in (attempts[:-1], list(reversed(attempts)), [*attempts, attempts[0]]):
+        with pytest.raises(ValueError, match="invalid probe operation sequence"):
+            parse_probe_attempts(encode(invalid))
+
+    malformed = [dict(attempt) for attempt in attempts]
+    malformed[0]["reason_code"] = "unrecognized"
+    with pytest.raises(ValueError, match="invalid probe output"):
+        parse_probe_attempts(encode(malformed))

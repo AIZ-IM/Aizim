@@ -152,8 +152,11 @@ def test_pause_is_durable_and_does_not_rewrite_the_target(tmp_path: Path) -> Non
     assert cli(project, "task", "pause", "--task-id", "test", "--author", "Ada").returncode == 0
     paused = json.loads(cli(project, "task", "list").stdout)[0]
     assert paused["paused"] and paused["target_hash"] == before["target_hash"]
-    assert cli(project, "task", "resume", "--task-id", "test").returncode == 0
-    assert not json.loads(cli(project, "task", "list").stdout)[0]["paused"]
+    resumed = cli(project, "task", "resume", "--task-id", "test", "--max-rounds", "7")
+    assert resumed.returncode == 0, resumed.stderr
+    target = json.loads(cli(project, "task", "list").stdout)[0]
+    assert not target["paused"] and target["max_rounds"] == 7
+    assert target["target_hash"] == before["target_hash"]
 
 
 def test_public_cli_rejects_a_proof_in_place_of_the_target(tmp_path: Path) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -8,7 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from aizim.config import CODEX_CLI_VERSION
+from aizim.omp.executable import omp_version
+from aizim.omp.runtime import OMP_VERSION
 
 from .macos_profile import compile_macos_profile, validate_macos_profile
 from .permission_profile import canonical_directory, normalize_sandbox_request
@@ -22,7 +24,7 @@ from .sandbox import (
     validate_launch_spec,
 )
 
-_CODEX_VERSION: Final = f"codex-cli {CODEX_CLI_VERSION}"
+_AGENT_VERSION: Final = f"omp/{OMP_VERSION}"
 _SANDBOX_EXECUTABLE: Final = Path("/usr/bin/sandbox-exec")
 
 
@@ -33,8 +35,8 @@ class SandboxHostError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class MacOSSandboxDependencies:
     platform: str
-    codex_executable: Path
-    codex_version: Callable[[], str]
+    agent_executable: Path
+    agent_version: Callable[[], str]
     sandbox_is_apple: Callable[[], bool]
     developer_root: Callable[[], Path]
 
@@ -48,8 +50,8 @@ class MacOSSandboxAdapter:
         return cls(
             MacOSSandboxDependencies(
                 platform=sys.platform,
-                codex_executable=executable,
-                codex_version=lambda: _command_output((str(executable), "--version")),
+                agent_executable=executable,
+                agent_version=lambda: omp_version(executable),
                 sandbox_is_apple=_sandbox_is_apple,
                 developer_root=lambda: Path(_command_output(("/usr/bin/xcode-select", "-p"))),
             )
@@ -60,8 +62,8 @@ class MacOSSandboxAdapter:
         return "darwin"
 
     @property
-    def codex_executable(self) -> Path:
-        return self._dependencies.codex_executable
+    def agent_executable(self) -> Path:
+        return self._dependencies.agent_executable
 
     def compile(self, request: SandboxRequest) -> SandboxLaunchSpec:
         developer_root = self._validate_host()
@@ -76,7 +78,7 @@ class MacOSSandboxAdapter:
         except ValueError as error:
             raise SandboxHostError(str(error)) from error
         spec = compile_macos_profile(
-            self._dependencies.codex_executable, normalized, developer_root
+            self._dependencies.agent_executable, normalized, developer_root
         )
         validate_macos_profile(
             spec,
@@ -92,7 +94,7 @@ class MacOSSandboxAdapter:
         return await execute_probe(
             self,
             request,
-            codex_version=_CODEX_VERSION,
+            agent_version=_AGENT_VERSION,
             sandbox_executable=str(_SANDBOX_EXECUTABLE),
         )
 
@@ -101,13 +103,18 @@ class MacOSSandboxAdapter:
         if dependencies.platform != "darwin":
             raise SandboxHostError("macOS sandbox requires Darwin")
         try:
-            version = dependencies.codex_version()
+            executable = dependencies.agent_executable
+            executable_valid = (
+                executable.is_absolute() and executable.resolve(strict=True) == executable
+                and executable.is_file() and os.access(executable, os.X_OK)
+            )
+            version = dependencies.agent_version()
             signed = dependencies.sandbox_is_apple()
             developer_root = dependencies.developer_root()
-        except (OSError, subprocess.SubprocessError) as error:
+        except Exception as error:
             raise SandboxHostError("sandbox host validation failed") from error
-        if not dependencies.codex_executable.is_absolute() or version != _CODEX_VERSION:
-            raise SandboxHostError("unsupported Codex CLI")
+        if not executable_valid or version != _AGENT_VERSION:
+            raise SandboxHostError("unsupported omp executable or version")
         if not signed:
             raise SandboxHostError("Apple sandbox executable is unavailable")
         if not developer_root.is_absolute():
@@ -119,9 +126,9 @@ class MacOSSandboxAdapter:
 
 
 def _default_dependencies() -> MacOSSandboxDependencies:
-    executable = shutil.which("codex")
-    codex = Path(executable) if executable is not None else Path("codex")
-    return MacOSSandboxAdapter.for_executable(codex)._dependencies
+    executable = shutil.which("omp")
+    agent = Path(executable).resolve() if executable is not None else Path("omp")
+    return MacOSSandboxAdapter.for_executable(agent)._dependencies
 
 
 def _command_output(argv: tuple[str, ...]) -> str:

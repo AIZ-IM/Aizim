@@ -162,7 +162,7 @@ def _resolve_action(
     cursor: Mapping[str, JsonValue],
     delta: dict[str, JsonValue] | None,
 ) -> FakeToolAction:
-    payload = cast(dict[str, JsonValue], _resolve_value(action.payload, cursor))
+    payload = cast(dict[str, JsonValue], _resolve_value(action.payload, cursor, delta))
     reference = payload.pop("delta_reference", None)
     if reference is None:
         return FakeToolAction(action.operation, payload)
@@ -175,9 +175,11 @@ def _resolve_action(
     return FakeToolAction(action.operation, payload)
 
 
-def _resolve_value(value: JsonValue, cursor: Mapping[str, JsonValue]) -> JsonValue:
+def _resolve_value(
+    value: JsonValue, cursor: Mapping[str, JsonValue], delta: Mapping[str, JsonValue] | None
+) -> JsonValue:
     if type(value) is list:
-        return [_resolve_value(item, cursor) for item in value]
+        return [_resolve_value(item, cursor, delta) for item in value]
     if type(value) is not dict:
         return value
     if set(value) == {"$cursor"}:
@@ -185,7 +187,12 @@ def _resolve_value(value: JsonValue, cursor: Mapping[str, JsonValue]) -> JsonVal
         if type(key) is not str or key not in cursor:
             raise FakeFixtureError("UNKNOWN_CURSOR_FIELD")
         return cursor[key]
-    return {key: _resolve_value(item, cursor) for key, item in value.items()}
+    if set(value) == {"$delta"}:
+        key = value["$delta"]
+        if delta is None or type(key) is not str:
+            raise FakeFixtureError("DELTA_REFERENCE_UNAVAILABLE")
+        return _delta_text(delta, key)
+    return {key: _resolve_value(item, cursor, delta) for key, item in value.items()}
 
 
 def _reference_template(value: JsonValue) -> str:

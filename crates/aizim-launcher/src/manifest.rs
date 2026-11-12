@@ -190,7 +190,7 @@ fn validate_distribution(manifest: &DistributionManifest) -> Result<(), Launcher
     require_equal(
         "DISTRIBUTION_VERSION_MISMATCH",
         &manifest.python_version,
-        "3.14.6",
+        "3.15.2",
     )?;
     require_equal(
         "DISTRIBUTION_VERSION_MISMATCH",
@@ -213,7 +213,7 @@ fn validate_platform(manifest: &PlatformManifest) -> Result<(), LauncherError> {
         &manifest.launcher_version,
         VERSION,
     )?;
-    require_equal("PLATFORM_VERSION_MISMATCH", &manifest.uv_version, "0.11.31")?;
+    require_equal("PLATFORM_VERSION_MISMATCH", &manifest.uv_version, "0.13.7")?;
 
     let expected = host_target().ok_or_else(|| LauncherError::configuration("TARGET_MISMATCH"))?;
     require_equal("TARGET_MISMATCH", &manifest.target, expected.id)?;

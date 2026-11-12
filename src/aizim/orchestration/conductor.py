@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK - preserves existing concurrent worker cancellation semantics
+import asyncio  # ANYIO_OK: preserves existing concurrent worker cancellation semantics
 import secrets
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -148,7 +148,7 @@ class ResearchConductor:
                     )
                 )
             return SharedRunResult(run_id, start, end, declarations)
-        except BaseException:  # noqa: BROAD_EXCEPT_OK - durable run-abort boundary
+        except BaseException:  # BROAD_EXCEPT_OK: durable run-abort boundary
             self._state.append_event(
                 AppendEventCommand(
                     "RunAborted", "research_conductor", run_id, None, {"reason_code": "RUN_FAILED"}

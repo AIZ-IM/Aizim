@@ -9,9 +9,10 @@ _PASS_LINES = (
     "SECURITY GATE PASS",
     "gateway_matrix=pass",
     "filesystem_denials=6/6",
-    "socket_denials=2/2",
+    "socket_denials=1/1",
     "environment_denials=1/1",
-    "allowed_controls=2/2",
+    "allowed_controls=3/3",
+    "network_destination_isolation=not_enforced",
     "protected_assets=unchanged",
     "protected_state=unchanged",
 )
@@ -32,5 +33,5 @@ def run_security_probe(project: Path) -> int:
         if report.platform_id == "darwin"
         else "linux_profile=pass"
     )
-    print("\n".join((*_PASS_LINES[:2], profile, *_PASS_LINES[2:])))
+    print("\n".join((*_PASS_LINES[:2], profile, *_PASS_LINES[2:], report.network_boundary)))
     return 0

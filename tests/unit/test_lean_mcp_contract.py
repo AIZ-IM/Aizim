@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -12,6 +11,7 @@ from mcp.types import TextContent
 
 from aizim.lean import DocumentBroker, mcp_client, promotion_runtime
 from aizim.lean.mcp_client import EXPECTED_TOOL_NAMES, LeanMcpClient
+from aizim.lean.mcp_parsing import parse_attempts, parse_diagnostics, parse_goal
 from aizim.lean.models import DiagnosticsResult, LeanRuntimeError
 from aizim.lean.project import materialize_smoke_project
 from aizim.lean.promotion_runtime import _complete_diagnostics
@@ -20,6 +20,60 @@ from aizim.lean.verification import BuildResult
 from aizim.state import StateService
 
 SMOKE_ROOT = Path(__file__).parents[2] / "examples" / "smoke_lean"
+
+
+def test_lean_033_compact_responses_and_pending_ranges() -> None:
+    goal = parse_goal(
+        {"line_context": "by", "goals": [
+            {"context": [], "goal": None, "status": "unknown", "pretty": "?"}
+        ]},
+        "hash",
+    )
+    assert goal.goals[0].target is None
+    diagnostics = parse_diagnostics(
+        {
+            "partial": True,
+            "success": True,
+            "timed_out": True,
+            "still_elaborating_lines": [[2, 5]],
+            "items": [{
+                "severity": "warning", "message": "m", "line": 2,
+                "column": 1, "category": "linter",
+            }],
+        },
+        "hash",
+    )
+    assert diagnostics.payload()["still_elaborating_lines"] == [[2, 5]]
+    assert diagnostics.items[0].lean_tags is None
+    attempts = parse_attempts(
+        {"items": [{"snippet": "rfl", "goals": [], "diagnostics": [], "timed_out": False}]},
+        "hash",
+    )
+    assert attempts.items[0].proof_status is None
+
+
+def test_attempts_keep_the_goals_each_snippet_leaves_open() -> None:
+    attempts = parse_attempts(
+        {"items": [
+            {"snippet": "simp", "goals": ["n : Nat\n⊢ n + 0 = n"], "diagnostics": [],
+             "timed_out": False, "proof_status": "incomplete"},
+            {"snippet": "rfl", "goals": [], "diagnostics": [], "timed_out": False},
+        ]},
+        "hash",
+    )
+
+    assert [item.goals for item in attempts.items] == [("n : Nat\n⊢ n + 0 = n",), ()]
+    assert [item.payload()["goals"] for item in attempts.items] == [["n : Nat\n⊢ n + 0 = n"], []]
+
+
+@pytest.mark.parametrize("ranges", [[[2]], [[2, 1]], [[True, 3]], [2, 3]])
+def test_lean_033_rejects_invalid_pending_ranges(ranges: object) -> None:
+    with pytest.raises(LeanRuntimeError, match="INVALID_LEAN_RESPONSE"):
+        parse_diagnostics(
+            {"partial": True, "success": True, "timed_out": True,
+             "items": [], "still_elaborating_lines": ranges},
+            "hash",
+        )
 
 
 def test_lean_mcp_environment_prepends_the_reviewed_ripgrep(
@@ -89,25 +143,25 @@ class _RecordingSession:
                 '"diagnostics":[]}'
             )
             if name == "lean_hover_info"
-            else '{"axioms":[],"warnings":[]}'
+            else '{"axioms":[],"warnings":[],"trust":"standard","non_standard_axioms":[]}'
         )
-        return SimpleNamespace(isError=False, content=[TextContent(type="text", text=payload)])
+        return SimpleNamespace(is_error=False, content=[TextContent(type="text", text=payload)])
 
 
 class _TimeoutRecordingSession:
     def __init__(self) -> None:
-        self.read_timeout: timedelta | None = None
+        self.read_timeout: float | None = None
 
     async def call_tool(
         self,
         _name: str,
         _arguments: dict[str, object],
         *,
-        read_timeout_seconds: timedelta,
+        read_timeout_seconds: float,
     ) -> object:
         self.read_timeout = read_timeout_seconds
         return SimpleNamespace(
-            isError=False,
+            is_error=False,
             content=[
                 TextContent(
                     type="text",
@@ -126,7 +180,7 @@ async def test_client_allows_three_minutes_for_a_bounded_mcp_tool_call(tmp_path:
 
     await client.build(clean=False, fetch_cache=False)
 
-    assert session.read_timeout == timedelta(seconds=180)
+    assert session.read_timeout == 180.0
 
 
 @pytest.mark.asyncio
@@ -154,7 +208,7 @@ class _ElaboratingClient:
     def __init__(self) -> None:
         self.calls: list[int | None] = []
         self.results = [
-            DiagnosticsResult(True, (1,), True, True, (), (), "a" * 64),
+            DiagnosticsResult(True, ((1, 1),), True, True, (), (), "a" * 64),
             DiagnosticsResult(False, None, True, False, (), (), "b" * 64),
         ]
 
@@ -199,7 +253,7 @@ class _ColdElaboratingClient:
         self.calls.append(timeout_seconds)
         return DiagnosticsResult(
             not self.ready,
-            (1,) if not self.ready else None,
+            ((1, 1),) if not self.ready else None,
             True,
             not self.ready,
             (),
@@ -277,14 +331,14 @@ async def test_client_rejects_non_text_oversized_and_unreviewed_goal_responses(
     project = materialize_smoke_project(tmp_path, "run-1", SMOKE_ROOT)
     client = LeanMcpClient(project)
     object.__setattr__(
-        client, "_session", _Session(SimpleNamespace(isError=False, content=[object()]))
+        client, "_session", _Session(SimpleNamespace(is_error=False, content=[object()]))
     )
     with pytest.raises(LeanRuntimeError, match="INVALID_LEAN_RESPONSE"):
         await client._call("lean_goal", {})
 
     oversized = TextContent(type="text", text="{" + '"x":"' + "a" * (4 * 1024 * 1024) + '"}')
     object.__setattr__(
-        client, "_session", _Session(SimpleNamespace(isError=False, content=[oversized]))
+        client, "_session", _Session(SimpleNamespace(is_error=False, content=[oversized]))
     )
     with pytest.raises(LeanRuntimeError, match="LEAN_RESPONSE_TOO_LARGE"):
         await client._call("lean_goal", {})
@@ -297,7 +351,7 @@ async def test_client_rejects_non_text_oversized_and_unreviewed_goal_responses(
         ),
     )
     object.__setattr__(
-        client, "_session", _Session(SimpleNamespace(isError=False, content=[unreviewed]))
+        client, "_session", _Session(SimpleNamespace(is_error=False, content=[unreviewed]))
     )
     with pytest.raises(LeanRuntimeError, match="INVALID_LEAN_RESPONSE"):
         await client.goal(project / "AizimSmoke" / "Base.lean", 5, None)

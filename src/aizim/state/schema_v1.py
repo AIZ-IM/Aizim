@@ -124,8 +124,9 @@ _CODECS: Final = {
     ),
     "CapabilityMinted": _codec(
         ("worker_id", "role"),
-        ("token_hash", "lease_id", "operations", "expires_at"),
-        {"token_hash": _sha256_payload, "expires_at": _timestamp_payload},
+        ("token_hash", "lease_id", "operations", "expires_at", "call_budget"),
+        {"token_hash": _sha256_payload, "expires_at": _timestamp_payload,
+         "call_budget": lambda value: type(value) is int and 1 <= value <= 10000},
     ),
     "CapabilityDenied": _codec(("reason_code", "role", "worker_id", "operation", "request_id")),
     "SandboxProbeStarted": _codec(("probe_id",), ("profile",)),

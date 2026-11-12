@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import tomllib
 from collections.abc import Mapping
 from datetime import date, datetime, time
@@ -9,7 +8,6 @@ from pathlib import Path
 from typing import assert_never
 
 from .model import (
-    CODEX_CLI_VERSION,
     LEAN_LSP_MCP_VERSION,
     LEAN_TOOLCHAIN,
     LEANCLIENT_VERSION,
@@ -24,7 +22,7 @@ from .model import (
     RunPolicy,
 )
 
-type TomlScalar = None | bool | int | float | str | datetime | date | time
+type TomlScalar = bool | int | float | str | datetime | date | time | None
 type TomlValue = TomlScalar | list[TomlValue] | dict[str, TomlValue]
 
 
@@ -88,7 +86,7 @@ def load_config(
             raw: dict[str, TomlValue] = tomllib.load(stream)
     else:
         raw = {}
-    _known_keys(raw, frozenset({"model", "run", "resources", "foundation"}), "config")
+    _known_keys(raw, frozenset({"run", "resources", "foundation"}), "config")
     run_table = _table(raw, "run")
     resources_table = _table(raw, "resources")
     foundation_table = _table(raw, "foundation")
@@ -128,7 +126,6 @@ def load_config(
                 "lean_lsp_mcp_version",
                 "leanclient_version",
                 "mcp_version",
-                "codex_cli_version",
                 "schema_version",
                 "platform_adapter",
                 "repl_enabled",
@@ -192,17 +189,9 @@ def load_config(
     for actual, required, location in fixed_foundation:
         if actual != required:
             raise ConfigError(location, f"must equal fixed foundation value {required!r}")
-    file_model = raw.get("model")
-    if file_model is not None and type(file_model) is not str:
-        raise ConfigError("model", "must be a string")
-    environment = os.environ if environ is None else environ
-    model = environment.get("AIZIM_MODEL", file_model)
-    if model is not None and type(model) is not str:
-        raise ConfigError("AIZIM_MODEL", "must be a string")
     return AizimConfig(
         run=run,
         resources=resources,
-        model=model,
         lean_toolchain=_string(foundation_table, "lean_toolchain", LEAN_TOOLCHAIN),
         lean_lsp_mcp_version=_string(
             foundation_table, "lean_lsp_mcp_version", LEAN_LSP_MCP_VERSION
@@ -211,7 +200,4 @@ def load_config(
             foundation_table, "leanclient_version", LEANCLIENT_VERSION
         ),
         mcp_version=_string(foundation_table, "mcp_version", MCP_VERSION),
-        codex_cli_version=_string(
-            foundation_table, "codex_cli_version", CODEX_CLI_VERSION
-        ),
     )

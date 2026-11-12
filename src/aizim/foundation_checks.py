@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from aizim import foundation_contract as contract
 from aizim import foundation_evidence as fe
-from aizim.config import CODEX_CLI_VERSION
+from aizim.config import LEAN_LSP_MCP_VERSION, LEAN_TOOLCHAIN, LEANCLIENT_VERSION, MCP_VERSION
 from aizim.domain import sha256_bytes, sha256_json
 from aizim.domain.serialization import JsonValue
 from aizim.foundation_epoch import durable_start
 from aizim.foundation_trace import trace_complete
 from aizim.modes.manifest import RUNTIME_ACCEPTANCE_SCOPE
+from aizim.omp.runtime import OMP_VERSION
 
 type Criterion = tuple[str, bool]
 
@@ -143,11 +144,15 @@ def _pins(manifest: fe.JsonObject) -> bool:
     settings = _pairs(manifest.get("reasoning_settings"))
     resources = _object(manifest.get("resources"))
     return (
-        dependencies == {"lean-lsp-mcp": "0.28.1", "leanclient": "0.12.1", "mcp": "1.28.1"}
+        dependencies == {
+            "lean-lsp-mcp": LEAN_LSP_MCP_VERSION,
+            "leanclient": LEANCLIENT_VERSION,
+            "mcp": MCP_VERSION,
+        }
         and settings is not None
         and settings.get("allowed_imports_hash") == sha256_json(("Std",))
-        and manifest.get("lean_version") == "4.32.1"
-        and manifest.get("toolchain_version") == "leanprover/lean4:v4.32.1"
+        and manifest.get("lean_version") == LEAN_TOOLCHAIN.rsplit(":v", 1)[-1]
+        and manifest.get("toolchain_version") == LEAN_TOOLCHAIN
         and manifest.get("mathlib_version") is None
         and manifest.get("repl_revision") is None
         and resources is not None
@@ -177,7 +182,7 @@ def _alignment(
     if len(reviews) != 1 or final is None:
         return False
     review = reviews[0].payload
-    reviewer = "codex-alignment-auditor"
+    reviewer = "omp-alignment-auditor"
     return (
         review.get("kind") == body.get("review_kind") == final.get("review_kind") == "machine"
         and review.get("verdict") == body.get("verdict") == final.get("verdict") == "aligned"
@@ -187,14 +192,15 @@ def _alignment(
     )
 
 
-def _codex(manifest: fe.JsonObject) -> bool:
+def _omp(manifest: fe.JsonObject) -> bool:
     policy = _object(manifest.get("run_policy"))
     return (
-        manifest.get("agent_harness_name") == manifest.get("model_backend") == "codex"
-        and manifest.get("agent_harness_version") == f"codex-cli {CODEX_CLI_VERSION}"
+        manifest.get("agent_harness_name") == "omp"
+        and manifest.get("model_backend") == "magpie"
+        and manifest.get("agent_harness_version") == f"omp/{OMP_VERSION}"
         and fe.is_hash(manifest.get("agent_harness_binary_hash"))
         and type(manifest.get("model_identifier")) is str
-        and manifest.get("process_isolation_profile") == "macos-sandbox-aizim-worker"
+        and manifest.get("process_isolation_profile") == "aizim-worker"
         and policy is not None
         and policy.get("participation") == "autonomous"
         and policy.get("formal_participation") == "formal_unassisted"
@@ -271,6 +277,6 @@ def evaluate(evidence: fe.FoundationEvidence) -> tuple[Criterion, ...]:
             and all(item.sequence < completed[0].sequence for item in publications),
         ),
         ("14-machine-alignment-review", _alignment(events, manifest, alignment)),
-        ("15-real-codex-unassisted-manifest", _codex(manifest)),
+        ("15-real-omp-magpie-unassisted-manifest", _omp(manifest)),
         ("16-engineering-smoke-limitation", _report(evidence, report)),
     )

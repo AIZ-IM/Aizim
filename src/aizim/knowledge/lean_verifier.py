@@ -223,5 +223,5 @@ def _with_import(manifest: bytes, module: PurePosixPath) -> bytes:
     return (
         manifest
         if line in manifest.splitlines(keepends=True)
-        else manifest + (b"" if manifest.endswith(b"\n") else b"\n") + line
+        else manifest + (b"" if not manifest or manifest.endswith(b"\n") else b"\n") + line
     )

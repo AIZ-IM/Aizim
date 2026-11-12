@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK -- drives the asyncio state RPC client
 import os
 import shutil
 import socket
@@ -11,12 +10,7 @@ import time
 from pathlib import Path
 from typing import Literal, assert_never
 
-from aizim.domain.serialization import JsonValue
-from aizim.state.operations import RpcRequest, RpcSuccess
-from aizim.state.rpc import rpc_call
-
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal_lean"
-type PublicControlCommand = Literal["configure", "register", "assign"]
 type StaticOwnershipState = Literal[
     "partial_pid",
     "partial_socket",
@@ -49,59 +43,20 @@ def wait_for(path: Path, process: subprocess.Popen[str]) -> None:
     assert path.exists() and process.poll() is None
 
 
-def rpc_projection(socket_path: Path, name: str, entity_id: str) -> dict[str, JsonValue]:
-    response = asyncio.run(
-        rpc_call(
-            socket_path,
-            RpcRequest(
-                operation="query_projection",
-                params={"projection_name": name, "entity_id": entity_id},
-                session_id=None,
-            ),
-        )
+def add_research_task(root: Path) -> subprocess.CompletedProcess[str]:
+    return run_cli(
+        "research",
+        "task",
+        "add",
+        "--project",
+        str(root),
+        "--task-id",
+        "ownership-task",
+        "--title",
+        "Ownership fixture",
+        "--statement",
+        "True",
     )
-    assert isinstance(response, RpcSuccess)
-    assert type(response.result) is dict
-    return response.result
-
-
-def run_public_control(
-    root: Path, command: PublicControlCommand
-) -> subprocess.CompletedProcess[str]:
-    match command:
-        case "configure":
-            return run_cli(
-                "controller",
-                "configure",
-                "--project",
-                str(root),
-                "--provider",
-                "codex",
-            )
-        case "register":
-            return run_cli(
-                "worker",
-                "register",
-                "--project",
-                str(root),
-                "--worker-id",
-                "worker-1",
-                "--role",
-                "formalizer",
-            )
-        case "assign":
-            return run_cli(
-                "worker",
-                "assign",
-                "--project",
-                str(root),
-                "--worker-id",
-                "worker-1",
-                "--task",
-                "prove the fixture",
-            )
-        case unreachable:
-            assert_never(unreachable)
 
 
 def bind_private_socket(path: Path) -> socket.socket:

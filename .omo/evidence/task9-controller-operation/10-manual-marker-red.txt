@@ -1,0 +1,8 @@
+
+==================================== ERRORS ====================================
+___________ ERROR collecting tests/e2e/test_real_controller_smoke.py ___________
+'manual_real_controller' not found in `markers` configuration option
+=========================== short test summary info ============================
+ERROR tests/e2e/test_real_controller_smoke.py - Failed: 'manual_real_controll...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+no tests collected, 1 error in 0.05s

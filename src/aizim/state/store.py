@@ -38,7 +38,7 @@ from .store_mutations import (
     revoke_lease_capabilities,
 )
 from .store_publication_methods import PublicationStoreMethods
-from .store_schema import ensure_artifact_associations, future_schema
+from .store_schema import ensure_artifact_associations, ensure_capability_budget, future_schema
 
 _SCHEMA_PATH: Final = Path(__file__).with_name("sql") / "001_foundation.sql"
 
@@ -135,6 +135,7 @@ def _initialize(
     if future is not None:
         raise IncompatibleEventSchemaError(future)
     ensure_artifact_associations(connection)
+    ensure_capability_budget(connection)
     _query_events(connection)
 
 
@@ -218,7 +219,7 @@ class _EventStore(PublicationStoreMethods):
 
     def capability_record(self, token_hash: str) -> CapabilityRecord | None:
         statement = "SELECT token_hash,run_id,worker_id,role,lease_id,operations_json,"
-        statement += "expires_at,revoked_at FROM capability_tokens WHERE token_hash=?"
+        statement += "expires_at,revoked_at,call_budget FROM capability_tokens WHERE token_hash=?"
         row: CapabilityRow | None = self._connection.execute(statement, (token_hash,)).fetchone()
         return None if row is None else capability_from_row(row)
 

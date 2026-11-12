@@ -1,61 +1,71 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from integration.doctor_provider_support import executable
+from integration.doctor_execution_support import (
+    execution_environment,
+    initialized_project,
+    ready_execution_services,
+    ready_foundation,
+)
 
-import aizim.cli.doctor_provider_checks as doctor_provider_checks
-from aizim.agents.linux_sandbox import LinuxSandboxAdapter
-from aizim.cli import doctor_command
+import aizim.cli.doctor_execution_checks as doctor_execution_checks
+from aizim.cli.doctor_command import run_doctor
+from aizim.runtime.layout import ProjectLayout
 
 
-def test_linux_sandbox_passes_only_after_host_validation(
+@pytest.mark.parametrize("unavailable", (False, True))
+def test_security_readiness_fails_for_failed_or_unavailable_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, unavailable: bool
+) -> None:
+    root = initialized_project(tmp_path)
+    environment = execution_environment(tmp_path)
+    ready_execution_services(monkeypatch)
+
+    async def probe(*_arguments: object) -> SimpleNamespace:
+        if unavailable:
+            raise OSError("private-sandbox-host-error")
+        return SimpleNamespace(passed=False, network_boundary="unavailable")
+
+    monkeypatch.setattr(doctor_execution_checks, "run_security_gate", probe)
+
+    checks = {
+        check.id: check
+        for check in doctor_execution_checks.execution_checks(
+            ProjectLayout.from_lean_project(root), environment
+        )
+    }
+
+    assert checks["security_probe"].status == "FAIL"
+    assert checks["security_probe"].detail == (
+        "security probe is unavailable" if unavailable else "security probe failed"
+    )
+    assert checks["omp_rpc"].status == "PASS"
+    assert "private-sandbox-host-error" not in repr(checks)
+
+
+def test_failed_security_probe_makes_human_doctor_not_ready(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    codex = executable(tmp_path / "codex", "codex-cli 0.154.0")
-    validated: list[Path] = []
+    root = initialized_project(tmp_path)
+    environment = execution_environment(tmp_path)
+    monkeypatch.setenv("PATH", environment["PATH"])
+    ready_execution_services(monkeypatch)
+    ready_foundation(monkeypatch)
 
-    def validate_host(adapter: LinuxSandboxAdapter) -> Path:
-        validated.append(adapter.codex_executable)
-        return tmp_path / "bwrap"
+    async def failed_probe(*_arguments: object) -> SimpleNamespace:
+        return SimpleNamespace(passed=False, network_boundary="unavailable")
 
-    monkeypatch.setattr(
-        doctor_provider_checks.LinuxSandboxAdapter,
-        "validate_host",
-        validate_host,
-    )
+    monkeypatch.setattr(doctor_execution_checks, "run_security_gate", failed_probe)
 
-    check = doctor_provider_checks._sandbox_check(codex.resolve(), "linux")
+    result = run_doctor(root, False)
+    lines = capsys.readouterr().out.splitlines()
 
-    assert check == doctor_command.DoctorCheck(
-        "sandbox_exec",
-        "PASS",
-        "Codex Linux sandbox available",
-    )
-    assert validated == [codex.resolve()]
-
-
-def test_linux_sandbox_fails_closed_when_host_validation_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    codex = executable(tmp_path / "codex", "codex-cli 0.154.0")
-
-    def fail_host(_adapter: LinuxSandboxAdapter) -> Path:
-        raise OSError("bwrap unavailable")
-
-    monkeypatch.setattr(
-        doctor_provider_checks.LinuxSandboxAdapter,
-        "validate_host",
-        fail_host,
-    )
-
-    check = doctor_provider_checks._sandbox_check(codex.resolve(), "linux")
-
-    assert check == doctor_command.DoctorCheck(
-        "sandbox_exec",
-        "FAIL",
-        "sandbox mechanism is unavailable",
-    )
+    assert result == 3
+    assert "FAIL security_probe security probe failed" in lines
+    assert lines[-1] == "NOT READY"
+    assert all(not line.startswith("SKIP ") for line in lines)

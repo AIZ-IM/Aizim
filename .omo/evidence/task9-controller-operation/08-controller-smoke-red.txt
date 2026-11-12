@@ -1,0 +1,21 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________ test_controller_smoke_stdout_is_byte_exact __________________
+
+    def test_controller_smoke_stdout_is_byte_exact() -> None:
+        result = subprocess.run(
+            [sys.executable, str(SMOKE_SCRIPT)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+>       assert result.returncode == 0, result.stderr
+E       AssertionError: /Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/.venv/bin/python: can't open file '/Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/scripts/qa/controller_smoke.py': [Errno 2] No such file or directory
+E         
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['/Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/.venv/bin/python', '/Users/fwmbam4/CodeHub/WangF...'/Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/scripts/qa/controller_smoke.py': [Errno 2] No such file or directory\n").returncode
+
+tests/integration/test_cli_control_projection.py:249: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_cli_control_projection.py::test_controller_smoke_stdout_is_byte_exact
+1 failed in 0.07s

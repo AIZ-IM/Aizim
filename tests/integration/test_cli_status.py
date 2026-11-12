@@ -147,12 +147,23 @@ def test_status_json_has_stable_empty_shape_and_initial_epoch(tmp_path: Path) ->
     assert all(document[key] == [] for key in STATUS_KEYS - {"epochs"})
 
 
-def test_state_supervisor_command_is_hidden_from_public_help() -> None:
+def test_public_help_exposes_only_supported_commands() -> None:
     result = run_cli("--help")
 
     assert result.returncode == 0
-    assert "{research,init,doctor,status,controller,worker,run,security-probe}" in result.stdout
-    assert "state" not in result.stdout
+    assert "{research,init,doctor,status}" in result.stdout
+    assert all(command not in result.stdout for command in (
+        "controller", "worker", "security-probe", "state", "gateway",
+    ))
+
+
+@pytest.mark.parametrize("command", ("controller", "worker", "run", "security-probe"))
+def test_removed_public_commands_are_rejected(command: str) -> None:
+    result = run_cli(command)
+
+    assert result.returncode == 2
+    assert "invalid choice" in result.stderr
+    assert result.stdout == ""
 
 
 def test_status_is_reconstructed_from_durable_projections_after_restart(

@@ -146,7 +146,7 @@ def validate_candidate_source(
         raise ContributionValidationError("EXTRA_TOP_LEVEL_DECLARATION")
     if any(re.search(rf"(?m)^\s*{re.escape(command)}\b", code) for command in _COMMANDS):
         raise ContributionValidationError("FORBIDDEN_LEAN_COMMAND")
-    imports = re.findall(r"(?m)^\s*import\s+([A-Za-z0-9_.]+)", code)
+    imports = candidate_imports(source)
     if any(item not in allowed_imports for item in imports):
         raise ContributionValidationError("IMPORT_NOT_ALLOWED")
     normalized = re.sub(r"\s+", " ", code)
@@ -154,6 +154,37 @@ def validate_candidate_source(
     declaration = re.escape(f"theorem {name} {separator}{candidate_type}")
     if re.search(rf"\b{declaration}(?=\s*:=)", normalized) is None:
         raise ContributionValidationError("CANDIDATE_NOT_IN_SOURCE")
+
+
+def candidate_imports(source: bytes) -> tuple[str, ...]:
+    """Read the complete import header in order, including multiline module lists.
+
+    Candidate files use an import header followed by one theorem. Restricting this
+    header also excludes commands such as `prelude` that change implicit imports.
+    """
+    code = _strip_comments_and_strings(_utf8(source))
+    theorem = re.search(r"\btheorem\b", code)
+    if theorem is None:
+        raise ContributionValidationError("CANDIDATE_NOT_IN_SOURCE")
+    if re.search(r"\bimport\b", code[theorem.start():]):
+        raise ContributionValidationError("INVALID_IMPORT_CONTEXT")
+    tokens = code[:theorem.start()].split()
+    imports: list[str] = []
+    index = 0
+    while index < len(tokens):
+        if tokens[index] != "import":
+            raise ContributionValidationError("INVALID_IMPORT_CONTEXT")
+        index += 1
+        start = index
+        while index < len(tokens) and tokens[index] != "import":
+            module = tokens[index]
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", module) is None:
+                raise ContributionValidationError("INVALID_IMPORT_CONTEXT")
+            imports.append(module)
+            index += 1
+        if start == index:
+            raise ContributionValidationError("INVALID_IMPORT_CONTEXT")
+    return tuple(imports)
 
 
 def _boundary(source: bytes, offset: int) -> bool:
@@ -180,6 +211,7 @@ def _strip_comments_and_strings(source: str) -> str:
                 block_depth -= 1
                 index += 2
             else:
+                result.append("\n" if source[index] == "\n" else " ")
                 index += 1
         elif in_string:
             if source[index] == "\\":
@@ -193,6 +225,7 @@ def _strip_comments_and_strings(source: str) -> str:
             newline = source.find("\n", index)
             index = len(source) if newline < 0 else newline
         elif pair == "/-":
+            result.append(" ")
             block_depth, index = 1, index + 2
         elif source[index] == '"':
             in_string, index = True, index + 1

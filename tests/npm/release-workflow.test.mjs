@@ -4,10 +4,9 @@ import test from "node:test";
 
 const latestActions = [
   "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-  "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
-  "leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9",
-  "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
-  "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+  "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+  "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+  "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
 ];
 const runners = [
   "macos-15",
@@ -32,6 +31,8 @@ test("release workflow is manual-only, exact-commit, three-target, and non-publi
     "verify-release-bundle.mjs",
     "dirty_tracked_inputs",
     "restored_build_cache",
+    'npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.2.2',
+    'test "$(node --version)" = "v26.13.0"',
     ...runners,
     ...latestActions,
   ]) {
@@ -70,6 +71,8 @@ test("registry smoke workflow is manual-only, three-target, read-only, and exact
     "registry-smoke.mjs",
     "--version",
     "--aggregate",
+    'npm install --global --prefix "$RUNNER_TEMP/npm-12" npm@12.2.2',
+    'test "$(node --version)" = "v26.13.0"',
     ...runners,
     ...latestActions,
   ]) {

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import os
 from collections.abc import Awaitable, Callable, Mapping
+from pathlib import Path, PurePosixPath
 from typing import Final
 
 from aizim.domain import AgentRole, sha256_bytes
@@ -15,8 +18,9 @@ from aizim.knowledge import (
     SnapshotPayload,
 )
 from aizim.lean import DocumentBroker, SharedLeanRuntime
+from aizim.lean.document_io import DocumentIoError, open_root, read_relative
 from aizim.lean.runtime_gateway import multi_attempt as runtime_multi_attempt
-from aizim.lean.source_layout import allowed_imports
+from aizim.lean.source_layout import allowed_imports, source_files
 from aizim.state import StateService
 
 from .knowledge_stream import KnowledgeStream
@@ -40,6 +44,7 @@ class WorkerGatewayError(RuntimeError):
 
 class WorkerGatewayActions:
     _TARGET_TOOLS: Final = (
+        GatewayTool.PROJECT_READ,
         GatewayTool.LEAN_GOAL,
         GatewayTool.LEAN_MULTI_ATTEMPT,
         GatewayTool.LEAN_DIAGNOSTICS,
@@ -68,6 +73,7 @@ class WorkerGatewayActions:
         targets = dict(self._runtime.gateway_targets())
         targets.update(
             {
+                GatewayTool.PROJECT_READ: self.project_read,
                 GatewayTool.LEAN_MULTI_ATTEMPT: self.multi_attempt,
                 GatewayTool.DOCUMENT_APPLY: self.document_apply,
                 GatewayTool.CONTRIBUTION_SUBMIT: self.contribution_submit,
@@ -95,6 +101,19 @@ class WorkerGatewayActions:
                 if snippet is not None:
                     accepted.add(snippet)
         return result
+
+    async def project_read(self, call: AuthorizedCall) -> JsonValue:
+        """Read a source file from the supervisor-owned run copy."""
+        requested = PurePosixPath(_text(call.payload, "path"))
+        if requested.is_absolute() or any(
+            part in {"..", "."} or part.startswith(".") for part in requested.parts
+        ):
+            raise WorkerGatewayError("INVALID_PROJECT_PATH")
+        if requested not in await asyncio.to_thread(source_files, self._broker.source_root):
+            raise WorkerGatewayError("INVALID_PROJECT_PATH")
+        project_root = await self._broker._trusted_promotion_project(call.run_id)
+        content = await asyncio.to_thread(_read_project_source, project_root, *requested.parts)
+        return {"path": requested.as_posix(), "content": content}
 
     async def document_apply(self, call: AuthorizedCall) -> JsonValue:
         if call.lease_id is None:
@@ -191,6 +210,26 @@ class WorkerGatewayActions:
             delta.delta_id in acknowledged and delta.module == module
             for delta in KnowledgeReader(self._state).read(0)
         )
+
+
+_READ_LIMIT = 512 * 1024
+
+
+def _read_project_source(root: Path, *parts: str) -> str:
+    relative = PurePosixPath(*parts)
+    try:
+        if relative not in source_files(root):
+            raise WorkerGatewayError("INVALID_PROJECT_PATH")
+        descriptor = open_root(root)
+        try:
+            data = read_relative(descriptor, relative)
+        finally:
+            os.close(descriptor)
+    except (DocumentIoError, OSError):
+        raise WorkerGatewayError("INVALID_PROJECT_PATH") from None
+    if len(data) > _READ_LIMIT:
+        raise WorkerGatewayError("PROJECT_READ_TOO_LARGE")
+    return data.decode("utf-8")
 
 
 def controller_worker_tools(role: AgentRole) -> tuple[GatewayTool, ...]:

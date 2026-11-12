@@ -34,7 +34,7 @@ class WorkerDirective:
             or type(self.initial_source) is not bytes
             or not self.initial_source
             or type(self.budget) is not int
-            or self.budget < 1
+            or not 1 <= self.budget <= 10000
             or not math.isfinite(self.timeout_seconds)
             or self.timeout_seconds <= 0
         ):
@@ -86,6 +86,7 @@ class BrokerWorkerAuthority:
                 if directive.operations is None
                 else directive.operations,
                 lease.expires_at,
+                call_budget=directive.budget,
             )
         )
         session_id = self._sessions.register(

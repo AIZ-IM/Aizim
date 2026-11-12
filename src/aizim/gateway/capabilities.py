@@ -131,6 +131,7 @@ class CapabilityGrant:
     lease_id: str | None
     operations: tuple[GatewayTool, ...]
     expires_at: datetime
+    call_budget: int | None = None
 
     def __post_init__(self) -> None:
         for field, value in (("run_id", self.run_id), ("worker_id", self.worker_id)):
@@ -149,6 +150,10 @@ class CapabilityGrant:
         if any(operation not in ROLE_CAPABILITIES[self.role] for operation in self.operations):
             raise ValueError("operations exceed the role capability matrix")
         _utc(self.expires_at, "expires_at")
+        if self.call_budget is not None and (
+            type(self.call_budget) is not int or not 1 <= self.call_budget <= 10000
+        ):
+            raise ValueError("call_budget must be an integer from 1 to 10000")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -174,11 +179,27 @@ class AuthorizedCall:
     payload: dict[str, JsonValue]
 
 
+GATEWAY_RATE_LIMITED: Final = "GATEWAY_RATE_LIMITED"
+MIN_RETRY_AFTER_SECONDS: Final = 0.001
+MAX_RETRY_AFTER_SECONDS: Final = 60.0
+
+
 @dataclass(frozen=True, slots=True)
 class GatewayError:
     code: str
     message: str
     event_id: str | None
+    retry_after_seconds: float | None = None
+
+    def __post_init__(self) -> None:
+        retry = self.retry_after_seconds
+        if self.code == GATEWAY_RATE_LIMITED:
+            if (type(retry) is not int and type(retry) is not float) or not (
+                MIN_RETRY_AFTER_SECONDS <= retry <= MAX_RETRY_AFTER_SECONDS
+            ):
+                raise ValueError("invalid gateway retry hint")
+        elif retry is not None:
+            raise ValueError("retry hints are reserved for gateway rate limits")
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +235,7 @@ class CapabilityIssuer:
             lease_id=grant.lease_id,
             operations=tuple(operation.value for operation in grant.operations),
             expires_at=grant.expires_at,
+            call_budget=grant.call_budget,
         )
         self._state.persist_capability(record)
         return raw_token

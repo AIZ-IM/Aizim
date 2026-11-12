@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK - exercises the asyncio Linux sandbox adapter
+import asyncio  # ANYIO_OK: exercises the asyncio Linux sandbox adapter
 import hashlib
 import os
 import shutil
@@ -14,8 +14,9 @@ import pytest
 from aizim.agents.linux_sandbox import LinuxSandboxAdapter
 from aizim.agents.sandbox import ProbeOperation, ProbeRequest
 from aizim.agents.workspace_view import ViewSource, WorkspaceViewBuilder
+from aizim.omp.executable import resolve_omp
+from aizim.omp.runtime import OMP_VERSION
 from aizim.runtime.layout import ProjectLayout
-from aizim.runtime.provider_executables import codex_runtime_root, resolve_codex
 from aizim.state import StateService, StateServiceConfig
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "attack_probe_project"
@@ -45,7 +46,7 @@ def accepted(server: socket.socket) -> bool:
 
 @pytest.mark.linux_sandbox
 @pytest.mark.skipif(sys.platform != "linux", reason="requires Linux")
-def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
+def test_real_linux_sandbox_denies_protected_surfaces_and_allows_host_tcp() -> None:
     with TemporaryDirectory(prefix="aizim-linux-attack-") as directory:
         private_root = Path(directory)
         root = Path(shutil.copytree(FIXTURE, private_root / "project"))
@@ -66,7 +67,7 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
         gateway_path = private_root / "gateway.sock"
         gateway = listener(gateway_path)
         secret = "linux-sandbox-secret-must-not-appear"
-        codex = resolve_codex(os.environ).path
+        agent = resolve_omp(os.environ).path
         try:
             with StateService(StateServiceConfig(root, "linux-sandbox-test")) as state:
                 shared = layout.artifact_root / "shared.txt"
@@ -75,7 +76,7 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
                 before_digest = state.logical_digest()
                 tcp_host, tcp_port = tcp.getsockname()
                 report = asyncio.run(
-                    LinuxSandboxAdapter.for_executable(codex).launch_probe(
+                    LinuxSandboxAdapter.for_executable(agent).launch_probe(
                         ProbeRequest(
                             probe_id="probe-linux-1",
                             run_id="run-linux-1",
@@ -94,7 +95,6 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
                             parent_env=dict(os.environ, AIZIM_ATTACK_SECRET=secret),
                             event_sink=state,
                             timeout_seconds=20.0,
-                            runtime_read_roots=(codex_runtime_root(codex),),
                         )
                     )
                 )
@@ -114,22 +114,29 @@ def test_real_linux_sandbox_denies_all_protected_surfaces() -> None:
 
             assert report.passed
             assert report.platform_id == "linux"
-            assert report.codex_version == "codex-cli 0.154.0"
-            assert report.sandbox_executable.endswith("/codex-resources/bwrap")
+            assert report.agent_version == f"omp/{OMP_VERSION}"
+            assert Path(report.sandbox_executable).name == "bwrap"
             assert tuple(attempt.operation for attempt in report.attempts) == tuple(
                 ProbeOperation
             )
-            assert all(attempt.verdict == "denied" for attempt in report.attempts[:9])
-            assert all(attempt.verdict == "allowed" for attempt in report.attempts[9:])
+            allowed_operations = {
+                ProbeOperation.CONNECT_HOST_TCP, ProbeOperation.WRITE_ALLOWED_SCRATCH,
+                ProbeOperation.READ_ALLOWED_VIEW,
+            }
+            assert all(
+                attempt.verdict
+                == ("allowed" if attempt.operation in allowed_operations else "denied")
+                for attempt in report.attempts
+            )
             assert report.unexpected_allows == ()
             assert before_assets == after_assets
             assert before_digest == after_digest == report.logical_digest_before
             assert report.logical_digest_after == before_digest
-            assert not accepted(tcp)
+            assert accepted(tcp)
             assert not accepted(gateway)
             assert len(events) == 11
-            assert [event.event_type for event in events].count("SandboxProbeDenied") == 9
-            assert [event.event_type for event in events].count("SandboxProbePassed") == 2
+            assert [event.event_type for event in events].count("SandboxProbeDenied") == 8
+            assert [event.event_type for event in events].count("SandboxProbePassed") == 3
             serialized = repr(report) + repr(events)
             assert secret not in serialized
             assert str(root) not in serialized

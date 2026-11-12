@@ -4,6 +4,7 @@ from typing import Protocol
 
 from jsonschema import ValidationError, validate
 from mcp import types
+from mcp.server.context import ServerRequestContext
 from mcp.server.lowlevel import Server
 
 from aizim.domain import AgentRole, canonical_json
@@ -35,22 +36,25 @@ class GatewayChannel(GatewayMcpChannel, Protocol):
 
 
 def create_gateway_server(channel: GatewayMcpChannel) -> Server:
-    server = Server("aizim-gateway")
-
-    @server.list_tools()
-    async def list_tools() -> list[types.Tool]:
+    async def list_tools(
+        _context: ServerRequestContext, _params: types.PaginatedRequestParams | None
+    ) -> types.ListToolsResult:
         tools = getattr(channel, "tools", advertised_tools(channel.role))
-        return [
-            types.Tool(
-                name=tool.value,
-                description="Aizim role-gated gateway operation",
-                inputSchema=input_schema(tool),
-            )
-            for tool in tools
-        ]
+        return types.ListToolsResult(
+            tools=[
+                types.Tool(
+                    name=tool.value,
+                    description="Aizim role-gated gateway operation",
+                    input_schema=input_schema(tool),
+                )
+                for tool in tools
+            ]
+        )
 
-    @server.call_tool(validate_input=False)
-    async def call_tool(name: str, arguments: dict[str, JsonValue]) -> types.CallToolResult:
+    async def call_tool(
+        _context: ServerRequestContext, params: types.CallToolRequestParams
+    ) -> types.CallToolResult:
+        name, arguments = params.name, params.arguments
         if type(arguments) is not dict or arguments.keys() != {"payload"}:
             return _mcp_result(_invalid_request())
         payload = arguments["payload"]
@@ -73,7 +77,7 @@ def create_gateway_server(channel: GatewayMcpChannel) -> Server:
             )
         return _mcp_result(result)
 
-    return server
+    return Server("aizim-gateway", on_list_tools=list_tools, on_call_tool=call_tool)
 
 
 def _invalid_request() -> GatewayFailure:
@@ -84,6 +88,6 @@ def _mcp_result(result: GatewaySuccess | GatewayFailure) -> types.CallToolResult
     document = result_document(result)
     return types.CallToolResult(
         content=[types.TextContent(type="text", text=canonical_json(document).decode())],
-        structuredContent=document,
-        isError=isinstance(result, GatewayFailure),
+        structured_content=document,
+        is_error=isinstance(result, GatewayFailure),
     )

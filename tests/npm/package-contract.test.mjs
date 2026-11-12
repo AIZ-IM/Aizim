@@ -20,7 +20,7 @@ const platforms = [
   ["linux-x64", ["linux"], ["x64"], ["glibc"]],
 ];
 
-test("uses one version without owning provider packages", () => {
+test("uses one version without bundling external runtime packages", () => {
   // Given
   const meta = readJson("package.json");
   const pyproject = readText("pyproject.toml");
@@ -36,12 +36,12 @@ test("uses one version without owning provider packages", () => {
   // Then
   assert.equal(meta.name, "@aiz.im/aizim");
   assert.equal(meta.version, "0.1.0");
-  assert.equal(meta.packageManager, "npm@12.0.1");
+  assert.equal(meta.packageManager, "npm@12.2.2");
   assert.equal(meta.engines.node, ">=22.22.2");
   assert.equal(meta.dependencies, undefined);
   assert.equal(meta.peerDependencies, undefined);
-  assert.equal(meta.devDependencies.typescript, "6.0.2");
-  assert.equal(pythonVersion, "3.14.6");
+  assert.equal(meta.devDependencies.typescript, "7.0.2");
+  assert.equal(pythonVersion, "3.15.2");
   assert.deepEqual(meta.workspaces, ["npm/platforms/*"]);
   assert.ok(meta.files.includes("lib/"));
   assert.match(pyproject, /^version = "0\.1\.0"$/m);
@@ -144,46 +144,3 @@ test("commits a dependency-free Lake manifest for the smoke project", () => {
   assert.deepEqual(manifest.packages, []);
 });
 
-test("documents external agent ownership, compatibility, and upgrade recovery", () => {
-  const readme = readText("README.md");
-  const npmReadme = readText("npm/README.md");
-  const distribution = readText("docs/operations/npm-distribution.md");
-  const foundation = readText("docs/operations/foundation-runbook.md");
-
-  for (const document of [readme, npmReadme, distribution]) {
-    assert.match(document, /does not install Codex or Claude/u);
-    assert.match(document, /Codex CLI 0\.154\.0/u);
-    assert.match(document, /Claude Code 2\.1\.218/u);
-  }
-  const operations = `${distribution}\n${foundation}`;
-  assert.match(
-    operations,
-    /Codex is always required for Worker and sandbox readiness/u,
-  );
-  assert.match(
-    operations,
-    /Claude is required only when `claude`\s+is the selected Controller/u,
-  );
-  assert.match(
-    operations,
-    /`AIZIM_CODEX_EXECUTABLE` before `codex` on `PATH`/u,
-  );
-  assert.match(
-    operations,
-    /`AIZIM_CLAUDE_EXECUTABLE` before `claude` on `PATH`/u,
-  );
-  assert.match(operations, /observed=.*supported=/u);
-  assert.match(operations, /supported side-by-side CLI/u);
-  assert.match(operations, /trust on first use/u);
-  assert.match(operations, /canonical path, exact version, and\s+SHA-256/u);
-  assert.match(operations, /user-owned provider provenance/u);
-  assert.match(operations, /preserves project state and credentials/u);
-  assert.match(operations, /does not use the old nested agent packages/u);
-
-  for (const document of [readme, npmReadme, distribution, foundation]) {
-    assert.doesNotMatch(
-      document,
-      /package-local (?:Codex|Claude)|supplies Codex|bundled Codex/u,
-    );
-  }
-});

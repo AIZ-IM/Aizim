@@ -20,7 +20,9 @@ _OPEN_DIRECTORY: Final = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
 
 class WorkspaceView:
-    __slots__ = ("_closed", "entries", "manifest_sha256", "scratch_root", "view_root")
+    __slots__ = (
+        "_closed", "_private_root", "entries", "manifest_sha256", "scratch_root", "view_root",
+    )
 
     def __init__(
         self,
@@ -28,20 +30,19 @@ class WorkspaceView:
         scratch_root: Path,
         entries: tuple[ViewEntry, ...],
         manifest_sha256: str,
+        private_root: Path,
     ) -> None:
         self.view_root = view_root
         self.scratch_root = scratch_root
         self.entries = entries
         self.manifest_sha256 = manifest_sha256
+        self._private_root = private_root
         self._closed = False
 
     def close(self) -> None:
         if self._closed:
             return
-        try:
-            _remove_private_tree(self.view_root)
-        finally:
-            _remove_private_tree(self.scratch_root)
+        _remove_private_tree(self._private_root)
         self._closed = True
 
 
@@ -56,8 +57,13 @@ class WorkspaceViewBuilder:
             raise ViewBuildError("canonical project root is not a directory")
         temporary_root = _private_temporary_root()
         if root == temporary_root or root in temporary_root.parents:
+            _remove_private_tree(temporary_root)
             raise ViewBuildError("workspace view root must be outside the canonical project")
-        view_root, scratch_root = _create_ephemeral_roots(temporary_root)
+        try:
+            view_root, scratch_root = _create_ephemeral_roots(temporary_root)
+        except BaseException:
+            _remove_private_tree(temporary_root)
+            raise
         root_fd = -1
         view_fd = -1
         try:
@@ -85,15 +91,17 @@ class WorkspaceViewBuilder:
                 scratch_root,
                 entries,
                 hashlib.sha256(manifest).hexdigest(),
+                temporary_root,
             )
         except ViewBuildError:
-            _remove_private_tree(view_root)
-            _remove_private_tree(scratch_root)
+            _remove_private_tree(temporary_root)
             raise
         except (OSError, ValueError) as error:
-            _remove_private_tree(view_root)
-            _remove_private_tree(scratch_root)
+            _remove_private_tree(temporary_root)
             raise ViewBuildError("workspace view construction failed") from error
+        except BaseException:
+            _remove_private_tree(temporary_root)
+            raise
         finally:
             if view_fd >= 0:
                 os.close(view_fd)
@@ -138,9 +146,10 @@ def _is_prefix(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
 
 
 def _private_temporary_root() -> Path:
-    root = Path(tempfile.gettempdir()).resolve(strict=True)
+    root = Path(tempfile.mkdtemp(prefix="aizim-workspace-")).resolve(strict=True)
     metadata = root.stat()
-    if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) & 0o077:
+    if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o700:
+        _remove_private_tree(root)
         raise ViewBuildError("temporary root is not private to the current user")
     return root
 

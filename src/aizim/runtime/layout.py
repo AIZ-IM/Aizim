@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Final
 
 from aizim.config import (
-    CODEX_CLI_VERSION,
     LEAN_LSP_MCP_VERSION,
     LEAN_TOOLCHAIN,
     LEANCLIENT_VERSION,
@@ -41,7 +40,6 @@ CONFIG_TEMPLATE: Final = (
     f'lean_lsp_mcp_version = "{LEAN_LSP_MCP_VERSION}"\n'
     f'leanclient_version = "{LEANCLIENT_VERSION}"\n'
     f'mcp_version = "{MCP_VERSION}"\n'
-    f'codex_cli_version = "{CODEX_CLI_VERSION}"\n'
 ).encode()
 _DIRECTORY_MODE: Final = 0o700
 _FILE_MODE: Final = 0o600

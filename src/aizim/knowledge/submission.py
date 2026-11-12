@@ -16,6 +16,7 @@ from .contributions import (
     SnapshotPayload,
     validate_candidate_source,
 )
+from .target_binding import validate_target_context
 
 
 def _text(value: object, code: str) -> str:
@@ -113,10 +114,15 @@ class ContributionService:
             or draft.environment_fingerprint != self._environment
         ):
             raise ContributionValidationError("EPOCH_MISMATCH")
-        if any(item not in self._allowed_imports for item in draft.imports):
+        binding = validate_target_context(
+            self._state, draft.run_id, draft.worker_id, draft.candidate_name,
+            draft.complete_type, draft.imports, source,
+        )
+        allowed_imports = self._allowed_imports if binding is None else binding.imports
+        if any(item not in allowed_imports for item in draft.imports):
             raise ContributionValidationError("IMPORT_NOT_ALLOWED")
         validate_candidate_source(
-            source, draft.candidate_name, draft.complete_type, self._allowed_imports
+            source, draft.candidate_name, draft.complete_type, allowed_imports
         )
         artifact = self._artifacts.store(draft.run_id, "contributions", source, "text/x-lean")
         payload: dict[str, JsonValue] = {

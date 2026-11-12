@@ -1,211 +1,157 @@
 # Aizim foundation runbook
 
-This runbook operates the macOS Slices 1–2 engineering-smoke path. It does not establish an
+The autonomous workflow is `aizim research …`, using one restricted omp RPC process per attempt
+and the local magpie gateway. This runbook distinguishes current operational checks from legacy
+Codex foundation evidence. Neither an engineering smoke test nor a model response establishes an
 open-problem result, novelty, or general autonomous proving capability.
 
-## Safety boundary
+## Safety boundary and prerequisites
 
-- Treat model output, worker processes, worker views, and model-requested tools as untrusted.
-- Never open or edit `.aizim/state.sqlite3` manually during a live run. Use `aizim status`, the
-  StateService RPC, and registered artifacts.
-- A failed or skipped security probe prohibits autonomous execution. Do not continue to a fake or
-  real autonomous run until Gate B passes on the same host and project state.
-- Keep `AIZIM_MODEL` in the invoking shell only. Do not put it in `.aizim/config.toml`, an `.env`
-  file, a workflow, a report, or an artifact.
+Treat model output, RPC events, views, and tool arguments as untrusted. Never edit
+`.aizim/state.sqlite3` manually during a live run; use the CLI, StateService RPC, and registered
+artifacts. A failed or skipped required security control blocks autonomous execution.
 
-## Fixed foundation pins
+Install omp 18.18.2 and magpie 0.1.3338, and configure the local magpie service with an available
+model. The omp version pin has one source: `aizim.omp.runtime.OMP_VERSION` (currently `18.18.2`).
+Observed harness identity is recorded as `omp/18.18.2`, with the canonical executable hash; the
+model backend is `magpie`. Model selection and provider credentials belong to magpie. Do not set
+`AIZIM_MODEL` or copy provider credentials into Aizim config, prompts, artifacts, or reports.
+
+Linux requires a working system `bwrap` and user namespaces. macOS requires Apple's
+`/usr/bin/sandbox-exec`. Both use an explicit read-only materialized view and writable scratch;
+canonical project/state and gateway Unix socket access are restricted. An unavailable Linux user
+namespace fails closed. A filtered minimal environment excludes provider credentials, and isolated
+per-attempt configuration under scratch rejects ambient plugins, extensions, skills, rules, and
+MCP. The host network is shared for local magpie access, so the omp process can also access other
+local listeners and external networks available to the host. There is no OS TCP destination deny or
+isolation guarantee. The trusted pinned omp executable, disabled model shell/file tools and ambient
+integrations, and trusted host gateway enforce the remaining authority. See the
+[authority boundary](../security/authority-boundary.md).
+
+For the uv-native source workflow, install uv 0.13.7 and Python 3.15.2.
+The Lean project must already contain regular `lakefile.toml` and `lean-toolchain` files. For the
+foundation engineering evidence contract, retain these formal-runtime pins:
 
 | Component | Required value |
 |---|---|
-| Platform | macOS with `/usr/bin/sandbox-exec` |
-| Python | 3.12–3.14 |
-| uv | 0.11.31 |
-| Codex CLI | 0.154.0 |
-| Claude Code | 2.1.218 when using a Claude Controller |
-| Lean | 4.32.1 |
-| Lean toolchain | `leanprover/lean4:v4.32.1` |
-| lean-lsp-mcp | 0.28.1 |
-| leanclient | 0.12.1 |
-| MCP | 1.28.1 |
+| Lean | 4.35.0 |
+| Lean toolchain | `leanprover/lean4:v4.35.0` |
+| lean-lsp-mcp | 0.33.0 |
+| leanclient | 0.13.2 |
+| MCP | `mcp[cli]==2.2.0` (exact) |
 | Free disk floor | 2,147,483,648 bytes (2 GiB) |
-| Lake imports | `Std` only; no Mathlib, Batteries, REPL, or Loogle index |
+| Foundation imports | `Std` only; no Mathlib, Batteries, REPL, or Loogle index |
 
-Global `uv` is required only for the uv-native source workflow. The external Codex prerequisite
-applies to both source and npm operation: Aizim does not install Codex or Claude. Codex is always
-required for Worker and sandbox readiness. Claude is required only when `claude` is the selected
-Controller. Install `uv` 0.11.31 with the organization's managed Python tooling, install `elan`,
-Node.js, and `rg`, then install the agent pins you need:
+MCP 2.2.0 is an exact upstream compatibility constraint for lean-lsp-mcp 0.33.0; do not treat it
+as a minimum or substitute another MCP version. omp and magpie do not provision the pinned Python
+environment or the external Lean toolchain. The Lean host is research-only and is not part of npm
+release qualification. An unavailable Lean toolchain must be reported as unavailable formal
+verification.
+
+## Initialize and check readiness
+
+Use a private project directory and initialize it once:
 
 ```sh
-elan toolchain install leanprover/lean4:v4.32.1
-npm install --global @openai/codex@0.154.0
-# Only for a Claude Controller:
-npm install --global --allow-scripts=@anthropic-ai/claude-code \
-  @anthropic-ai/claude-code@2.1.218
 uv sync --frozen
-```
-
-Verify rather than assuming the active tools:
-
-```sh
-uv --version
-codex --version
-# Only for a Claude Controller:
-claude --version
-(cd examples/smoke_lean && lake env lean --version)
-(cd examples/smoke_lean && lake --version)
-uv run python -c 'import importlib.metadata as m; print(m.version("lean-lsp-mcp"), m.version("leanclient"), m.version("mcp"))'
-```
-
-Expected pins are `uv 0.11.31`, `codex-cli 0.154.0`, optional `2.1.218 (Claude Code)`, Lean
-`4.32.1`, and Python package versions `0.28.1 0.12.1 1.28.1`.
-
-Codex resolves `AIZIM_CODEX_EXECUTABLE` before `codex` on `PATH`; Claude independently resolves
-`AIZIM_CLAUDE_EXECUTABLE` before `claude` on `PATH`. Unsupported-version diagnostics include
-`observed=...; supported=...`; install a supported side-by-side CLI and set the corresponding
-override to its absolute path. For each Controller-start operation, Aizim records the canonical
-path, exact version, and SHA-256 as trust on first use, then revalidates it before every launch.
-That protects one operation from image replacement but does not verify user-owned provider
-provenance.
-
-## Initialize a Lean project
-
-The project must already contain regular `lakefile.toml` and `lean-toolchain` files. Initialization
-is idempotent and creates only private state below `.aizim/`:
-
-```sh
 uv run aizim init /absolute/path/to/lean-project
+uv run aizim doctor --project /absolute/path/to/lean-project
+uv run aizim security-probe --project /absolute/path/to/lean-project
 ```
 
-Do not hand-edit the generated database or runtime lock. A conflicting `.aizim/config.toml` is a
-hard initialization failure.
+Initialization creates private state below `.aizim/`; do not hand-edit its database or runtime
+lock. A conflicting `.aizim/config.toml` is a hard initialization failure. For isolated acceptance
+copies, copy checked-in project source into separate private directories without `.aizim/` or
+`.lake/`. Never mix generated evidence from different project copies.
 
-## Prepare separate acceptance copies
+Doctor checks supported omp/magpie readiness, the selected model, RPC startup and host-tool
+transport, and Lean prerequisites. It does not inspect provider credentials or check Codex/Claude.
+A doctor failure blocks scheduling until the reported prerequisite is repaired.
 
-Fake and real acceptance runs must not share generated state. Copy only the checked-in smoke
-project, excluding `.aizim/` and `.lake/`, into two fresh directories below the private macOS
-`${TMPDIR}`. Do not put a canonical project below `/tmp` or `/private/tmp`; the sandbox rejects
-their shared parent permissions.
+The no-model security gate must print `SECURITY GATE PASS`. It executes restricted real omp RPC
+`get_state` and tool-inventory inspection, without a prompt or model call, alongside gateway
+authority checks and filesystem/environment probes. Eight operations must be denied: six
+filesystem attacks, gateway Unix-socket access, and secret-environment access. Three controls must
+be allowed: reading the view, writing scratch, and connecting to a host TCP listener. Protected
+hashes/logical state must remain unchanged and replay must match after restart. The report must
+state the shared-network limitation; the allowed TCP control does not demonstrate destination
+confinement.
+
+The new terminal receipt is `omp_security_gate_complete`, bound to the attack probe policy hash.
+A legacy Codex `gate_b_complete` receipt cannot substitute for this gate. The restricted RPC
+attestation has its own paths and identity; do not require its policy hash to equal the attack
+probe hash. Any failed, missing, skipped, or inconclusive required evidence blocks the run.
+
+## Run bounded research
+
+Create an immutable target and start the supervisor:
 
 ```sh
-: "${TMPDIR:?TMPDIR must be the private macOS per-user temporary directory}"
-case "${TMPDIR%/}" in
-  /tmp|/tmp/*|/private/tmp|/private/tmp/*|/var/tmp|/var/tmp/*|/private/var/tmp|/private/var/tmp/*)
-    echo "unsafe TMPDIR" >&2; exit 1;;
-esac
-AIZIM_FAKE_ROOT="$(mktemp -d "${TMPDIR%/}/aizim-fake.XXXXXX")"
-AIZIM_REAL_ROOT="$(mktemp -d "${TMPDIR%/}/aizim-real.XXXXXX")"
-rsync -a --exclude '.aizim' --exclude '.lake' examples/smoke_lean/ "$AIZIM_FAKE_ROOT/"
-rsync -a --exclude '.aizim' --exclude '.lake' examples/smoke_lean/ "$AIZIM_REAL_ROOT/"
-uv run aizim init "$AIZIM_FAKE_ROOT"
-uv run aizim init "$AIZIM_REAL_ROOT"
-uv run aizim controller configure --project "$AIZIM_FAKE_ROOT" --provider codex
-uv run aizim controller configure --project "$AIZIM_REAL_ROOT" --provider codex
+uv run aizim research task add --project PROJECT \
+  --task-id smoke-true --title 'Prove True' --statement True \
+  --max-rounds 2 --max-failures 1 --timeout-seconds 120
+uv run aizim research run --project PROJECT --max-seconds 300
+uv run aizim status --project PROJECT --json
+uv run aizim research task list --project PROJECT --json
 ```
 
-## Readiness and Gate B
+`research run` performs the security gate before scheduling. This command can make model requests
+through magpie; the security gate itself cannot. Each attempt receives fresh run/worker/lease
+identities, private session storage, and only the authorized stdio host tools. Terminal work is
+not dispatched again after recovery. Pause or resume a target through `research task pause` or
+`research task resume` with its `--task-id`. Resume accepts `--max-rounds` and `--max-failures`;
+a blocked target resumes only after its limits allow another round. Three consecutive
+infrastructure failures, such as a model outage, pause a target without using its failure budget.
 
-Run readiness and Gate B on each copy before its autonomous run:
+A verified target requires trusted Lean publication bound to the immutable target statement,
+candidate, and attempt. Inspect the attempt's publication evidence; a completed omp prompt,
+assistant summary, magpie usage record, or accepted human review is insufficient. Human reviews
+of meaning, value, exposition, and release remain separate from formal verification.
+
+## Foundation artifact acceptance and legacy evidence
+
+The retained foundation checker evaluates a specific engineering evidence package, not every
+research run. Its five registered artifacts are `run-manifest.json`, `formal-trace.jsonl`,
+`formal-trace.sha256`, `alignment-review.json`, and `acceptance-report.json`, under
+`.aizim/artifacts/RUN_ID/`. It requires the package's complete event/epoch, verification, worker,
+alignment, shutdown, and policy bindings. A research run without this package is not a foundation
+acceptance run; do not manufacture artifacts or a passing event to fill that gap.
+
+For a current omp/magpie foundation package, run:
 
 ```sh
-for AIZIM_PROJECT_ROOT in "$AIZIM_FAKE_ROOT" "$AIZIM_REAL_ROOT"; do
-  uv run aizim doctor --project "$AIZIM_PROJECT_ROOT"
-  uv run aizim security-probe \
-    --project "$AIZIM_PROJECT_ROOT" --backend codex --no-model
-done
+uv run python scripts/check_foundation.py --project PROJECT --run-id RUN_ID
+# Select the newest omp/magpie foundation candidate:
+uv run python scripts/check_foundation.py --project PROJECT --run-id latest-real
 ```
 
-Every doctor must end `READY`. The fixed Gate B success heading is `SECURITY GATE PASS`. Gate B
-must deny all nine protected operations, allow the two intended view/scratch operations, preserve
-protected hashes and the logical digest, and replay after restart. Any nonzero exit or
-`SECURITY GATE FAIL` blocks autonomous execution on that copy.
+Success prints `FOUNDATION ACCEPTANCE PASS 16/16`. Selection requires `agent_harness_name=omp`
+and `model_backend=magpie`; the final manifest must retain the starting identity, match
+`omp/OMP_VERSION`, and identify the `aizim-worker` isolation profile. The checker requires a
+preceding complete omp security receipt and consistent policy hashes. It does not fall back from
+a later failed or incomplete security gate to an older successful one.
 
-## Deterministic fake run
+Runtime `16/16` covers replayable real-run predicates only and does not independently prove
+CI-only or test-only rows of the overall handoff matrix. Real RPC smoke, deterministic protocol
+and failure tests, formal/recovery regressions, and browser checks supply separate evidence.
+Formal end-to-end acceptance additionally requires the external pinned Lean toolchain.
 
-The fake backend exercises shared orchestration without a model call:
+Historical Codex foundation events, exports, and fixtures remain legacy records with their
+original identities and hashes. They are replayable and interpretable, but neither their old
+Codex pin nor a historical Gate B pass qualifies new omp/magpie acceptance. Fake-child/synthetic
+fixtures test checker behavior; they are not evidence that a live model or theorem run occurred.
+The former `run --profile autonomous-shared`, Controller configuration, Worker registration, and
+Codex-specific security-probe options are removed, with no execution aliases.
 
-```sh
-uv run aizim run \
-  --project "$AIZIM_FAKE_ROOT" \
-  --profile autonomous-shared \
-  --backend fake
-uv run aizim status --project "$AIZIM_FAKE_ROOT" --json
-```
+## Status, cleanup, and recovery
 
-Success includes `AIZIM RUN PASS`, knowledge epoch 2, two verified declarations, no live leases,
-and a stopped shared Lean runtime. A fake pass is engineering validation, not real-Codex evidence.
+Use `aizim status --project PROJECT --json`, research task listings, and the read-only research
+console/export to inspect current evidence. Keep formal verification and semantic review separate.
+Never treat a stale omp session file as research authority.
 
-## Credentialed real run
-
-Run this gate locally and manually. CI intentionally has no model credential and never invokes a
-model API. Gate B, the direct real run, and the checker must target the same fresh real copy, in
-that order. Its starting knowledge epoch must be 0.
-
-```sh
-test -n "${AIZIM_MODEL:-}"
-uv run aizim run \
-  --project "$AIZIM_REAL_ROOT" \
-  --profile autonomous-shared \
-  --backend codex
-uv run python scripts/check_foundation.py \
-  --project "$AIZIM_REAL_ROOT" \
-  --run-id latest-real
-```
-
-The last command must print exactly `FOUNDATION ACCEPTANCE PASS 16/16`. Missing, skipped,
-inconclusive, mixed-policy, or post-publication evidence fails closed.
-
-That runtime `16/16` covers replayable real-run predicates only and does not independently prove
-CI-only or test-only rows of the overall handoff matrix. The full matrix remains binding and is
-evidenced separately by the clean automated suite, pinned CI workflows, credentialed manual gate,
-and final handoff report. The runtime artifacts never fabricate receipts for external tests.
-
-Run the credentialed pytest E2E separately:
-
-```sh
-uv run pytest tests/e2e/test_real_codex_smoke.py \
-  -m "manual_real_codex and lean_integration" -q -s
-```
-
-That test creates and deletes its own fresh temp copy. Its artifacts are intentionally not the
-checker target.
-
-## Status and registered artifacts
-
-Use the CLI for live state:
-
-```sh
-uv run aizim status --project "$AIZIM_REAL_ROOT"
-uv run aizim status --project "$AIZIM_REAL_ROOT" --json
-```
-
-Each completed evaluated run registers exactly these files under
-`.aizim/artifacts/RUN_ID/`:
-
-- `run-manifest.json`
-- `formal-trace.jsonl`
-- `formal-trace.sha256`
-- `alignment-review.json`
-- `acceptance-report.json`
-
-The manifest records exact tool/runtime policy, the trace is chained to source events, and the
-acceptance report carries the engineering-smoke limitation. Treat all five as one evidence set.
-
-## Clean up stopped ephemeral views
-
-Normal completion removes private `aizim-view-*` and `aizim-scratch-*` directories automatically.
-After a hard process kill, first confirm `aizim status` reports stopped workers and no live leases,
-and confirm no Aizim, Codex, or Lean process owns the candidate directory. List candidates without
-deleting them:
-
-```sh
-AIZIM_TEMP_ROOT="$(uv run python -c 'import tempfile; print(tempfile.gettempdir())')"
-find "$AIZIM_TEMP_ROOT" -maxdepth 1 -type d \
-  \( -name 'aizim-view-*' -o -name 'aizim-scratch-*' \) -print
-```
-
-Move only an exact, inspected orphan path to Trash. Never use a wildcard deletion and never remove
-`.aizim/state.sqlite3`, `.aizim/artifacts/`, or a view still owned by a process.
-
-For crash, lease, runtime, publication, replay, and quarantine handling, continue with the
-[event recovery runbook](event-recovery.md).
+Normal cleanup releases capabilities/leases and removes private views, scratch, and session
+storage. After a hard kill, first stop the supervisor and confirm no Aizim, omp, or Lean process
+owns a candidate directory and that no live lease remains. Remove only exact inspected orphan
+paths. Never delete the state database, registered artifacts, or directories still owned by a
+process. Continue with the [event recovery runbook](event-recovery.md) for interruption, replay,
+publication, and quarantine handling.

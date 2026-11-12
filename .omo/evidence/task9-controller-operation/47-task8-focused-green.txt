@@ -1,0 +1,6 @@
+1 file already formatted
+All checks passed!
+All checks passed!
+................                                                         [100%]
+16 passed in 2.19s
+pure_loc=250

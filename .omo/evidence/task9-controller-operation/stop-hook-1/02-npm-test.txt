@@ -1,0 +1,195 @@
+npm notice run @aiz.im/aizim@0.1.0 test
+npm notice run node scripts/npm/test.mjs
+✔ resolves the complete installed distribution from absolute paths (23.277208ms)
+✔ reports a missing optional platform package (10.256416ms)
+✔ reports an incomplete distribution without launcher (9.695375ms)
+✔ reports an incomplete distribution without distributionManifest (7.735125ms)
+✔ hashes files as lowercase SHA-256 and uses a timing-safe comparison (36.787209ms)
+✔ deletes a mismatched uv archive without extracting it (27.046916ms)
+✔ extracts verified uv without a shell and requires an executable file (8.671166ms)
+✔ rejects a non-executable extracted uv binary (4.791792ms)
+✔ build target detection agrees with runtime target detection (0.236541ms)
+✔ rejects a version mismatch across source manifests (0.33225ms)
+✔ measures artifact size and digest from file content (4.227459ms)
+✔ source digest covers every declared input and ignores generated output (11.423333ms)
+✔ source input discovery ignores Python bytecode caches (14.544ms)
+▶ requires every install observation before composing native evidence
+  ✔ failed security gate (1.492083ms)
+  ✔ changed ready marker (0.128708ms)
+  ✔ missing global Codex resolution (0.077541ms)
+  ✔ missing negative integrity test (0.065166ms)
+  ✔ missing controller loop smoke (0.070541ms)
+✔ requires every install observation before composing native evidence (2.7705ms)
+✔ composes native evidence only from matching build, test, pack, and install summaries (3.979ms)
+✔ CI pins current actions and qualifies the exact three native runners without publishing (20.292625ms)
+✔ aggregates exactly three native targets and the minimum Node runtime (38.867125ms)
+▶ rejects unknown fields, false checks, and target ABI mismatches
+  ✔ unknown field (15.847458ms)
+  ✔ false check (23.410958ms)
+  ✔ Linux without glibc (11.419291ms)
+✔ rejects unknown fields, false checks, and target ABI mismatches (51.254375ms)
+▶ rejects stale commits and duplicate or missing targets
+  ✔ stale commit (6.446083ms)
+  ✔ duplicate target (7.226084ms)
+✔ rejects stale commits and duplicate or missing targets (13.932833ms)
+▶ rejects modified tarballs, path traversal, and divergent meta bytes
+  ✔ modified tarball (5.888042ms)
+  ✔ path traversal (8.282958ms)
+  ✔ divergent meta bytes (5.398875ms)
+✔ rejects modified tarballs, path traversal, and divergent meta bytes (19.913125ms)
+✔ resolves the exact nested native Claude executable (3.71175ms)
+✔ rejects wrong meta version without a PATH fallback (3.397ms)
+✔ rejects wrong native version without a PATH fallback (5.745291ms)
+✔ rejects missing native alias without a PATH fallback (1.956333ms)
+✔ rejects missing executable without a PATH fallback (8.781334ms)
+✔ rejects non-executable file without a PATH fallback (9.050584ms)
+✔ rejects an executable directory as a typed configuration error (3.746792ms)
+✔ resolves the exact nested native Codex executable (2.8ms)
+✔ rejects wrong meta version without a PATH fallback (7.539666ms)
+✔ rejects wrong native version without a PATH fallback (3.515667ms)
+✔ rejects missing native alias without a PATH fallback (1.9165ms)
+✔ rejects missing executable without a PATH fallback (1.836375ms)
+✔ rejects non-executable file without a PATH fallback (6.967916ms)
+✔ private smoke roots reject shared and non-private directories (1.780083ms)
+✔ private smoke roots allow an owned mode-700 child of a shared temp root (0.101625ms)
+✔ the smoke layout isolates every consumer-owned surface (0.227083ms)
+✔ installs exactly the platform and meta tarballs without scripts (0.392417ms)
+✔ consumer environment is minimal and removes injection variables (0.149375ms)
+✔ doctor failures name the exact failed checks (0.146083ms)
+✔ controller smoke uses the provisioned wheel runtime and exact output (0.085916ms)
+✔ launches with internal flags, one separator, and inherited stdio (3.769209ms)
+✔ maps child exit 69 to 69 (0.328333ms)
+✔ maps child exit undefined to 70 (0.187958ms)
+✔ forwards SIGINT to the child once (0.522333ms)
+✔ forwards SIGTERM to the child once (0.089625ms)
+✔ forwards SIGHUP to the child once (0.238791ms)
+✔ removes forwarding handlers before mirroring a child signal (0.144333ms)
+✔ rejects a child-process start error with a stable code (0.6285ms)
+✔ prints one safe configuration error line and returns 78 (0.437541ms)
+✔ classifies an invalid package-local Claude executable as configuration (0.344ms)
+✔ npm packs the exact meta package allowlist (368.930834ms)
+✔ npm packs the exact platform package allowlist (191.310875ms)
+✔ rejects forbidden names even when npm would omit them (3.791833ms)
+✔ rejects missing executable modes and lifecycle scripts (2.601417ms)
+✔ uses one version and exact dependencies when manifests are loaded (11.601917ms)
+✔ retains platform selectors when public package manifests are inspected (0.344541ms)
+✔ maps exactly three native Claude packages without darwin x64 (0.281375ms)
+✔ declares no package lifecycle hook when installation metadata is inspected (0.360916ms)
+✔ commits a dependency-free Lake manifest for the smoke project (0.377208ms)
+✔ maps darwin arm64 to darwin-arm64 (0.442333ms)
+✔ maps linux arm64 to linux-arm64 (0.062083ms)
+✔ maps linux x64 to linux-x64 (0.178292ms)
+✔ rejects {"platform":"win32","arch":"x64"} (0.572875ms)
+✔ rejects {"platform":"darwin","arch":"x64"} (0.070708ms)
+✔ rejects {"platform":"darwin","arch":"ia32"} (0.079959ms)
+✔ rejects {"platform":"linux","arch":"x64","report":{"header":{}}} (0.056625ms)
+✔ verifies a clean three-target release bundle with one common meta tarball (27.210917ms)
+▶ rejects dirty tracked inputs and cross-language version drift
+  ✔ dirty tracked inputs (5.351542ms)
+  ✔ version drift (0.216416ms)
+✔ rejects dirty tracked inputs and cross-language version drift (5.98425ms)
+✔ reads the same release version from Python, npm, Cargo, and every platform (2.142292ms)
+✔ registry verification distinguishes 404 and integrity mismatch (0.297583ms)
+✔ registry wait mode stops after twelve 404 attempts at five-second intervals (0.172375ms)
+✔ registry smoke aggregate requires READY, Gate B, and a run on all targets (0.224042ms)
+✔ release record is deterministic and excludes sensitive runtime context (0.546833ms)
+✔ release workflow is manual-only, exact-commit, three-target, and non-publishing (3.552166ms)
+✔ registry smoke workflow is manual-only, three-target, read-only, and exact-version (1.050542ms)
+✔ selects only the native sandbox tests for the current platform (1.129292ms)
+ℹ tests 91
+ℹ suites 0
+ℹ pass 91
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 677.329791
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running unittests src/lib.rs (target/debug/deps/aizim_launcher-e0d00806da354504)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/aizim_launcher-45c7381ca8b332c3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cache_contract.rs (target/debug/deps/cache_contract-1648e45a358d65a2)
+
+running 7 tests
+test computes_platform_cache_roots_and_override ... ok
+test rejects_relative_missing_symlink_and_non_directory_roots ... ok
+test staging_cleanup_is_scoped_to_the_current_leaf_prefix ... ok
+test cache_path_changes_for_every_identity_input_and_schema ... ok
+test ready_runtime_is_reused_without_mutation_and_invalid_marker_is_not ... ok
+test promotion_never_overwrites_a_complete_environment ... ok
+test exclusive_lock_is_os_backed_and_persistent_file_is_reusable ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/manifest_contract.rs (target/debug/deps/manifest_contract-7c61a4811d538d4f)
+
+running 9 tests
+test parses_closed_internal_arguments_and_preserves_user_bytes ... ok
+test rejects_missing_duplicate_unknown_and_relative_internal_arguments ... ok
+test rejects_unknown_manifest_fields ... ok
+test version_mismatch_diagnostic_is_safe_and_actionable ... ok
+test rejects_an_artifact_symlink_escape ... ok
+test verifies_valid_manifests_and_returns_canonical_artifacts ... ok
+test rejects_absolute_and_parent_artifact_paths_as_configuration ... ok
+test rejects_size_hash_and_non_regular_artifacts_as_integrity_failures ... ok
+test rejects_schema_version_and_closed_target_mismatches ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/provision_contract.rs (target/debug/deps/provision_contract-c21d8e4e807722e4)
+
+running 7 tests
+test wrong_version_is_unavailable_and_not_promoted ... ok
+test final_exec_rejects_a_missing_bundled_ripgrep ... ok
+test promoted_console_scripts_reference_the_final_runtime ... ok
+test final_exec_preserves_opaque_args_and_sets_the_closed_distribution_context ... ok
+test warm_runtime_runs_no_commands_and_emits_no_bootstrap_status ... ok
+test cold_bootstrap_uses_the_exact_command_sequence_and_clean_environment ... ok
+test every_command_failure_leaves_no_final_or_staging_runtime ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+   Doc-tests aizim_launcher
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Checked 50 packages in 6ms
+All checks passed!
+All checks passed!
+........................................................................ [  8%]
+........................................................................ [ 17%]
+.........................................................s.............. [ 26%]
+........................................................................ [ 35%]
+........................................................................ [ 44%]
+........................................................................ [ 53%]
+........................................................................ [ 62%]
+........................................................................ [ 71%]
+........................................................................ [ 80%]
+........................................................................ [ 89%]
+........................................................................ [ 98%]
+..............                                                           [100%]
+805 passed, 1 skipped, 22 deselected in 91.55s (0:01:31)
+dist/npm/aiz.im-aizim-darwin-arm64-0.1.0.tgz
+dist/npm/aiz.im-aizim-0.1.0.tgz
+aizim 0.1.0
+READY
+SECURITY GATE PASS
+AIZIM RUN PASS
+CONTROLLER SMOKE PASS
+assignment_executions=1
+restart_duplicates=0
+All checks passed!
+All checks passed!
+Checked npm distribution for darwin-arm64

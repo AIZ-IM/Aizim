@@ -175,7 +175,10 @@ def _select(events: tuple[EventEvidence, ...], requested: str) -> RunSelection:
         manifest = event.payload.get("manifest")
         if type(manifest) is not dict:
             continue
-        if manifest.get("agent_harness_name") == manifest.get("model_backend") == "codex":
+        if (
+            manifest.get("agent_harness_name") == "omp"
+            and manifest.get("model_backend") == "magpie"
+        ):
             candidates.append(RunSelection(event.run_id, manifest, event.sequence))
     if requested == "latest-real":
         if not candidates:
@@ -250,11 +253,8 @@ def gate_policy(events: tuple[EventEvidence, ...], before_sequence: int) -> str:
     if not groups:
         fail("GATE_B_EVIDENCE_MISSING")
     records = max(groups.values(), key=lambda group: max(item.sequence for item in group))
-    attempts = tuple(
-        item
-        for item in records
-        if item.payload.get("operation") in contract.DENIED_OPERATIONS | contract.ALLOWED_OPERATIONS
-    )
+    operations = contract.DENIED_OPERATIONS | contract.ALLOWED_OPERATIONS
+    attempts = tuple(item for item in records if item.payload.get("operation") in operations)
     terminals = tuple(
         item
         for item in records

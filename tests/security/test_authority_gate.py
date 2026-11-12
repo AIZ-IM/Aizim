@@ -2,16 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-import subprocess
-import sys
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import cast
 
 import pytest
 
-from aizim.agents.sandbox import ProbeOperation, ProbeReport, ProbeRequest
+from aizim.agents.sandbox import GATE_COMPLETION_OPERATION, ProbeOperation
 from aizim.cli import security_probe_command
 from aizim.domain.serialization import JsonValue
 from aizim.gateway import (
@@ -23,10 +20,8 @@ from aizim.gateway import (
 )
 from aizim.gateway.authority_probe import AuthorityProbeError, run_authority_probe
 from aizim.runtime.layout import ProjectLayout
-from aizim.runtime.provider_executables import resolve_codex
 from aizim.security_gate import (
     SecurityGateError,
-    _launch_attested_probe,
     run_security_gate,
 )
 from aizim.state import StateService, StateServiceConfig
@@ -41,36 +36,21 @@ GATEWAY_DENIALS = (
     "UNADVERTISED_OPERATION",
 )
 PASS_LINES = (
-    "SECURITY GATE PASS",
-    "gateway_matrix=pass",
-    "seatbelt_profile=pass",
-    "filesystem_denials=6/6",
-    "socket_denials=2/2",
-    "environment_denials=1/1",
-    "allowed_controls=2/2",
-    "protected_assets=unchanged",
-    "protected_state=unchanged",
+    "SECURITY GATE PASS", "gateway_matrix=pass", "seatbelt_profile=pass",
+    "filesystem_denials=6/6", "socket_denials=1/1", "environment_denials=1/1",
+    "allowed_controls=3/3", "network_destination_isolation=not_enforced",
+    "protected_assets=unchanged", "protected_state=unchanged",
+    "omp can access other local and external TCP destinations; "
+    "sandbox does not enforce destination isolation",
 )
-LINUX_PASS_LINES = (
-    *PASS_LINES[:2],
-    "linux_profile=pass",
-    *PASS_LINES[3:],
-)
+LINUX_PASS_LINES = (*PASS_LINES[:2], "linux_profile=pass", *PASS_LINES[3:])
 
 
 @dataclass(frozen=True, slots=True)
 class _PlatformReport:
     passed: bool
     platform_id: str
-
-
-def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "aizim", *arguments],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    network_boundary: str = PASS_LINES[-1]
 
 
 def copy_project(tmp_path: Path, name: str) -> Path:
@@ -111,46 +91,43 @@ def test_authority_probe_revokes_capability_after_unexpected_dispatch(
         assert record is not None
         assert record.revoked_at is not None
 
-
-async def test_security_probe_revalidates_the_resolved_codex_image(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    "inspection",
+    [
+        {"protocol_version": 1, "ambient_disabled": True, "tool_names": (),
+         "model": "magpie/model"},
+        {"protocol_version": 2, "ambient_disabled": False, "tool_names": (),
+         "model": "magpie/model"},
+        {"protocol_version": 2, "ambient_disabled": True, "tool_names": ("shell",),
+         "model": "magpie/model"},
+        {"protocol_version": 2, "ambient_disabled": True, "tool_names": (), "model": ""},
+        {"ambient_disabled": True, "tool_names": (), "model": "magpie/model"},
+    ],
+)
+def test_gate_rejects_unrestricted_or_unconfigured_rpc_before_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, inspection: dict[str, object],
 ) -> None:
-    binary = tmp_path / "codex"
-    binary.write_text("#!/bin/sh\nprintf 'codex-cli 0.154.0\\n'\n")
-    binary.chmod(0o755)
-    environment = {
-        "AIZIM_CODEX_EXECUTABLE": str(binary),
-        "PATH": "",
-    }
-    executable = resolve_codex(environment)
+    root = copy_project(tmp_path, "rpc-preflight")
+    ProjectLayout.from_lean_project(root).prepare_runtime()
+    with StateService(StateServiceConfig(root, "rpc-preflight-init")):
+        pass
 
-    class ReplacingAdapter:
-        async def launch_probe(self, _request: ProbeRequest) -> ProbeReport:
-            binary.write_text("#!/bin/sh\nprintf 'codex-cli 0.154.0\\n'\n# replaced\n")
-            return ProbeReport(
-                "darwin",
-                True,
-                "codex-cli 0.154.0",
-                "/usr/bin/sandbox-exec",
-                "a" * 64,
-                (),
-                (),
-                "b" * 64,
-                "b" * 64,
-            )
+    async def inspect(_root: Path, _environment: object) -> dict[str, object]:
+        return inspection
 
-    monkeypatch.setattr(
-        "aizim.security_gate.sandbox_adapter",
-        lambda _path: ReplacingAdapter(),
-    )
+    def unexpected_resolve(_environment: object) -> None:
+        raise AssertionError("gate proceeded past failed RPC preflight")
 
-    with pytest.raises(SecurityGateError, match=r"^CODEX_IMAGE_CHANGED$"):
-        await _launch_attested_probe(
-            executable,
-            environment,
-            cast(ProbeRequest, object()),
-        )
+    monkeypatch.setattr("aizim.security_gate.inspect_omp_worker", inspect)
+    monkeypatch.setattr("aizim.security_gate.resolve_omp", unexpected_resolve)
+    with pytest.raises(
+        SecurityGateError,
+        match=(
+            r"omp RPC protocol or ambient tool restriction is invalid"
+            r"|omp has no selected magpie model"
+        ),
+    ):
+        asyncio.run(run_security_gate(root))
 
 
 @pytest.mark.macos_sandbox
@@ -195,12 +172,8 @@ def test_composite_authority_gate_denies_attacks_and_replays(
 
     def sentinel_token(size: int) -> str:
         token_sizes.append(size)
-        sequence = len(token_sizes)
-        if size == 32:
-            return f"{TOKEN_SENTINEL}_{sequence}"
-        if size == 24:
-            return f"{SECRET_SENTINEL}_{sequence}"
-        raise AssertionError(f"unexpected token size: {size}")
+        prefix = TOKEN_SENTINEL if size == 32 else SECRET_SENTINEL
+        return f"{prefix}_{len(token_sizes)}"
 
     monkeypatch.setattr("aizim.security_gate.secrets.token_urlsafe", sentinel_token)
 
@@ -211,18 +184,22 @@ def test_composite_authority_gate_denies_attacks_and_replays(
     assert report.gateway_denials == GATEWAY_DENIALS
     assert report.target_dispatches == 0
     assert tuple(attempt.operation for attempt in report.attempts) == tuple(ProbeOperation)
-    assert all(attempt.verdict == "denied" for attempt in report.attempts[:9])
-    assert all(attempt.verdict == "allowed" for attempt in report.attempts[9:])
-    assert report.broker_connections == report.tcp_connections == 0
+    allowed = {ProbeOperation.CONNECT_HOST_TCP, ProbeOperation.WRITE_ALLOWED_SCRATCH,
+               ProbeOperation.READ_ALLOWED_VIEW}
+    assert all(attempt.verdict == ("allowed" if attempt.operation in allowed else "denied")
+               for attempt in report.attempts)
+    assert report.broker_connections == 0
+    assert report.tcp_connections == 1
+    assert not report.network_destination_isolation
     assert report.protected_assets_unchanged
     assert report.protected_state_unchanged
     assert report.replay_verified
     assert report.replayed_gateway_denials == GATEWAY_DENIALS
     assert report.replayed_sandbox_denials == tuple(
-        operation.value for operation in tuple(ProbeOperation)[:9]
+        operation.value for operation in ProbeOperation if operation not in allowed
     )
     assert len(report.policy_hash) == 64
-    assert token_sizes == [32, 32, 24, 32, 32, 24]
+    assert report.model
     rendered = repr((report, repeated, output))
     assert TOKEN_SENTINEL not in rendered
     assert SECRET_SENTINEL not in rendered
@@ -233,7 +210,7 @@ def test_composite_authority_gate_denies_attacks_and_replays(
             record.envelope.payload
             for record in state.query_events()
             if record.envelope.event_type == "SandboxProbePassed"
-            and record.envelope.payload.get("operation") == "gate_b_complete"
+            and record.envelope.payload.get("operation") == GATE_COMPLETION_OPERATION
         ]
     assert len(terminals) == 2
     assert {terminal["policy_hash"] for terminal in terminals} == {
@@ -242,65 +219,33 @@ def test_composite_authority_gate_denies_attacks_and_replays(
     }
 
 
-def test_security_probe_requires_the_fixed_credential_free_shape(tmp_path: Path) -> None:
-    missing = run_cli("security-probe")
-    wrong_backend = run_cli(
-        "security-probe",
-        "--project",
-        str(tmp_path),
-        "--backend",
-        "fake",
-        "--no-model",
-    )
-    failed = run_cli(
-        "security-probe",
-        "--project",
-        str(tmp_path),
-        "--backend",
-        "codex",
-        "--no-model",
-    )
-
-    assert missing.returncode == wrong_backend.returncode == 2
-    assert failed.returncode == 3
-    assert failed.stdout == "SECURITY GATE FAIL\n"
-    assert failed.stderr == ""
-
-
-def test_security_probe_renders_the_linux_profile_line(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+@pytest.mark.parametrize(
+    ("platform", "expected"), (("linux", LINUX_PASS_LINES), ("darwin", PASS_LINES)),
+)
+def test_security_probe_renders_platform_and_network_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    platform: str, expected: tuple[str, ...],
 ) -> None:
-    async def linux_report(_project: Path) -> _PlatformReport:
-        return _PlatformReport(True, "linux")
+    async def report(_project: Path) -> _PlatformReport:
+        return _PlatformReport(True, platform)
 
-    monkeypatch.setattr(security_probe_command, "run_security_gate", linux_report)
-
+    monkeypatch.setattr(security_probe_command, "run_security_gate", report)
     assert security_probe_command.run_security_probe(tmp_path) == 0
-    assert capsys.readouterr().out.splitlines() == list(LINUX_PASS_LINES)
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == list(expected)
+    assert captured.err == ""
 
 
-@pytest.mark.macos_sandbox
-def test_security_probe_cli_prints_exact_nine_line_summary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_security_probe_does_not_report_pass_after_gate_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
-    root = copy_project(tmp_path, "cli-project")
-    layout = ProjectLayout.from_lean_project(root)
-    layout.prepare_runtime()
-    with StateService(StateServiceConfig(root, "authority-cli-init")):
-        pass
+    async def fail(_project: Path) -> _PlatformReport:
+        raise SecurityGateError("private diagnostic")
 
-    monkeypatch.setenv("PYTHONASYNCIODEBUG", "1")
-    result = run_cli(
-        "security-probe",
-        "--project",
-        str(root),
-        "--backend",
-        "codex",
-        "--no-model",
-    )
+    monkeypatch.setattr(security_probe_command, "run_security_gate", fail)
+    assert security_probe_command.run_security_probe(tmp_path) == 3
+    captured = capsys.readouterr()
+    assert captured.out == "SECURITY GATE FAIL\n"
+    assert captured.err == ""
 
-    assert result.returncode == 0
-    assert result.stdout.splitlines() == list(PASS_LINES)
-    assert result.stderr == ""
+

@@ -8,13 +8,13 @@ from typing_extensions import TypeIs
 from aizim.domain.serialization import JsonValue
 
 type FrozenJsonValue = (
-    None
-    | bool
+    bool
     | int
     | float
     | str
     | tuple[FrozenJsonValue, ...]
     | Mapping[str, FrozenJsonValue]
+    | None
 )
 type FrozenJsonObject = Mapping[str, FrozenJsonValue]
 

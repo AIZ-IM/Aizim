@@ -1,8 +1,15 @@
 from .backend import AgentBackend, AgentRequest, AgentResult, BackendIdentity
-from .codex_backend import CodexBackend, CodexBackendDependencies
 from .fake_backend import FakeAgentBackend, FakeToolAction
 from .linux_sandbox import LinuxSandboxAdapter, LinuxSandboxDependencies
 from .macos_sandbox import MacOSSandboxAdapter, MacOSSandboxDependencies
+from .omp_backend import (
+    OmpAgentBackend,
+    OmpBackendDependencies,
+    OmpBackendError,
+    create_omp_backend,
+    inspect_omp_worker,
+    preflight_omp_worker,
+)
 from .platform_sandbox import sandbox_adapter
 from .sandbox import (
     ProbeAttempt,
@@ -28,14 +35,15 @@ __all__ = [
     "AgentRequest",
     "AgentResult",
     "BackendIdentity",
-    "CodexBackend",
-    "CodexBackendDependencies",
     "FakeAgentBackend",
     "FakeToolAction",
     "LinuxSandboxAdapter",
     "LinuxSandboxDependencies",
     "MacOSSandboxAdapter",
     "MacOSSandboxDependencies",
+    "OmpAgentBackend",
+    "OmpBackendDependencies",
+    "OmpBackendError",
     "ProbeAttempt",
     "ProbeOperation",
     "ProbeReport",
@@ -49,6 +57,9 @@ __all__ = [
     "ViewSource",
     "WorkspaceView",
     "WorkspaceViewBuilder",
+    "create_omp_backend",
+    "inspect_omp_worker",
+    "preflight_omp_worker",
     "sandbox_adapter",
     "validate_launch_spec",
 ]

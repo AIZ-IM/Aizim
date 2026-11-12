@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -7,14 +8,12 @@ from tempfile import TemporaryDirectory
 
 import pytest
 from integration.cli_control_support import (
-    PublicControlCommand,
     ReplacementTarget,
     StaticOwnershipState,
+    add_research_task,
     initialized_project,
     replacing_rpc_server,
-    rpc_projection,
     run_cli,
-    run_public_control,
     static_ownership_records,
     wait_for,
 )
@@ -22,7 +21,7 @@ from integration.cli_control_support import (
 from aizim.state import StateService, StateServiceConfig
 
 
-def test_live_owner_accepts_public_control_commands_and_remains_owner() -> None:
+def test_live_owner_accepts_research_mutations_and_status_reads() -> None:
     # Given
     with TemporaryDirectory(prefix="aizim-control-", dir="/tmp") as directory:
         root = initialized_project(Path(directory))
@@ -48,59 +47,26 @@ def test_live_owner_accepts_public_control_commands_and_remains_owner() -> None:
             owner_pid = pid_path.read_text().strip()
 
             # When
-            configured = run_cli(
-                "controller",
-                "configure",
-                "--project",
-                str(root),
-                "--provider",
-                "codex",
-                "--model",
-                "gpt-5.6-sol",
-            )
-            registered = run_cli(
-                "worker",
-                "register",
-                "--project",
-                str(root),
-                "--worker-id",
-                "worker-1",
-                "--role",
-                "formalizer",
-            )
-            assigned = run_cli(
-                "worker",
-                "assign",
-                "--project",
-                str(root),
-                "--worker-id",
-                "worker-1",
-                "--task",
-                "prove the fixture",
-            )
+            added = add_research_task(root)
+            status = run_cli("status", "--project", str(root), "--json")
+            listed = run_cli("research", "task", "list", "--project", str(root))
 
             # Then
-            assert configured.returncode == registered.returncode == assigned.returncode == 0
+            assert added.returncode == status.returncode == listed.returncode == 0
             assert owner.poll() is None
             assert pid_path.read_text().strip() == owner_pid
-            controller = rpc_projection(socket_path, "controller", "primary")
-            roster = rpc_projection(socket_path, "worker_roster", "worker-1")
-            assignment = rpc_projection(socket_path, "worker_assignments", "worker-1")
-            assert controller["version"] == 1
-            assert roster["version"] == 1
-            assert assignment["version"] == 1
+            assert json.loads(added.stdout) == {"id": "ownership-task", "version": 1}
+            assert json.loads(listed.stdout)[0]["task_id"] == "ownership-task"
         finally:
             owner.terminate()
             owner.wait(timeout=5)
 
 
-@pytest.mark.parametrize("command", ("configure", "register", "assign"))
 @pytest.mark.parametrize(
     "ownership_state",
     ("partial_pid", "partial_socket", "stale", "unsafe_pid", "unsafe_socket"),
 )
-def test_public_control_commands_fail_closed_for_invalid_ownership_records(
-    command: PublicControlCommand,
+def test_research_mutations_fail_closed_for_invalid_ownership_records(
     ownership_state: StaticOwnershipState,
 ) -> None:
     # Given
@@ -114,7 +80,7 @@ def test_public_control_commands_fail_closed_for_invalid_ownership_records(
             listeners = static_ownership_records(run_root, ownership_state)
             try:
                 # When
-                result = run_public_control(root, command)
+                result = add_research_task(root)
             finally:
                 for listener in listeners:
                     listener.close()
@@ -122,16 +88,18 @@ def test_public_control_commands_fail_closed_for_invalid_ownership_records(
                 socket_path.unlink(missing_ok=True)
 
             # Then
-            surface = "controller" if command == "configure" else "worker"
-            assert result.returncode == 6
-            assert result.stderr == f"aizim {surface}: state is unavailable\n"
+            reason = (
+                "live state ownership record is incomplete"
+                if ownership_state in {"partial_pid", "partial_socket"}
+                else "live state service is unavailable"
+            )
+            assert result.returncode == 4
+            assert result.stderr == f"aizim research: {reason}\n"
             assert owner.logical_digest() == before
 
 
-@pytest.mark.parametrize("command", ("configure", "register", "assign"))
 @pytest.mark.parametrize("replacement_target", ("pid", "socket"))
-def test_public_control_commands_fail_closed_when_live_identity_is_replaced(
-    command: PublicControlCommand,
+def test_research_mutations_fail_closed_when_live_identity_is_replaced(
     replacement_target: ReplacementTarget,
 ) -> None:
     # Given
@@ -147,14 +115,15 @@ def test_public_control_commands_fail_closed_when_live_identity_is_replaced(
             )
             try:
                 # When
-                result = run_public_control(root, command)
+                result = add_research_task(root)
                 thread.join(timeout=2)
 
                 # Then
-                surface = "controller" if command == "configure" else "worker"
                 assert not thread.is_alive()
-                assert result.returncode == 6
-                assert result.stderr == f"aizim {surface}: state is unavailable\n"
+                assert result.returncode == 4
+                assert result.stderr == (
+                    "aizim research: live state ownership changed during control request\n"
+                )
                 assert owner.logical_digest() == before
             finally:
                 listener.close()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK -- exercises the asyncio Unix-server lifecycle
+import asyncio  # ANYIO_OK: exercises the asyncio Unix-server lifecycle
 import socket
 import stat
 from collections.abc import Iterator

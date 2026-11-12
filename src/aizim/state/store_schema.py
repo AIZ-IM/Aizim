@@ -29,3 +29,15 @@ def ensure_artifact_associations(connection: SchemaConnection) -> None:
         "CHECK(byte_length>=0),PRIMARY KEY(run_id,relative_path),UNIQUE(run_id,artifact_name),"
         "FOREIGN KEY(content_hash) REFERENCES artifacts(content_hash))"
     )
+
+
+def ensure_capability_budget(connection: SchemaConnection) -> None:
+    column = connection.execute(
+        "SELECT 1 FROM pragma_table_info('capability_tokens') WHERE name='call_budget'"
+    ).fetchone()
+    if column is None:
+        connection.execute(
+            "ALTER TABLE capability_tokens ADD COLUMN call_budget INTEGER "
+            "CHECK(call_budget IS NULL OR (typeof(call_budget)='integer' "
+            "AND call_budget BETWEEN 1 AND 10000))"
+        )

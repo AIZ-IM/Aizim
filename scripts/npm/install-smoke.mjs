@@ -54,6 +54,8 @@ const sharedTemporaryRoots = [
 const agentPackages = Object.freeze([
   "@openai/codex",
   "@anthropic-ai/claude-code",
+  "@oh-my-pi/pi-coding-agent",
+  "@kitten-science/magpie",
 ]);
 const agentCommands = Object.freeze(["codex", "claude"]);
 export const DOCTOR_CHECK_IDS = Object.freeze([
@@ -64,12 +66,10 @@ export const DOCTOR_CHECK_IDS = Object.freeze([
   "lean_project",
   "disk_floor",
   "runtime_mode",
-  "controller_configuration",
-  "controller_provider",
-  "controller_executable",
-  "controller_auth",
-  "worker_codex",
-  "sandbox_exec",
+  "omp",
+  "magpie",
+  "omp_rpc",
+  "security_probe",
   "lean_lsp_mcp",
   "leanclient",
   "state_service",
@@ -84,7 +84,6 @@ export function createSmokeLayout(root) {
     local,
     global: child("global-consumer"),
     project: child("project"),
-    runProject: child("run-project"),
     home: child("home"),
     cache: child("cache"),
     tools: child("tools"),
@@ -116,12 +115,9 @@ export function consumerEnvironment(layout, source, pathEntries) {
   const environment = Object.fromEntries(
     Object.entries(source).filter(([name]) => preservedEnvironment.has(name)),
   );
-  const elanHome =
-    source.ELAN_HOME ?? (source.HOME ? join(source.HOME, ".elan") : undefined);
   return {
     ...environment,
     AIZIM_CACHE_DIR: layout.cache,
-    ...(elanHome ? { ELAN_HOME: elanHome } : {}),
     HOME: layout.home,
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
@@ -153,13 +149,6 @@ export async function validatePrivateRoot(
   return canonical;
 }
 
-function npmArguments(...arguments_) {
-  return [process.execPath, [join(dirname(process.execPath), "npm"), ...arguments_]];
-}
-
-function npxArguments(...arguments_) {
-  return [process.execPath, [join(dirname(process.execPath), "npx"), ...arguments_]];
-}
 
 async function execute(program, arguments_, options) {
   return await new Promise((resolvePromise, reject) => {
@@ -218,23 +207,15 @@ export function doctorFailureDocument(result, label) {
   const statuses = Object.fromEntries(
     document.checks.map((check) => [check.id, check.status]),
   );
-  const expectedStatuses = {
-    controller_configuration: "FAIL",
-    controller_provider: "SKIP",
-    controller_executable: "SKIP",
-    controller_auth: "SKIP",
-    worker_codex: "FAIL",
-    sandbox_exec: "SKIP",
-  };
+  const missingRuntimeChecks = ["omp", "magpie", "omp_rpc", "security_probe"];
   if (
     result.code !== 3 ||
     result.signal !== null ||
     document.ready !== false ||
-    DOCTOR_CHECK_IDS.some(
-      (id) => statuses[id] !== (expectedStatuses[id] ?? "PASS"),
-    )
+    DOCTOR_CHECK_IDS.some((id) => !["PASS", "FAIL"].includes(statuses[id])) ||
+    missingRuntimeChecks.some((id) => statuses[id] !== "FAIL")
   ) {
-    throw new Error(`${label} did not fail closed by role`);
+    throw new Error(`${label} did not fail closed without the external runtime`);
   }
   return document;
 }
@@ -254,11 +235,78 @@ export function validateProviderFreeCliEvidence(
   if (
     help.code !== 0 ||
     help.signal !== null ||
-    !help.stdout.startsWith("usage: aizim ")
+    !help.stdout.startsWith("usage: aizim ") ||
+    ["init", "doctor", "status", "research"].some(
+      (command) => !new RegExp(`\\b${command}\\b`, "u").test(help.stdout),
+    )
   ) {
     throw new Error(`${label} help mismatch`);
   }
   doctorFailureDocument(doctor, `${label} doctor`);
+}
+
+export function validateResearchTaskList(
+  result,
+  label = "research task list",
+  populated = false,
+) {
+  let tasks;
+  try {
+    tasks = JSON.parse(result.stdout);
+  } catch {
+    throw new Error(`${label} returned invalid JSON`);
+  }
+  if (
+    result.code !== 0 ||
+    result.signal !== null ||
+    !Array.isArray(tasks) ||
+    tasks.length !== (populated ? 1 : 0)
+  ) {
+    throw new Error(`${label} task list mismatch`);
+  }
+  if (populated) {
+    const task = tasks[0];
+    if (
+      task?.task_id !== "addition" ||
+      task.statement !== "(n : Nat) : n + 0 = n" ||
+      task.status !== "pending" ||
+      task.rounds !== 0 ||
+      !Array.isArray(task.verified_declarations) ||
+      task.verified_declarations.length !== 0
+    ) {
+      throw new Error(`${label} did not preserve the unexecuted research target`);
+    }
+  }
+  return tasks;
+}
+
+export async function researchTaskRoundtrip(binary, project, options) {
+  const listing = ["research", "task", "list", "--project", project, "--json"];
+  validateResearchTaskList(await execute(binary, listing, options));
+  const added = await requireSuccess(
+    binary,
+    [
+      "research", "task", "add", "--project", project, "--json",
+      "--task-id", "addition", "--title", "Addition identity",
+      "--statement", "(n : Nat) : n + 0 = n", "--import", "Std",
+    ],
+    options,
+    "research task add",
+  );
+  let record;
+  try {
+    record = JSON.parse(added.stdout);
+  } catch {
+    throw new Error("research task add returned invalid JSON");
+  }
+  if (record?.id !== "addition" || !Number.isInteger(record.version)) {
+    throw new Error("research task add receipt mismatch");
+  }
+  validateResearchTaskList(
+    await execute(binary, listing, options),
+    "research task roundtrip",
+    true,
+  );
 }
 
 export function assertNoAgentDependencies(document, label = "package") {
@@ -284,15 +332,15 @@ async function writeConsumer(path) {
   );
 }
 
-async function findExecutable(name) {
-  for (const directory of (process.env.PATH ?? "").split(":")) {
+export async function findExecutable(name, path = process.env.PATH ?? "") {
+  for (const directory of path.split(delimiter)) {
     if (!directory) {
       continue;
     }
     const candidate = join(directory, name);
     try {
       await access(candidate, constants.X_OK);
-      return candidate;
+      return await realpath(candidate);
     } catch {
       continue;
     }
@@ -303,11 +351,9 @@ async function findExecutable(name) {
 async function toolPath(layout) {
   await mkdir(layout.tools, { mode: 0o700 });
   await symlink(process.execPath, join(layout.tools, "node"));
-  for (const name of ["lake", "lean", "rg"]) {
-    await symlink(await findExecutable(name), join(layout.tools, name));
-  }
+  await symlink(await findExecutable("rg"), join(layout.tools, "rg"));
   const paths = [layout.tools, "/usr/bin", "/bin"];
-  for (const name of agentCommands) {
+  for (const name of [...agentCommands, "omp", "magpie"]) {
     for (const directory of paths) {
       try {
         await access(join(directory, name), constants.X_OK);
@@ -344,20 +390,6 @@ async function readyRecord(path) {
   };
 }
 
-export function provisionedRuntimePython(readyMarker) {
-  return join(dirname(readyMarker), "venv", "bin", "python");
-}
-
-export function requireControllerSmokeOutput(result) {
-  const expected =
-    "CONTROLLER SMOKE PASS\n" +
-    "assignment_executions=1\n" +
-    "restart_duplicates=0\n";
-  if (result.stdout !== expected) {
-    throw new Error("controller smoke output mismatch");
-  }
-  return result.stdout;
-}
 
 async function packageInputs() {
   await pack();
@@ -444,25 +476,6 @@ async function packUpgradeFixture(npm, layout, name, environment) {
   return join(layout.upgradePackages, filename);
 }
 
-function requireConfiguredCodexFailure(result) {
-  const document = parsedDoctor(result, "configured Codex upgrade doctor");
-  const statuses = Object.fromEntries(
-    document.checks.map((check) => [check.id, check.status]),
-  );
-  if (
-    result.code !== 3 ||
-    result.signal !== null ||
-    document.ready !== false ||
-    statuses.controller_configuration !== "PASS" ||
-    statuses.controller_provider !== "PASS" ||
-    statuses.controller_executable !== "FAIL" ||
-    statuses.controller_auth !== "SKIP" ||
-    statuses.worker_codex !== "FAIL" ||
-    statuses.sandbox_exec !== "SKIP"
-  ) {
-    throw new Error("configured Codex upgrade doctor did not fail closed");
-  }
-}
 
 async function bundledAgentUpgrade({
   environment,
@@ -607,25 +620,21 @@ async function bundledAgentUpgrade({
   ) {
     throw new Error("upgraded provider-free CLI mismatch");
   }
-  await requireSuccess(
-    binary,
-    [
-      "controller",
-      "configure",
-      "--project",
-      layout.upgradeProject,
-      "--provider",
-      "codex",
-    ],
-    { cwd: layout.upgrade, env: environment },
-    "upgrade Codex controller configure",
-  );
-  requireConfiguredCodexFailure(
+  doctorFailureDocument(
     await execute(
       binary,
       ["doctor", "--project", layout.upgradeProject, "--json"],
       { cwd: layout.upgrade, env: environment },
     ),
+    "upgraded missing-runtime doctor",
+  );
+  validateResearchTaskList(
+    await execute(
+      binary,
+      ["research", "task", "list", "--project", layout.upgradeProject, "--json"],
+      { cwd: layout.upgrade, env: environment },
+    ),
+    "upgraded research task list",
   );
 }
 
@@ -640,12 +649,6 @@ async function copyFixture(destination) {
   );
 }
 
-async function copyRunFixture(destination) {
-  await cp(join(repositoryRoot, "examples", "smoke_lean"), destination, {
-    recursive: true,
-    filter: (source) => basename(source) !== ".aizim",
-  });
-}
 
 async function writeEvidence(document) {
   await mkdir(npmBuildRoot, { mode: 0o700, recursive: true });
@@ -669,7 +672,6 @@ export async function installSmoke() {
       layout.cache,
       layout.npmPrefix,
       layout.project,
-      layout.runProject,
       layout.upgrade,
       layout.upgradeProject,
       layout.upgradePackages,
@@ -682,14 +684,16 @@ export async function installSmoke() {
       await writeConsumer(path);
     }
     const packages = await packageInputs();
+    const npmPath = await findExecutable("npm");
+    const npxPath = await findExecutable("npx");
     const environment = consumerEnvironment(
       layout,
       process.env,
       await toolPath(layout),
     );
     environment.TMPDIR = layout.temporary;
-    const npm = (...arguments_) => npmArguments(...arguments_);
-    const npx = (...arguments_) => npxArguments(...arguments_);
+    const npm = (...arguments_) => [process.execPath, [npmPath, ...arguments_]];
+    const npx = (...arguments_) => [process.execPath, [npxPath, ...arguments_]];
     let command = npm(
       ...installArguments(packages.platform.path, packages.meta.path),
     );
@@ -763,43 +767,10 @@ export async function installSmoke() {
       { version, help, doctor: localDoctorResult },
       "local provider-free CLI",
     );
-    await copyRunFixture(layout.runProject);
-    await requireSuccess(
-      await findExecutable("lake"),
-      ["build"],
-      { cwd: layout.runProject, env: environment },
-      "npm run project build",
-    );
-    await requireSuccess(
-      layout.localBinary,
-      ["init", layout.runProject],
-      { cwd: layout.local, env: environment },
-      "npm run project init",
-    );
-    const runResult = await requireSuccess(
-      layout.localBinary,
-      [
-        "run",
-        "--project",
-        layout.runProject,
-        "--profile",
-        "autonomous-shared",
-        "--backend",
-        "fake",
-      ],
-      { cwd: layout.local, env: environment },
-      "npm deterministic run",
-    );
-    if (!runResult.stdout.includes("AIZIM RUN PASS")) {
-      throw new Error("npm run result mismatch");
-    }
-    const controllerSmoke = await requireSuccess(
-      provisionedRuntimePython(markers[0]),
-      [join(repositoryRoot, "scripts", "qa", "controller_smoke.py")],
-      { cwd: repositoryRoot, env: environment },
-      "npm controller loop",
-    );
-    requireControllerSmokeOutput(controllerSmoke);
+    await researchTaskRoundtrip(layout.localBinary, layout.project, {
+      cwd: layout.local,
+      env: environment,
+    });
     await bundledAgentUpgrade({
       environment,
       initializer: layout.localBinary,
@@ -889,6 +860,15 @@ export async function installSmoke() {
       },
       "global provider-free CLI",
     );
+    validateResearchTaskList(
+      await execute(
+        layout.globalBinary,
+        ["research", "task", "list", "--project", layout.project, "--json"],
+        { cwd: layout.global, env: environment },
+      ),
+      "global research task list",
+      true,
+    );
 
     command = npm(
       "install",
@@ -964,19 +944,17 @@ export async function installSmoke() {
         provider_free_help: true,
         provider_free_doctor_fails_closed: true,
         no_agent_dependencies: true,
-        python_314_bootstrap: true,
+        python_315_bootstrap: true,
         cache_reused: true,
         uninstall_preserved_cache: true,
-        aizim_run: true,
-        controller_loop: true,
+        research_task_roundtrip: true,
         bundled_agent_upgrade_preserved_state_credentials: true,
         missing_platform_exit_78: true,
         integrity_failure_exit_74: true,
       },
     });
     process.stdout.write(
-      "aizim 0.1.0\nEXPECTED DOCTOR FAILURE\nAIZIM RUN PASS\n" +
-      controllerSmoke.stdout,
+      "aizim 0.1.0\nEXPECTED DOCTOR FAILURE\nRESEARCH TASK ROUNDTRIP PASS\n",
     );
   } finally {
     await rm(root, { force: true, recursive: true });

@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from aizim.agents import ViewBuildError
-from aizim.agents.codex_backend import CodexBackendError
 from aizim.agents.launcher import AgentLaunchError
+from aizim.agents.omp_backend import OmpBackendError
 from aizim.config.model import LeanRuntimeMode, ResourcePolicy
 from aizim.orchestration.resources import ResourceGovernor, ResourcePolicyError
 
@@ -76,8 +76,8 @@ async def test_proof_slots_bound_concurrent_workers() -> None:
 @pytest.mark.parametrize(
     "error",
     (
-        AgentLaunchError("CODEX_PROCESS_FAILED"),
-        CodexBackendError("CODEX_IMAGE_CHANGED"),
+        AgentLaunchError("HOST_COMMAND_FAILED"),
+        OmpBackendError("OMP_IMAGE_CHANGED"),
         ViewBuildError("workspace view construction failed"),
     ),
 )

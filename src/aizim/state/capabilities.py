@@ -45,6 +45,7 @@ class CapabilityRecord:
     operations: tuple[str, ...]
     expires_at: datetime
     revoked_at: datetime | None = None
+    call_budget: int | None = None
 
     def __post_init__(self) -> None:
         if re.fullmatch(r"[0-9a-f]{64}", self.token_hash) is None:
@@ -65,6 +66,10 @@ class CapabilityRecord:
         _timestamp(self.expires_at, "expires_at")
         if self.revoked_at is not None:
             _timestamp(self.revoked_at, "revoked_at")
+        if self.call_budget is not None and (
+            type(self.call_budget) is not int or not 1 <= self.call_budget <= 10000
+        ):
+            raise CapabilityRecordError("call_budget", "must be an integer from 1 to 10000")
 
     def __repr__(self) -> str:
         return (
@@ -73,7 +78,7 @@ class CapabilityRecord:
         )
 
 
-type CapabilityRow = tuple[str, str, str, str, str | None, str, str, str | None]
+type CapabilityRow = tuple[str, str, str, str, str | None, str, str, str | None, int | None]
 
 
 def capability_row(record: CapabilityRecord) -> CapabilityRow:
@@ -86,11 +91,13 @@ def capability_row(record: CapabilityRecord) -> CapabilityRow:
         canonical_json(record.operations).decode(),
         _timestamp(record.expires_at, "expires_at"),
         None if record.revoked_at is None else _timestamp(record.revoked_at, "revoked_at"),
+        record.call_budget,
     )
 
 
 def capability_from_row(row: CapabilityRow) -> CapabilityRecord:
-    token_hash, run_id, worker_id, role, lease_id, raw_operations, expires_at, revoked_at = row
+    (token_hash, run_id, worker_id, role, lease_id, raw_operations, expires_at, revoked_at,
+     call_budget) = row
     operations: JsonValue = json.loads(raw_operations)
     if type(operations) is not list:
         raise CapabilityRecordError("operations", "stored value must be a JSON string array")
@@ -108,6 +115,7 @@ def capability_from_row(row: CapabilityRow) -> CapabilityRecord:
         operations=tuple(parsed_operations),
         expires_at=_parse_timestamp(expires_at, "expires_at"),
         revoked_at=None if revoked_at is None else _parse_timestamp(revoked_at, "revoked_at"),
+        call_budget=call_budget,
     )
 
 

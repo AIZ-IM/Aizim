@@ -12,7 +12,7 @@ from aizim.domain.serialization import JsonValue
 from aizim.state.operations import AppendEventCommand
 from aizim.state.store_contracts import EventRecord
 
-GATE_COMPLETION_OPERATION = "gate_b_complete"
+GATE_COMPLETION_OPERATION = "omp_security_gate_complete"
 
 
 class ProbeOperation(StrEnum):
@@ -23,7 +23,7 @@ class ProbeOperation(StrEnum):
     TRAVERSE_TO_UNLEASED_FILE = "traverse_to_unleased_file"
     SCRATCH_SYMLINK_TO_STATE = "scratch_symlink_to_state"
     CONNECT_GATEWAY_UNIX_SOCKET = "connect_gateway_unix_socket"
-    CONNECT_NONALLOWLISTED_TCP = "connect_nonallowlisted_tcp"
+    CONNECT_HOST_TCP = "connect_host_tcp"
     READ_SECRET_ENVIRONMENT = "read_secret_environment"
     WRITE_ALLOWED_SCRATCH = "write_allowed_scratch"
     READ_ALLOWED_VIEW = "read_allowed_view"
@@ -106,7 +106,7 @@ class ProbeAttempt:
 class ProbeReport:
     platform_id: SandboxPlatform
     passed: bool
-    codex_version: str
+    agent_version: str
     sandbox_executable: str
     policy_hash: str
     attempts: tuple[ProbeAttempt, ...]

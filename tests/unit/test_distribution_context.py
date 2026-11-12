@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 import aizim.runtime.distribution as distribution
-import aizim.runtime.provider_executables as providers
 from aizim.runtime.distribution import (
     DISTRIBUTION_ENVIRONMENT,
     DistributionError,
@@ -16,9 +15,9 @@ from aizim.runtime.distribution import (
 )
 
 
-def _executable(path: Path, version: str = "codex-cli 0.154.0") -> Path:
+def _executable(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"#!/bin/sh\nprintf '%s\\n' '{version}'\n")
+    path.write_text("#!/bin/sh\nexit 0\n")
     path.chmod(0o755)
     return path
 
@@ -105,106 +104,24 @@ def test_invalid_closed_values_have_stable_safe_codes(
     assert str(tmp_path) not in str(failure.value)
 
 
-def test_external_resolvers_reject_relative_missing_directory_and_non_executable_paths(
-    tmp_path: Path,
+@pytest.mark.parametrize("npm_mode", [False, True])
+def test_ripgrep_is_resolved_from_the_system_path(
+    tmp_path: Path, npm_mode: bool
 ) -> None:
-    directory = tmp_path / "directory"
-    directory.mkdir()
-    missing = tmp_path / "missing"
-    non_executable = tmp_path / "non-executable"
-    non_executable.write_text("not executable\n")
-
-    for name, code in [
-        ("AIZIM_CODEX_EXECUTABLE", "CODEX_EXECUTABLE_UNAVAILABLE"),
-        ("AIZIM_CLAUDE_EXECUTABLE", "CLAUDE_EXECUTABLE_UNAVAILABLE"),
-    ]:
-        for candidate in [
-            Path("relative-provider"),
-            missing,
-            directory,
-            non_executable,
-        ]:
-            environment = {name: str(candidate), "PATH": ""}
-            with pytest.raises(providers.ProviderExecutableError) as failure:
-                resolver = (
-                    providers.discover_codex_executable
-                    if name == "AIZIM_CODEX_EXECUTABLE"
-                    else providers.discover_claude_executable
-                )
-                resolver(environment)
-            assert failure.value.code == code
-            assert str(candidate) not in str(failure.value)
-
-
-def test_npm_mode_uses_independent_external_overrides_before_path(tmp_path: Path) -> None:
-    override_codex = _executable(tmp_path / "override-codex")
-    override_claude = _executable(
-        tmp_path / "override-claude",
-        "2.1.218 (Claude Code)",
-    )
-    path_root = tmp_path / "bin"
-    path_codex = _executable(path_root / "codex")
-    path_claude = _executable(path_root / "claude", "2.1.218 (Claude Code)")
-    environment = {
-        **_npm_environment(),
-        "AIZIM_CODEX_EXECUTABLE": str(override_codex),
-        "AIZIM_CLAUDE_EXECUTABLE": str(override_claude),
-        "PATH": str(path_root),
-    }
-
-    assert providers.discover_codex_executable(environment) == override_codex
-    assert providers.discover_claude_executable(environment) == override_claude
-    assert providers.discover_codex_executable({"PATH": str(path_root)}) == path_codex
-    assert providers.discover_claude_executable({"PATH": str(path_root)}) == path_claude
-
-
-def test_ripgrep_fallback_is_distribution_mode_independent(tmp_path: Path) -> None:
-    triple = tmp_path / "codex-native" / "vendor" / "aarch64-apple-darwin"
-    (triple / "bin").mkdir(parents=True)
-    (triple / "codex-path").mkdir()
-    codex = _executable(triple / "bin" / "codex")
-    ripgrep = _executable(triple / "codex-path" / "rg")
-    environment = {
-        **_npm_environment(),
-        "AIZIM_CODEX_EXECUTABLE": str(codex),
-        "PATH": "",
-    }
+    ripgrep = _executable(tmp_path / "bin" / "rg")
+    environment = {"PATH": str(ripgrep.parent)}
+    if npm_mode:
+        environment.update(_npm_environment())
 
     assert resolve_ripgrep_executable(environment) == ripgrep
 
 
-def test_source_resolution_uses_ripgrep_from_the_codex_native_dependency(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    meta = tmp_path / "codex"
-    codex = _executable(meta / "bin" / "codex.js")
-    (meta / "bin" / "codex").symlink_to(codex)
-    (meta / "package.json").write_text('{"name":"@openai/codex"}\n')
-    triple = (
-        meta / "node_modules" / "@openai" / "codex-darwin-arm64" / "vendor" / "aarch64-apple-darwin"
-    )
-    (triple / "codex-path").mkdir(parents=True)
-    _executable(triple / "bin" / "codex")
-    ripgrep = _executable(triple / "codex-path" / "rg")
-    monkeypatch.setattr(
-        providers,
-        "_host_codex_layout",
-        lambda: ("darwin-arm64", "aarch64-apple-darwin"),
-    )
+def test_missing_ripgrep_has_a_stable_safe_error(tmp_path: Path) -> None:
+    with pytest.raises(DistributionError) as failure:
+        resolve_ripgrep_executable({"PATH": str(tmp_path)})
 
-    assert resolve_ripgrep_executable({"PATH": str(codex.parent)}) == ripgrep
-
-
-def test_source_resolution_rejects_an_unavailable_codex() -> None:
-    with pytest.raises(providers.ProviderExecutableError) as failure:
-        providers.discover_codex_executable({"PATH": ""})
-
-    assert failure.value.code == "CODEX_EXECUTABLE_UNAVAILABLE"
-
-    with pytest.raises(providers.ProviderExecutableError) as claude_failure:
-        providers.discover_claude_executable({"PATH": ""})
-
-    assert claude_failure.value.code == "CLAUDE_EXECUTABLE_UNAVAILABLE"
+    assert failure.value.code == "RIPGREP_EXECUTABLE_UNAVAILABLE"
+    assert str(tmp_path) not in str(failure.value)
 
 
 def test_without_distribution_environment_removes_only_internal_keys(
@@ -212,8 +129,8 @@ def test_without_distribution_environment_removes_only_internal_keys(
 ) -> None:
     environment = {
         **_npm_environment(),
-        "AIZIM_CODEX_EXECUTABLE": "/external/codex",
-        "AIZIM_CLAUDE_EXECUTABLE": "/external/claude",
+        "AIZIM_OMP_EXECUTABLE": "/external/omp",
+        "AIZIM_MAGPIE_EXECUTABLE": "/external/magpie",
         "PATH": "/usr/bin",
         "LANG": "C.UTF-8",
     }
@@ -222,8 +139,8 @@ def test_without_distribution_environment_removes_only_internal_keys(
 
     assert DISTRIBUTION_ENVIRONMENT.isdisjoint(scrubbed)
     assert scrubbed == {
-        "AIZIM_CLAUDE_EXECUTABLE": "/external/claude",
-        "AIZIM_CODEX_EXECUTABLE": "/external/codex",
+        "AIZIM_OMP_EXECUTABLE": "/external/omp",
+        "AIZIM_MAGPIE_EXECUTABLE": "/external/magpie",
         "PATH": "/usr/bin",
         "LANG": "C.UTF-8",
     }

@@ -1,0 +1,8 @@
+invocation=/opt/homebrew/bin/uv run --frozen python scripts/qa/controller_smoke.py
+exit_status=0
+stdout_exact=true
+stderr_bytes=0
+--- stdout ---
+CONTROLLER SMOKE PASS
+assignment_executions=1
+restart_duplicates=0

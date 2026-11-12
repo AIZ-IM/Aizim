@@ -1,160 +1,147 @@
 # Aizim authority boundary
 
-Slices 1 and 2 admit an agent only after two independent controls agree: the
-capability gateway authorizes the requested logical operation, and the
-platform sandbox profile permits the operating-system action. Passing either control
-alone grants no authority.
+Aizim owns research authority. One restricted omp RPC process performs one attempt; magpie owns
+model routing and provider credentials. Neither omp output nor magpie telemetry can verify a
+mathematical target. Only the trusted Lean publication path can do that.
 
 ## Trusted and untrusted processes
 
-The trusted computing base contains the Aizim CLI security-gate orchestrator,
-`StateService` and its single SQLite event store, the capability issuer and
-gateway, the gateway session broker, the materialized-view builder, the platform
-sandbox adapters, and the launcher-owned Codex parent process. These components
-may read canonical project state and append validated audit events.
+The trusted computing base includes the supervisor, StateService and its event store, the
+capability issuer and gateway, the session broker, the materialized-view builder, platform sandbox
+adapters, the pinned omp executable, and the local magpie service. Trusting the omp executable is
+necessary: filesystem isolation alone does not constrain every network action of that process.
+Model output, assistant summaries, RPC events, tool arguments, and transport digests are untrusted.
 
-Agents, model-controlled commands, and the gateway sidecar are untrusted. The
-sidecar receives one role-bound capability after peer authentication; it is not
-a general shell or filesystem mutation service. Trusted-only operations such as
-state append, capability minting, document path resolution, Lean build or
-verification, promotion, and environment approval are absent from every agent
-role capability set.
+The supervisor redeems the gateway session and keeps the raw capability token and broker session ID
+inside the trusted host. omp receives role-authorized host-tool definitions over stdio. Every call
+passes JSON Schema validation at the RPC boundary and capability, operation, run, worker, lease,
+expiry, and revocation checks in the gateway. Tool discovery does not confer authority. The host
+never delegates generic event append, capability minting, document path resolution, Lean
+verification, promotion, or environment approval to the model.
 
-Codex model transport occurs in the launcher-owned parent. Commands selected by
-the model run under the compiled profile with network disabled, so allowing the
-parent to reach model infrastructure does not give the model-controlled shell a
-network path.
+The gateway audits each refusal as `CapabilityDenied` and returns `CAPABILITY_DENIED`. Refusals
+include run budget exhaustion and the per-attempt call budget (`WORKER_BUDGET_EXHAUSTED`). Each
+attempt's trusted directive mints a `call_budget` from 1 through 10000 into its capability. The
+gateway enforces that budget across all calls for the worker identity; worker arguments cannot
+raise it. Historical capabilities without a minted budget retain the host worker limit.
 
-The foreground controller is trusted orchestration. The attested native Codex CLI
-is a trusted model transport, as it is for Workers; model outputs and model-selected
-tools are untrusted. Codex API traffic uses the client's own authenticated network
-connection. Its tools use a separate native permission profile: only the empty
-view and scratch are available, the canonical project and copied authentication
-directory are denied, shell environment inheritance and web search are disabled,
-and tool network access is disabled. Nesting the whole Codex CLI inside its own
-sandbox is unsupported by the pinned CLI's filesystem helpers.
+Rate limiting retains the `CapabilityDenied` audit with reason `REQUEST_RATE_EXCEEDED`, but returns
+the reserved `GATEWAY_RATE_LIMITED` result with `error.retry_after_seconds`, bounded from 0.001 to
+60 seconds. Throttles do not count as refusal outcomes. The trusted omp host bridge waits for that
+delay and retries the same call, checking authority again on each retry. Attempt deadlines and
+cancellation still interrupt the wait, and throttled calls do not consume run or worker budgets.
 
-Claude keeps the outer OS filesystem sandbox, disabled built-in tools and MCP,
-and an active network proxy restricted to its provider domains. Provider auth
-files are copied into private temporary storage; user settings and history are
-not copied. The model receives bounded assignment context and returns one validated
-dispatch, blocked, or reject decision. A validated dispatch may name only the assigned worker and fixed
-budget and timeout ceilings. Trusted code persists only the validated directive
-instruction and fixed hashes; prompts, raw provider envelopes, responses,
-credentials, authenticated URLs, and full environments are not durable state.
+When an authorized target raises, the gateway audits a `GatewayCallFailed` event and returns the
+target's stable upper-case reason code as an ordinary tool error; other messages become
+`TOOL_FAILED`, and exception text is never returned. The worker's channel stays usable after a
+target error. Gateway-owned codes (`CAPABILITY_DENIED`, `GATEWAY_INTERNAL`, `GATEWAY_PROTOCOL`,
+`GATEWAY_UNAVAILABLE`, and `GATEWAY_RATE_LIMITED`) are reserved; a target cannot claim them. Retry
+metadata belongs only to gateway rate-limit results. Closed tool schemas reject worker-supplied
+response codes and retry fields before dispatch, and the transport rejects malformed retry hints.
 
-The supervisor owns the sole live `StateService`. Same-UID CLI clients may use
-the public configure, register, assign, and typed research mutations; generic event
-append remains service-session-only. The selected controller provider never
-selects the worker backend: worker execution remains Codex-backed and passes
-through the existing lease, capability, gateway, sandbox, cleanup, and Lean
-verification boundaries. Terminal assignment IDs are durable and never
-dispatched again after restart.
+Autonomous attempts use `omp --mode rpc --no-ui --no-tools --no-extensions --no-skills --no-rules
+--no-context-files`, an explicit cwd, and private per-attempt session storage. Built-in model shell
+and file tools are disabled. Ambient extensions, skills, rules, context files, and MCP configuration
+must not add another execution path. Host tools are the only model-directed mutation interface.
+The trusted host gateway enforces the remaining logical authority boundary.
 
-Research records add immutable mathematical targets, dependency scheduling, bounded
-attempts, scoped advisory memory, and operator contributions/reviews. Only existing
-Lean publication evidence can mark a target verified. Human acceptance of meaning,
-value, or exposition never substitutes for formal verification. Model API output
-uses a provider-compatible flat schema and is normalized into the stricter local
-decision union; unknown fields and invalid action-specific combinations remain errors.
+magpie owns provider accounts, credentials, model selection, routing, fallback, quotas, and provider
+usage. Aizim records the observed omp version, executable identity, resolved model, and attempt
+usage; it does not copy provider credentials into prompts, reports, or artifacts. Model selection
+through `AIZIM_MODEL` and the former Codex/Claude Controller paths are removed.
 
-See [Codex permission scope](https://learn.chatgpt.com/docs/permissions#scope-and-enforcement)
-for the distinction between client service traffic and sandboxed command traffic.
+Only a trusted `DeclarationPublished` event bound to the immutable target statement, candidate,
+and attempt can mark a research target verified. Human semantic, value, exposition, and release
+reviews remain independent records with operator-declared identity. A contribution ID match,
+assistant summary, or successful RPC response alone is insufficient.
 
-Launcher-owned host checks also start in a fresh process group. Whether their
-direct parent exits successfully or with an error, Aizim returns its captured
-status and output only after killing and reaping any same-group descendants,
-including descendants that detached from standard input and output. Cleanup is
-completed before cancellation is propagated.
+## Materialized view and filesystem isolation
 
-## Materialized view and platform sandbox profile
+`WorkspaceViewBuilder` accepts an explicit project-relative allowlist. It rejects traversal,
+reserved `.git` and `.aizim` surfaces, symlinks, non-regular files, and multiply linked files. It
+copies through descriptor-relative operations and checks source digests and metadata before
+publication. Published files are fresh read-only copies; the manifest binds path, length, mode,
+and SHA-256. The builder atomically allocates a mode-0700 parent under the system temporary
+directory, which may be a shared sticky directory such as `/tmp`. View and scratch are separate
+private siblings inside that parent. Closing the workspace, or failing during construction,
+removes the private parent and its contents; the system temporary directory is never exposed
+as a runtime read root.
 
-`WorkspaceViewBuilder` accepts an explicit project-relative allowlist. It opens
-the canonical root once, rejects traversal, reserved `.git` and `.aizim`
-surfaces, symlinks, non-regular files, and multiply linked files, and copies
-bytes through descriptor-relative operations. Each source digest and metadata
-snapshot is checked again before publication. Published files are fresh `0444`
-copies, directories are read-only, and the manifest binds path, length, mode,
-and SHA-256. Scratch is a separate private ephemeral directory.
+Linux uses the system `bwrap` executable for filesystem isolation. The materialized view is
+read-only and scratch is writable; the canonical project, state database, shared artifacts,
+unleased files, and gateway Unix socket are hidden from the restricted process. Only declared
+runtime roots are readable. The process receives a filtered environment. A missing or unusable
+system bwrap or user namespace fails closed; there is no unsandboxed fallback. Aizim does not
+use Codex's bundled bwrap or its permission-profile implementation.
 
-Worker final messages use a parent-owned temporary directory under `.aizim/run`,
-outside the model's writable scratch and readable view. The CLI parent can write
-there as a normal user, while model tools remain denied access. The directory is
-removed after result parsing and on cancellation.
+macOS uses Apple's `/usr/bin/sandbox-exec` and the compiled Seatbelt profile to enforce the
+filesystem boundary. It requires a canonical, executable omp file at the pinned version and
+fails closed with a sandbox host error when that file is missing or invalid. The view is
+read-only, scratch is writable, and canonical project/state and gateway socket access are
+denied. The host kernel and platform sandbox mechanism are trusted.
 
-`MacOSSandboxAdapter` compiles and then validates the exact inline Codex
-permission profile before launching `codex sandbox --permission-profile`.
-Seatbelt denies the canonical project and `.aizim`, permits read-only access to
-the view and developer runtime, permits writes only in scratch, removes the
-parent environment, and disables child network access. The production attack
-probe exercises six filesystem denials, two socket denials, one environment
-denial, and two allowed controls. A synthetic environment value verifies that
-shell isolation is real without using user credentials.
+## Network limitation
 
-`LinuxSandboxAdapter` enforces the same permission contract through the
-package-local Codex CLI and its exact bundled `codex-resources/bwrap`. It
-accepts only Linux, Codex `0.154.0`, canonical regular executable images, and
-a working user-namespace/bwrap probe. Missing or unusable bwrap fails before a
-worker starts; there is no Landlock or unsandboxed fallback. The Linux profile
-uses a minimal fixed `PATH`, reads only the materialized view and declared
-runtime roots, writes only scratch, denies the canonical project, and disables
-child network access.
+The host network is shared so the restricted omp process can reach local magpie. Consequently, omp
+can access other local listeners and external networks reachable from the host. Linux bwrap
+restricts the filesystem; it provides no destination deny rule, TCP destination confinement, or
+network isolation guarantee in this configuration. Successful access to an arbitrary host TCP
+listener is an expected allowed probe, not evidence of a network sandbox failure. Do not interpret
+`SECURITY GATE PASS` as a promise that only magpie can be contacted. The new policy makes no
+cross-platform TCP destination isolation claim and is not equivalent to the old denied-network
+threat model.
 
-## Capability and socket lifecycle
+The boundary therefore depends on the trusted pinned omp executable, disabled model shell/file
+tools and ambient integrations, and the trusted host gateway. These controls restrict the model's
+available actions; they do not establish OS enforcement of a TCP allowlist. A compromised trusted
+executable, host service, kernel, or same-UID host process is outside this boundary.
 
-The issuer persists only a SHA-256 token digest plus the run, worker, role,
-lease, operation set, and expiry. The raw token is held transiently by the
-trusted broker and is never rendered in argv, environment, logs, events, or
-public report objects. Broker and transport bytearrays are zeroed when their
-one-shot session is redeemed, rejected, revoked, or closed. Immutable Python
-string references are dropped after revocation and closure, but Python does not
-guarantee that their former memory is overwritten. Call-time checks bind every
-operation to the persisted role and claims; discovery does not replace
-authorization.
+## Capability and process lifecycle
 
-The authority helper carries the persisted token digest with its evidence and
-revokes it on every exceptional or incomplete-evidence path. Once that helper
-returns, the live gate installs its cleanup boundary before reading protected
-digests or constructing the broker; digest, hash, broker, startup, and sandbox
-failures therefore all close any constructed broker and revoke the capability.
+The issuer persists only a SHA-256 token digest and its run, worker, role, lease, operation set,
+and expiry. Raw tokens stay transient in the trusted broker/supervisor and never appear in omp
+argv, environment, public reports, logs, or events. Mutable transport buffers are zeroed on
+redemption, rejection, revocation, or closure; dropping immutable Python strings cannot guarantee
+that their former memory is overwritten. All incomplete and exceptional paths revoke authority.
 
-The broker creates the actual socket entry at the canonical project location
-`.aizim/run/gateway.sock` with mode `0600`. When an absolute project path cannot
-fit Darwin's Unix-socket address, the gate reaches that same canonical directory
-entry through a private mode-`0700` short alias and removes the alias afterward.
-The sandbox must make zero accepted connections to this socket and to a
-non-allowlisted loopback listener.
+The broker creates `.aizim/run/gateway.sock` with mode `0600`. A private short socket alias may
+address platform path-length limits; cleanup removes the alias. The restricted process must not
+connect to the actual gateway Unix socket. The supervisor, rather than omp, redeems the session.
 
-Authorization failures append fixed, redacted `CapabilityDenied` events.
-Sandbox results append `SandboxProbeDenied` or `SandboxProbePassed` events with
-fixed operation and reason codes. The gate takes its protected logical digest
-after capability setup, verifies protected file hashes and that digest after all
-attacks, closes every broker, listener, view, scratch directory, and state
-handle, restarts `StateService`, and requires replay to reproduce the denial
-evidence without changing protected projections.
+The supervisor bounds JSONL frames, correlates requests, reassembles negotiated protocol-v2
+chunks, forwards cancellation, and terminates a non-cooperative child after timeout. Cleanup
+revokes/releases attempt resources and kills/reaps process-group descendants before propagating
+cancellation. An old omp session or final message never restores authority after restart.
 
-## Threat assumptions and platform status
+## No-model security gate
 
-Darwin peer audit tokens authenticate the executable image of the Python
-interpreter that runs the console script; they do not authenticate an individual
-Python module. Slices 1 and 2 therefore trust unsandboxed processes running as
-the same Unix user. Removing that same-UID host-process assumption requires a
-native launcher with a separately authenticated image. The controls also assume
-the host kernel, Apple Seatbelt implementation, pinned Codex CLI image, and Aizim
-trusted process are not compromised.
-
-Linux support is glibc-only and becomes qualified per architecture only after
-the real attack probe passes in the native CI job. An absent platform sandbox mechanism, a Codex
-version mismatch, a skipped or inconclusive attack, an unexpected allow, or a
-replay or digest mismatch fails closed.
-
-Run the credential-free gate only after initialization:
+After initialization, run:
 
 ```console
-aizim security-probe --project LEAN_PROJECT --backend codex --no-model
+aizim security-probe --project LEAN_PROJECT
 ```
 
-`--no-model` prevents a model API request; it does not select a weaker sandbox.
-Success is the fixed nine-line `SECURITY GATE PASS` summary. Every readiness,
-version, sandbox, authorization, digest, or replay failure exits with status 3
-and prints only `SECURITY GATE FAIL`.
+The gate starts the real pinned omp under the restricted OS profile, performs RPC `get_state` and
+tool-inventory inspection, and closes it without sending a prompt or making a model request. It
+also runs gateway authority checks and filesystem/environment probes. Required controls include
+six filesystem denials, denial of gateway Unix-socket access, denial of secret-environment access,
+read access to the allowed view, write access to scratch, and an allowed host TCP connection. The
+report states the shared-network limitation explicitly. Passing RPC startup does not by itself
+qualify the gateway or filesystem controls.
+
+Protected file hashes and logical projections must remain unchanged. The gate closes brokers,
+listeners, views, scratch directories, and state handles, restarts StateService, and requires replay
+to reproduce its evidence. Denials carry fixed redacted operation/reason codes. A single attack
+probe policy hash binds that probe's records and terminal receipt; RPC attestation uses separate
+paths and does not establish an identical policy hash.
+
+The completion operation is `omp_security_gate_complete`. Old Codex `gate_b_complete` receipts
+and their historical passing fixtures are legacy evidence only. They remain replayable and keep
+their original execution identities, but cannot qualify an omp security gate. Probe reports use
+`agent_version` for the observed omp version.
+
+An unsupported omp version, absent sandbox mechanism, failed RPC inspection, unexpected protected
+access, skipped or inconclusive required control, digest mismatch, or replay failure blocks
+execution. Platform qualification requires the real gate on that host and architecture. A pass
+covers the recorded controls and stated trust assumptions; it does not establish formal theorem
+verification or OS TCP isolation.

@@ -11,7 +11,7 @@ from functools import singledispatch
 from hashlib import sha256
 from pathlib import Path, PurePath
 
-type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
 
 @dataclass(frozen=True, slots=True)

@@ -24,7 +24,7 @@ def run_init(project: Path) -> int:
         with StateService(StateServiceConfig(layout.root, "init-session")) as state:
             _ensure_project_identity(state, layout.root)
         layout.secure_database_permissions()
-    except Exception:  # noqa: BROAD_EXCEPT_OK - scrub the public CLI error boundary
+    except Exception:  # BROAD_EXCEPT_OK: scrub the public CLI error boundary
         print("aizim init: initialization failed", file=sys.stderr)
         return 2
     print(f"Initialized Aizim state at {layout.state_root}")

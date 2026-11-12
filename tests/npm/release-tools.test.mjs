@@ -223,7 +223,7 @@ test("registry wait mode stops after twelve 404 attempts at five-second interval
   assert.deepEqual(delays, Array(11).fill(5_000));
 });
 
-test("registry smoke aggregate requires provider-free readiness and a run on all targets", () => {
+test("registry smoke aggregate requires runtime-free CLI and research tasks on all targets", () => {
   const documents = Object.keys(CI_TARGETS).map((target) => ({
     schema_version: 1,
     version,
@@ -233,17 +233,26 @@ test("registry smoke aggregate requires provider-free readiness and a run on all
       provider_free_cli: true,
       expected_doctor_failure: true,
       cache_reused: true,
-      lean_build: true,
-      aizim_run: true,
+      research_task_roundtrip: true,
     },
   }));
   const aggregate = createRegistrySmokeAggregate(documents, version);
   assert.deepEqual(aggregate.targets, Object.keys(CI_TARGETS).sort());
-  documents[0].checks.provider_free_cli = false;
-  assert.throws(
-    () => createRegistrySmokeAggregate(documents, version),
-    /registry smoke checks/u,
-  );
+  for (const name of Object.keys(documents[0].checks)) {
+    for (const value of [false, undefined]) {
+      const invalid = structuredClone(documents);
+      if (value === undefined) {
+        delete invalid[0].checks[name];
+      } else {
+        invalid[0].checks[name] = value;
+      }
+      assert.throws(
+        () => createRegistrySmokeAggregate(invalid, version),
+        /registry smoke checks/u,
+        `requires ${name}`,
+      );
+    }
+  }
 });
 
 test("release record is deterministic and excludes sensitive runtime context", () => {

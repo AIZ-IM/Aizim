@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import cast
 
+from lean_lsp_mcp.verify import classify_axioms
+
 from .models import LeanRuntimeError
 
 
@@ -45,12 +47,22 @@ def parse_build(value: object, response_hash: str) -> BuildResult:
 
 
 def parse_verification(value: object, response_hash: str) -> VerificationResult:
-    payload = _object(value, frozenset({"axioms", "warnings"}))
+    payload = _object(value, frozenset({"axioms", "warnings", "trust", "non_standard_axioms"}))
     axioms, warnings = payload["axioms"], payload["warnings"]
+    if payload["trust"] not in ("standard", "incomplete", "native", "custom"):
+        raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+    non_standard = payload["non_standard_axioms"]
+    if type(non_standard) is not list:
+        raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+    parsed_non_standard = tuple(_string(axiom) for axiom in non_standard)
     if type(axioms) is not list or type(warnings) is not list:
         raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
+    parsed_axioms = tuple(_string(item) for item in axioms)
+    expected_trust, expected_non_standard = classify_axioms(list(parsed_axioms))
+    if payload["trust"] != expected_trust or parsed_non_standard != tuple(expected_non_standard):
+        raise LeanRuntimeError("INVALID_LEAN_RESPONSE")
     return VerificationResult(
-        tuple(_string(item) for item in axioms),
+        parsed_axioms,
         tuple(_source_warning(item) for item in warnings),
         response_hash,
     )

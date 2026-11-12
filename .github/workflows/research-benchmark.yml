@@ -1,0 +1,105 @@
+name: Research benchmark
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      real_model:
+        description: Also run the configured omp model on an aizim-research self-hosted runner
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deterministic:
+    name: Deterministic ladder with actual Lean
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create private temporary root
+        run: |
+          mkdir -p "$RUNNER_TEMP/aizim-private-tmp"
+          chmod 700 "$RUNNER_TEMP/aizim-private-tmp"
+          echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
+      - name: Install pinned Lean toolchain
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: false
+          lake-package-directory: examples/smoke_lean
+          use-github-cache: false
+          use-mathlib-cache: false
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Run ladder through trusted Lean publication
+        run: >-
+          uv run python -m aizim.research.benchmark
+          --backend scripted
+          --output-dir "$RUNNER_TEMP/aizim-benchmark-artifacts"
+          --max-seconds 1800
+      - name: Upload configuration metrics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: research-benchmark-scripted-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/aizim-benchmark-artifacts/benchmark-*/metrics.json
+          if-no-files-found: error
+          retention-days: 30
+
+  real-model:
+    name: Optional configured omp model
+    if: github.event_name == 'workflow_dispatch' && inputs.real_model
+    needs: deterministic
+    runs-on: [self-hosted, aizim-research]
+    timeout-minutes: 40
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create private temporary root
+        run: |
+          mkdir -p "$RUNNER_TEMP/aizim-private-tmp"
+          chmod 700 "$RUNNER_TEMP/aizim-private-tmp"
+          echo "TMPDIR=$RUNNER_TEMP/aizim-private-tmp" >> "$GITHUB_ENV"
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.7"
+          enable-cache: false
+      - name: Install pinned Lean toolchain
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: false
+          lake-package-directory: examples/smoke_lean
+          use-github-cache: false
+          use-mathlib-cache: false
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Run configured omp model
+        run: >-
+          uv run python -m aizim.research.benchmark
+          --backend omp
+          --output-dir "$RUNNER_TEMP/aizim-real-benchmark-artifacts"
+          --timeout-seconds 300
+          --max-seconds 1800
+      - name: Upload configuration metrics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: research-benchmark-omp-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/aizim-real-benchmark-artifacts/benchmark-*/metrics.json
+          if-no-files-found: error
+          retention-days: 30

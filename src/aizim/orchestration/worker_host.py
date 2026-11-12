@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK - existing broker/consumer lifecycle
+import asyncio  # ANYIO_OK: existing broker/consumer lifecycle
 import secrets
 import sys
 import time
@@ -53,6 +53,9 @@ class WorkerHostError(RuntimeError):
     pass
 
 
+# Controller runs make a bounded number of calls in one run.
+_DEFAULT_GATEWAY_LIMITS = GatewayLimits(200, 60.0, 200)
+
 type _ConsumerFactory = Callable[
     [StateService, ArtifactStore, RuntimePromotionVerifier, KnowledgeStream],
     _Consumer,
@@ -86,11 +89,11 @@ async def _close_resources(
     for operation in operations:
         try:
             await operation()
-        except BaseException as error:  # noqa: BROAD_EXCEPT_OK - cleanup
+        except BaseException as error:  # BROAD_EXCEPT_OK: cleanup
             errors.append(error)
     try:
         alias.close()
-    except BaseException as error:  # noqa: BROAD_EXCEPT_OK - cleanup
+    except BaseException as error:  # BROAD_EXCEPT_OK: cleanup
         errors.append(error)
     return tuple(errors)
 
@@ -136,6 +139,7 @@ class WorkerExecutionHost:
         run_id: str,
         *,
         continue_on_failure: bool = False,
+        gateway_limits: GatewayLimits = _DEFAULT_GATEWAY_LIMITS,
     ) -> WorkerExecutionHost:
         return await cls._open_with_factories(
             state,
@@ -149,6 +153,7 @@ class WorkerExecutionHost:
                     state, artifacts, verifier, knowledge, continue_on_failure=continue_on_failure
                 ),
             ),
+            gateway_limits=gateway_limits,
         )
 
     @classmethod
@@ -160,6 +165,8 @@ class WorkerExecutionHost:
         governor: ResourceGovernor,
         run_id: str,
         factories: _HostFactories,
+        *,
+        gateway_limits: GatewayLimits = _DEFAULT_GATEWAY_LIMITS,
     ) -> WorkerExecutionHost:
         broker = DocumentBroker(project_root, state, smoke_root=smoke_root)
         await broker.recover()
@@ -181,7 +188,7 @@ class WorkerExecutionHost:
         gateway = CapabilityGateway(
             state,
             actions.targets(),
-            GatewayLimits(200, 60.0, 200),
+            gateway_limits,
             CapabilityDependencies(utc_now, time.monotonic, lambda: secrets.token_hex(16)),
         )
         client_image_hash = current_process_image_sha256()
@@ -196,7 +203,7 @@ class WorkerExecutionHost:
             await sessions.start()
             host._consumer_task = asyncio.create_task(consumer.run(host._stop))
             host._failure_task = asyncio.create_task(consumer.wait_for_failure())
-        except BaseException as primary:  # noqa: BROAD_EXCEPT_OK - rollback
+        except BaseException as primary:  # BROAD_EXCEPT_OK: rollback
             cleanup = asyncio.create_task(
                 host._cleanup() if host is not None else _close_resources(sessions, runtime, alias)
             )
@@ -274,7 +281,7 @@ class WorkerExecutionHost:
         errors: list[BaseException] = []
         try:
             resources.consumer.notify_submission()
-        except BaseException as error:  # noqa: BROAD_EXCEPT_OK - cleanup
+        except BaseException as error:  # BROAD_EXCEPT_OK: cleanup
             errors.append(error)
         await asyncio.sleep(0)
         consumer = self._consumer_task

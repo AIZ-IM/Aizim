@@ -131,7 +131,7 @@ def run(document: dict[str, object]) -> list[dict[str, str]]:
             lambda: _connect_unix(str(document["gateway_socket"])),
         ),
         (
-            "connect_nonallowlisted_tcp",
+            "connect_host_tcp",
             lambda: _connect_tcp(str(document["tcp_host"]), _tcp_port(document)),
         ),
         (

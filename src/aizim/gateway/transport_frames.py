@@ -10,6 +10,7 @@ from aizim.domain import AgentRole, canonical_json
 from aizim.domain.serialization import JsonValue
 
 from .capabilities import (
+    GATEWAY_RATE_LIMITED,
     GatewayError,
     GatewayFailure,
     GatewaySuccess,
@@ -23,7 +24,7 @@ TOKEN_LIMIT: Final = 4096
 type GatewayResult = GatewaySuccess | GatewayFailure
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class GatewayTransportError(RuntimeError):
     reason: str = "GATEWAY_UNAVAILABLE"
 
@@ -155,14 +156,14 @@ def result_document(result: GatewayResult) -> dict[str, JsonValue]:
         case GatewaySuccess(result=value):
             return {"ok": True, "result": value}
         case GatewayFailure(error=error):
-            return {
-                "ok": False,
-                "error": {
-                    "code": error.code,
-                    "message": error.message,
-                    "event_id": error.event_id,
-                },
+            document: dict[str, JsonValue] = {
+                "code": error.code,
+                "message": error.message,
+                "event_id": error.event_id,
             }
+            if error.retry_after_seconds is not None:
+                document["retry_after_seconds"] = error.retry_after_seconds
+            return {"ok": False, "error": document}
 
 
 def decode_result(body: bytes) -> GatewayResult:
@@ -178,13 +179,21 @@ def decode_result(body: bytes) -> GatewayResult:
             raise GatewayTransportError
         code, message = error.get("code"), error.get("message")
         event_id = error.get("event_id")
+        fields = {"code", "message", "event_id"}
+        if code == GATEWAY_RATE_LIMITED:
+            fields.add("retry_after_seconds")
+        if error.keys() != fields:
+            raise GatewayTransportError
+        retry = error.get("retry_after_seconds")
+        if retry is not None and not isinstance(retry, (int, float)):
+            raise GatewayTransportError
         if (
             type(code) is not str
             or type(message) is not str
             or (event_id is not None and type(event_id) is not str)
         ):
             raise GatewayTransportError
-        return GatewayFailure(GatewayError(code, message, event_id))
+        return GatewayFailure(GatewayError(code, message, event_id, retry))
     except (ValueError, RecursionError) as error:
         raise GatewayTransportError from error
 

@@ -125,6 +125,10 @@ async def test_fake_fixture_resolves_typed_delta_reference(tmp_path: Path) -> No
                             "delta_reference": {"template": "exact {fully_qualified_name} n"},
                         },
                     },
+                    {
+                        "operation": "contribution.submit",
+                        "payload": {"imports": ["Std", {"$delta": "module"}]},
+                    },
                 ]
             }
         )
@@ -134,7 +138,9 @@ async def test_fake_fixture_resolves_typed_delta_reference(tmp_path: Path) -> No
         "module": "AizimSmoke.Research.K00000001_S00000001_example",
     }
     factory = TransportFactory(
-        lambda: MemoryTransport((GatewaySuccess({"deltas": [delta]}), GatewaySuccess({})))
+        lambda: MemoryTransport(
+            (GatewaySuccess({"deltas": [delta]}), GatewaySuccess({}), GatewaySuccess({}))
+        )
     )
     backend = FakeAgentBackend.from_fixture(
         fixture, connect=factory, cursor={"document_id": "document-7"}
@@ -151,4 +157,7 @@ async def test_fake_fixture_resolves_typed_delta_reference(tmp_path: Path) -> No
         "accepted": "exact AizimSmoke.Research.example n",
         "import_module": delta["module"],
     }
-    assert backend.resolved_actions[-1] == FakeToolAction(GatewayTool.DOCUMENT_APPLY, payload)
+    assert calls[2] == (GatewayTool.CONTRIBUTION_SUBMIT, {"imports": ["Std", delta["module"]]})
+    operation, payload = calls[2]
+    assert isinstance(operation, GatewayTool)
+    assert backend.resolved_actions[-1] == FakeToolAction(operation, payload)

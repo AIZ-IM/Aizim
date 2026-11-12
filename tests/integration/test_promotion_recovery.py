@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
+from typing import cast
 
 import pytest
 
@@ -14,8 +15,11 @@ from aizim.knowledge import (
     PromotionEvidence,
     PromotionMaterialization,
     PromotionService,
+    RuntimePromotionVerifier,
     SnapshotPayload,
 )
+from aizim.orchestration.knowledge_stream import KnowledgeStream
+from aizim.orchestration.promotion_consumer import PromotionConsumer
 from aizim.state import (
     AppendEventCommand,
     PublicationQueueState,
@@ -53,13 +57,10 @@ class _Verifier:
         return None
 
 
-@pytest.mark.parametrize(
-    "recovered_state", (PublicationQueueState.VERIFIED, PublicationQueueState.MATERIALIZED)
-)
-def test_expired_verified_or_materialized_work_is_rechecked_then_published(
-    tmp_path: Path, recovered_state: PublicationQueueState
-) -> None:
-    current = [datetime(2030, 1, 1, tzinfo=UTC)]
+def _crashed_promotion(
+    tmp_path: Path, current: list[datetime], crashed_state: PublicationQueueState
+) -> tuple[StateService, ArtifactStore]:
+    """Queue one contribution, optionally claimed by an owner that stopped heartbeating."""
     source = b"import Std\ntheorem candidate : True := True.intro\n"
     state = StateService(
         StateServiceConfig(tmp_path, "promotion-recovery"),
@@ -108,15 +109,29 @@ def test_expired_verified_or_materialized_work_is_rechecked_then_published(
                 (),
             )
         )
+        if crashed_state is PublicationQueueState.QUEUED:
+            return state, artifacts
         claimed = state.claim_next_promotion("crashed-owner")
         assert claimed is not None
-        state.advance_promotion(
-            claimed.contribution_id, "crashed-owner", PublicationQueueState.VERIFIED
-        )
-        if recovered_state is PublicationQueueState.MATERIALIZED:
-            state.advance_promotion(
-                claimed.contribution_id, "crashed-owner", PublicationQueueState.MATERIALIZED
-            )
+        for step in (PublicationQueueState.VERIFIED, PublicationQueueState.MATERIALIZED):
+            if claimed.state is crashed_state:
+                break
+            claimed = state.advance_promotion(claimed.contribution_id, "crashed-owner", step)
+    except BaseException:
+        state.close()
+        raise
+    return state, artifacts
+
+
+@pytest.mark.parametrize(
+    "recovered_state", (PublicationQueueState.VERIFIED, PublicationQueueState.MATERIALIZED)
+)
+def test_expired_verified_or_materialized_work_is_rechecked_then_published(
+    tmp_path: Path, recovered_state: PublicationQueueState
+) -> None:
+    current = [datetime(2030, 1, 1, tzinfo=UTC)]
+    state, artifacts = _crashed_promotion(tmp_path, current, recovered_state)
+    try:
         current[0] += timedelta(minutes=2)
         verifier = _Verifier()
 
@@ -129,5 +144,110 @@ def test_expired_verified_or_materialized_work_is_rechecked_then_published(
         assert outcome is not None and outcome.state is PublicationQueueState.PUBLISHED
         assert outcome.new_epoch is not None and outcome.new_epoch.knowledge_epoch == 1
         assert verifier.calls == 1
+    finally:
+        state.close()
+
+
+@pytest.mark.parametrize("continue_on_failure", (False, True))
+@pytest.mark.parametrize(
+    "claimed_state",
+    (
+        PublicationQueueState.STAGED,
+        PublicationQueueState.VERIFIED,
+        PublicationQueueState.MATERIALIZED,
+    ),
+)
+async def test_every_consumer_takes_over_a_promotion_whose_owner_stopped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    continue_on_failure: bool,
+    claimed_state: PublicationQueueState,
+) -> None:
+    monkeypatch.setattr("aizim.orchestration.promotion_consumer._RECOVERY_POLL_SECONDS", 0.01)
+    current = [datetime(2030, 1, 1, tzinfo=UTC)]
+    state, artifacts = _crashed_promotion(tmp_path, current, claimed_state)
+    verifier = _Verifier()
+    service = PromotionService(state, artifacts, verifier, "shared-promotion-consumer", verifier)
+    consumer = PromotionConsumer(
+        state,
+        artifacts,
+        cast(RuntimePromotionVerifier, object()),
+        KnowledgeStream(state),
+        continue_on_failure=continue_on_failure,
+    )
+    monkeypatch.setattr(consumer, "_service", lambda: service)
+    stop = asyncio.Event()
+    worker = asyncio.create_task(consumer.run(stop))
+    try:
+        # No submission in this process announces the claim, and a fresh claim may be live.
+        await asyncio.sleep(0.1)
+        assert verifier.calls == 0
+        current[0] += timedelta(minutes=2)
+        await asyncio.wait_for(consumer.wait_for_epoch(1), timeout=2)
+        assert verifier.calls == 1
+    finally:
+        stop.set()
+        consumer.notify_submission()
+        await worker
+        state.close()
+
+
+@pytest.mark.parametrize("continue_on_failure", (False, True))
+async def test_every_consumer_drains_queued_work_on_startup_without_a_notification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, continue_on_failure: bool
+) -> None:
+    # Startup recovery must not wait for the periodic poll or a new submission.
+    monkeypatch.setattr("aizim.orchestration.promotion_consumer._RECOVERY_POLL_SECONDS", 60.0)
+    current = [datetime(2030, 1, 1, tzinfo=UTC)]
+    state, artifacts = _crashed_promotion(tmp_path, current, PublicationQueueState.QUEUED)
+    verifier = _Verifier()
+    service = PromotionService(state, artifacts, verifier, "startup-consumer", verifier)
+    consumer = PromotionConsumer(
+        state,
+        artifacts,
+        cast(RuntimePromotionVerifier, object()),
+        KnowledgeStream(state),
+        continue_on_failure=continue_on_failure,
+    )
+    monkeypatch.setattr(consumer, "_service", lambda: service)
+    stop = asyncio.Event()
+    worker = asyncio.create_task(consumer.run(stop))
+    try:
+        await asyncio.wait_for(consumer.wait_for_epoch(1), timeout=2)
+        assert verifier.calls == 1
+    finally:
+        # The host's stop-and-wake protocol must interrupt even a long recovery poll.
+        stop.set()
+        consumer.notify_submission()
+        try:
+            await asyncio.wait_for(worker, timeout=2)
+        finally:
+            state.close()
+
+
+@pytest.mark.parametrize("continue_on_failure", (False, True))
+async def test_stopped_consumer_leaves_queued_work_for_the_next_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, continue_on_failure: bool
+) -> None:
+    current = [datetime(2030, 1, 1, tzinfo=UTC)]
+    state, artifacts = _crashed_promotion(tmp_path, current, PublicationQueueState.QUEUED)
+    verifier = _Verifier()
+    service = PromotionService(state, artifacts, verifier, "stopped-consumer", verifier)
+    consumer = PromotionConsumer(
+        state,
+        artifacts,
+        cast(RuntimePromotionVerifier, object()),
+        KnowledgeStream(state),
+        continue_on_failure=continue_on_failure,
+    )
+    monkeypatch.setattr(consumer, "_service", lambda: service)
+    stop = asyncio.Event()
+    stop.set()
+    consumer.notify_submission()
+    try:
+        await asyncio.wait_for(consumer.run(stop), timeout=2)
+        assert verifier.calls == 0
+        claimed = state.claim_next_promotion("next-owner")
+        assert claimed is not None and claimed.contribution_id == "contribution-1"
     finally:
         state.close()
