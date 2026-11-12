@@ -1,5 +1,0 @@
-1 file already formatted
-warning: Invalid `# noqa` directive on scripts/qa/controller_smoke.py:10: expected a comma-separated list of codes (e.g., `# noqa: F401, F841`).
-warning: Invalid `# noqa` directive on scripts/qa/controller_smoke.py:242: expected a comma-separated list of codes (e.g., `# noqa: F401, F841`).
-All checks passed!
-All checks passed!

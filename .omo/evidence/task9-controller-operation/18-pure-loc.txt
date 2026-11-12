@@ -1,9 +1,0 @@
-246 src/aizim/cli/control_projection.py
-165 src/aizim/cli/control_command.py
-212 scripts/qa/controller_smoke.py
-172 tests/e2e/test_real_controller_smoke.py
-165 tests/integration/cli_control_support.py
-205 tests/integration/test_cli_control.py
-222 tests/integration/test_cli_control_projection.py
-142 tests/integration/test_cli_control_ownership.py
-220 tests/architecture/test_authority_imports.py

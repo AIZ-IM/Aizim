@@ -1,5 +1,0 @@
-npm notice run @aiz.im/aizim@0.1.0 check
-npm notice run node scripts/npm/check.mjs
-All checks passed!
-All checks passed!
-Checked npm distribution for darwin-arm64

@@ -1,4 +1,0 @@
-cleanup_target=/tmp/aizim-task9-review-fix-consumer.BR9HrG
-cleanup_absent=true
-cleanup_method=macOS Trash
-exit_status=0

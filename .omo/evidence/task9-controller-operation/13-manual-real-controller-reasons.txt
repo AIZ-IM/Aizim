@@ -1,4 +1,0 @@
-ss
-=========================== short test summary info ============================
-SKIPPED [2] tests/e2e/test_real_controller_smoke.py:47: AUTH_UNAVAILABLE
-2 skipped in 0.01s

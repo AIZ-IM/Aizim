@@ -1,3 +1,0 @@
-invocation=/opt/homebrew/bin/uv run --frozen python /Users/fwmbam4/.codex/plugins/cache/sisyphuslabs/omo/4.19.1/skills/programming/scripts/python/check-no-excuse-rules.py src/aizim/cli/control_projection.py src/aizim/cli/control_command.py scripts/qa/controller_smoke.py tests/e2e/test_real_controller_smoke.py tests/integration/cli_control_support.py tests/integration/test_cli_control.py tests/integration/test_cli_control_projection.py tests/integration/test_cli_control_ownership.py tests/architecture/test_authority_imports.py tests/security/test_controller_provider_isolation.py
-no violations in 10 file(s)
-exit_status=0

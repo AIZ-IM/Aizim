@@ -1,6 +1,0 @@
-2 files already formatted
-All checks passed!
-All checks passed!
-............................................................             [100%]
-60 passed in 25.58s
-control_projection_pure_loc=249

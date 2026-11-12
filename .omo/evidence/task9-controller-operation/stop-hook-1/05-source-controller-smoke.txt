@@ -1,3 +1,0 @@
-CONTROLLER SMOKE PASS
-assignment_executions=1
-restart_duplicates=0

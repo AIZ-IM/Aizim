@@ -1,9 +1,0 @@
-candidate=agent_launcher_lifecycle
-.....
-5 passed in 3.79s
-candidate=authority_gate
-.......
-7 passed in 2.92s
-candidate=both
-...........
-11 passed in 15.45s

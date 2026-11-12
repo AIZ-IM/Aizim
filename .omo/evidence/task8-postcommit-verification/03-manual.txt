@@ -1,6 +1,0 @@
-version=2.1.218 (Claude Code)
-version_exit=0
-mandated_flags_parse_exit=0
-auth_status_exit=0
-auth_outcome=READY
-exit=0

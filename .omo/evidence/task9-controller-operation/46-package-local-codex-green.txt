@@ -1,3 +1,0 @@
-codex_path=/Users/fwmbam4/CodeHub/WangFrankie/AI4M/Aizim/node_modules/.bin/codex
-.
-1 passed in 0.57s

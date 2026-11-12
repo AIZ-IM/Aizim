@@ -1,4 +1,0 @@
-consumer_absent=true
-plugin_absent=true
-debug_journal_absent=true
-consumer_cleanup=recoverable_trash

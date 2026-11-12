@@ -1,2 +1,0 @@
-observed_type=FrozenInstanceError
-observed_message=cannot assign to field '__traceback__'
