@@ -36,6 +36,8 @@ jobs:
           lake-package-directory: examples/smoke_lean
           use-github-cache: false
           use-mathlib-cache: false
+      - name: Install external ripgrep prerequisite
+        run: brew install ripgrep && rg --version
       - name: Install locked dependencies
         run: uv sync --frozen
       - name: Test Lean integration without a model API
